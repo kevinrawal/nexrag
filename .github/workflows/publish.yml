@@ -1,0 +1,68 @@
+name: Publish to PyPI
+
+on:
+  workflow_dispatch:          # manual trigger only — never runs automatically
+    inputs:
+      version:
+        description: "Version to publish (must match __version__ in __init__.py) e.g. 0.1.0"
+        required: true
+        type: string
+      dry_run:
+        description: "Dry run — build and verify but do NOT publish to PyPI"
+        required: true
+        type: boolean
+        default: true         # default is dry run — you have to explicitly uncheck to actually publish
+
+jobs:
+  build-and-publish:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    environment: pypi
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Verify version matches input
+        run: |
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          PKG_VERSION=$(python -c "import nexrag; print(nexrag.__version__)")
+          echo "Input version:   $INPUT_VERSION"
+          echo "Package version: $PKG_VERSION"
+          if [ "$INPUT_VERSION" != "$PKG_VERSION" ]; then
+            echo "ERROR: Input version ($INPUT_VERSION) does not match package version ($PKG_VERSION)"
+            echo "Update __version__ in src/nexrag/__init__.py before publishing."
+            exit 1
+          fi
+
+      - name: Run tests before publishing
+        run: pytest tests/unit/ -v
+
+      - name: Build package
+        run: uv build
+
+      - name: Show build artifacts
+        run: ls -lh dist/
+
+      - name: Publish to PyPI
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        run: uv publish --token ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Dry run notice
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "Dry run complete — package was built but NOT published to PyPI."
+          echo "To publish, re-run this workflow with 'Dry run' unchecked."
