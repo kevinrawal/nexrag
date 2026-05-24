@@ -8,8 +8,7 @@
 ██║ ╚████║███████╗██╔╝ ██╗██║  ██║██║  ██║╚██████╔╝
 ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝
 
-      ══●══════⇄══════●══════▶══
-         plug. swap. scale.
+●plug ⇄swap ▶scale
 ```
 
 > Framework-agnostic RAG pipeline SDK. Plug in any component, swap any stage, configure everything in YAML.
