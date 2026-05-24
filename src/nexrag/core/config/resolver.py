@@ -16,9 +16,11 @@ No silent failures, no generic ImportError bubbling up to users.
 from __future__ import annotations
 
 import importlib
-from typing import Any
+from typing import Any, TypeVar, cast
 
 from nexrag.exceptions import ClassResolutionError
+
+T = TypeVar("T")
 
 
 def resolve_class[T](
@@ -53,7 +55,7 @@ def resolve_class[T](
     module = _import_module(module_path, class_path, stage, component)
     cls = _get_class(module, class_name, class_path, stage, component)
     _validate_base(cls, expected_base, class_path, stage, component)
-    return _instantiate(cls, params, class_path, stage, component)
+    return _instantiate(cast(type[T], cls), params, class_path, stage, component)
 
 
 def _split_class_path(
@@ -103,7 +105,7 @@ def _get_class(
     class_path: str,
     stage: str,
     component: str,
-) -> type:
+) -> type[Any]:
     cls = getattr(module, class_name, None)
     if cls is None:
         available = [name for name in dir(module) if not name.startswith("_")]
@@ -141,12 +143,12 @@ def _validate_base(
 
 
 def _instantiate(
-    cls: type,
+    cls: type[T],
     params: dict[str, Any],
     class_path: str,
     stage: str,
     component: str,
-) -> Any:
+) -> T:
     try:
         return cls(**params)
     except TypeError as e:
