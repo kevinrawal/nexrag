@@ -16,14 +16,12 @@ No silent failures, no generic ImportError bubbling up to users.
 from __future__ import annotations
 
 import importlib
-from typing import Any, TypeVar
+from typing import Any
 
 from nexrag.exceptions import ClassResolutionError
 
-T = TypeVar("T")
 
-
-def resolve_class(
+def resolve_class[T](
     class_path: str,
     expected_base: type[T],
     params: dict[str, Any] | None = None,

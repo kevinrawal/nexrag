@@ -19,7 +19,6 @@ from nexrag.core.models.chunk import ScoredChunk
 from nexrag.core.models.event import PipelineEvent
 from nexrag.core.models.result import PipelineResult, Source
 from nexrag.exceptions import (
-    EmbedderError,
     LLMError,
     PipelineError,
     PromptError,
@@ -107,7 +106,6 @@ class QueryPipeline:
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
 
         try:
-            query_vector = self._run_embedder(query, pipeline_id)  # TODO: why not used?
             chunks = self._run_retriever(
                 query,
                 active_collection,
@@ -141,24 +139,6 @@ class QueryPipeline:
         )
 
     # Stage runners
-
-    def _run_embedder(self, query: str, pipeline_id: str) -> list[float]:
-        self._emit(pipeline_id, "embedder", "started")
-        t = time.monotonic()
-        try:
-            vector = self._embedder.embed_query(query)
-        except EmbedderError:
-            raise
-        except Exception as e:
-            raise PipelineError(
-                "Embedder failed while embedding the query.",
-                stage="embedder",
-                component=type(self._embedder).__name__,
-                pipeline_id=pipeline_id,
-                cause=e,
-            ) from e
-        self._emit(pipeline_id, "embedder", "completed", t, {"dimensions": len(vector)})
-        return vector
 
     def _run_retriever(
         self,
