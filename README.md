@@ -1,5 +1,17 @@
 # NexRAG
 
+```text
+███╗   ██╗███████╗██╗  ██╗██████╗  █████╗  ██████╗
+████╗  ██║██╔════╝╚██╗██╔╝██╔══██╗██╔══██╗██╔════╝
+██╔██╗ ██║█████╗   ╚███╔╝ ██████╔╝███████║██║  ███╗
+██║╚██╗██║██╔══╝   ██╔██╗ ██╔══██╗██╔══██║██║   ██║
+██║ ╚████║███████╗██╔╝ ██╗██║  ██║██║  ██║╚██████╔╝
+╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝
+
+      ══●══════⇄══════●══════▶══
+         plug. swap. scale.
+```
+
 > Framework-agnostic RAG pipeline SDK. Plug in any component, swap any stage, configure everything in YAML.
 
 [![PyPI version](https://img.shields.io/pypi/v/nexrag.svg)](https://pypi.org/project/nexrag/)
