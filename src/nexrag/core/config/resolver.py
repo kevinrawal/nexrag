@@ -21,6 +21,7 @@ from typing import Any, TypeVar, cast
 from nexrag.exceptions import ClassResolutionError
 
 T = TypeVar("T")
+U = TypeVar("U")
 
 
 def resolve_class[T](
@@ -126,8 +127,8 @@ def _get_class(
 
 
 def _validate_base(
-    cls: type,
-    expected_base: type,
+    cls: type[Any],
+    expected_base: type[Any],
     class_path: str,
     stage: str,
     component: str,
@@ -142,13 +143,13 @@ def _validate_base(
         )
 
 
-def _instantiate(
-    cls: type[T],
+def _instantiate[U](
+    cls: type[U],
     params: dict[str, Any],
     class_path: str,
     stage: str,
     component: str,
-) -> T:
+) -> U:
     try:
         return cls(**params)
     except TypeError as e:
