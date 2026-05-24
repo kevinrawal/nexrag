@@ -1,0 +1,95 @@
+# nexrag.yaml — NexRAG V1 Example Configuration
+# Copy this file into your project and adjust values.
+# This is the single source of truth for your entire pipeline.
+
+nexrag:
+  version: "1.0"
+
+# INGESTION PIPELINE
+
+ingestion:
+
+  loader:
+    type: auto          # auto | pdf | txt | excel | json | code | word | html
+    # type: custom
+    # class: myproject.loaders.MyCustomLoader
+
+  sanitizer:
+    enabled: false      # false = PassthroughSanitizer (no-op)
+    # enabled: true
+    # class: myproject.sanitizers.RemoveBoilerplateSanitizer
+
+  chunker:
+    strategy: recursive # fixed | sentence | paragraph | recursive | custom
+    chunk_size: 512
+    chunk_overlap: 64
+    min_chunk_size: 50
+    # strategy: custom
+    # class: myproject.chunkers.SemanticChunker
+    # params:
+    #   similarity_threshold: 0.8
+
+  embedder:
+    provider: openai
+    model: text-embedding-3-small
+    api_key: ${OPENAI_API_KEY}
+    # provider: huggingface
+    # model: sentence-transformers/all-MiniLM-L6-v2
+    # provider: ollama
+    # model: nomic-embed-text
+    # base_url: http://localhost:11434
+
+  vector_db:
+    provider: chroma
+    default_collection: documents
+    collections:
+      documents:
+        path: ./.nexrag/chroma
+        # description: "Main document store"
+
+  on_conflict: overwrite  # overwrite | skip | append
+
+# QUERY PIPELINE
+
+query:
+
+  embedder: inherit       # reuse ingestion embedder config
+
+  retriever:
+    top_k: 5
+    score_threshold: 0.6
+    metadata_filter: ~
+    #   file_type: pdf
+    #   department: legal
+
+  prompt:
+    system: |
+      You are a helpful assistant. Answer the user's question using only
+      the context provided. If the answer is not in the context, say so
+      clearly. Do not make up information.
+    template: ~           # null = NexRAG default template
+    # template_class: myproject.prompts.MyPromptBuilder
+
+  llm:
+    provider: openai
+    model: gpt-4o
+    api_key: ${OPENAI_API_KEY}
+    temperature: 0.2
+    max_tokens: 1024
+    streaming: false
+    # provider: anthropic
+    # model: claude-sonnet-4-20250514
+    # api_key: ${ANTHROPIC_API_KEY}
+    # provider: ollama
+    # model: llama3
+    # base_url: http://localhost:11434
+
+# OBSERVABILITY
+
+observability:
+  enabled: true
+  observer: console       # console (V1) | custom
+  log_level: INFO
+  format: json
+  # observer: custom
+  # class: myproject.observers.DatadogObserver
