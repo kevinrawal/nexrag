@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field, model_validator
 class LoaderConfig(BaseModel):
     type: Literal["auto", "pdf", "txt", "excel", "json", "code", "word", "html", "custom"] = "auto"
     class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
 
@@ -38,6 +39,7 @@ class LoaderConfig(BaseModel):
 class SanitizerConfig(BaseModel):
     enabled: bool = False
     class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
 
@@ -83,20 +85,28 @@ class EmbedderConfig(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+    def __repr__(self) -> str:
+        return f"EmbedderConfig(provider={self.provider!r}, model={self.model!r}, api_key=***)"
+
 
 class CollectionConfig(BaseModel):
-    path: str | None = None  # local ChromaDB
-    host: str | None = None  # remote ChromaDB
+    path: str | None = None  # local ChromaDB persist path
+    host: str | None = None  # remote ChromaDB HTTP host
     port: int | None = None
+    mode: Literal["memory", "persistent"] = "persistent"
     description: str | None = None  # used by V2 router
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class VectorDBConfig(BaseModel):
-    provider: Literal["chroma"] = "chroma"  # expand in V2+
+    provider: Literal["chroma", "custom"] = "chroma"
     default_collection: str
     collections: dict[str, CollectionConfig]
     on_conflict: Literal["overwrite", "skip", "append"] = "overwrite"
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
 
     @model_validator(mode="after")
     def default_collection_must_exist(self) -> VectorDBConfig:
@@ -121,9 +131,14 @@ class IngestionConfig(BaseModel):
 
 
 class RetrieverConfig(BaseModel):
+    provider: Literal["dense", "custom"] = "dense"
     top_k: int = 5
     score_threshold: float = 0.0
     metadata_filter: dict[str, Any] | None = None
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
 
 
 class PromptConfig(BaseModel):
@@ -135,6 +150,7 @@ class PromptConfig(BaseModel):
     template: Literal["default", "qa", "summarize", "custom"] | None = None
     context_format: Literal["numbered", "labeled", "plain"] = "numbered"
     class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
 
@@ -153,8 +169,12 @@ class LLMConfig(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+    def __repr__(self) -> str:
+        return f"LLMConfig(provider={self.provider!r}, model={self.model!r}, api_key=***)"
+
 
 class QueryConfig(BaseModel):
+    embedder: EmbedderConfig | Literal["inherit"] = "inherit"
     retriever: RetrieverConfig = Field(default_factory=RetrieverConfig)
     prompt: PromptConfig = Field(default_factory=PromptConfig)
     llm: LLMConfig
@@ -169,6 +189,7 @@ class ObservabilityConfig(BaseModel):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     format: Literal["json", "text"] = "json"
     class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
 

@@ -23,6 +23,13 @@ from nexrag.exceptions import ClassResolutionError
 T = TypeVar("T")
 U = TypeVar("U")
 
+_SENSITIVE_KEYS = frozenset({"api_key", "token", "secret", "password", "credential", "key", "auth"})
+
+
+def _redact(params: dict[str, Any]) -> dict[str, Any]:
+    """Replace values of sensitive keys with *** to prevent secret leakage in error messages."""
+    return {k: "***" if k.lower() in _SENSITIVE_KEYS else v for k, v in params.items()}
+
 
 def resolve_class[T](
     class_path: str,
@@ -154,7 +161,7 @@ def _instantiate[U](
         return cls(**params)
     except TypeError as e:
         raise ClassResolutionError(
-            f"Failed to instantiate '{class_path}' with params {params}: {e}. "
+            f"Failed to instantiate '{class_path}' with params {_redact(params)}: {e}. "
             f"Check that your __init__ accepts these keyword arguments.",
             stage=stage,
             component=component,

@@ -19,6 +19,7 @@ from nexrag.core.models.chunk import ScoredChunk
 from nexrag.core.models.event import PipelineEvent
 from nexrag.core.models.result import PipelineResult, Source
 from nexrag.exceptions import (
+    EmbedderError,
     LLMError,
     PipelineError,
     PromptError,
@@ -106,8 +107,10 @@ class QueryPipeline:
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
 
         try:
+            query_embedding = self._run_query_embedder(query, pipeline_id)
             chunks = self._run_retriever(
                 query,
+                query_embedding,
                 active_collection,
                 active_top_k,
                 active_threshold,
@@ -140,9 +143,34 @@ class QueryPipeline:
 
     # Stage runners
 
+    def _run_query_embedder(self, query: str, pipeline_id: str) -> list[float]:
+        self._emit(pipeline_id, "embedder", "started")
+        t = time.monotonic()
+        try:
+            embedding = self._embedder.embed_query(query)
+        except EmbedderError:
+            raise
+        except Exception as e:
+            raise PipelineError(
+                "Embedder failed while embedding the query.",
+                stage="embedder",
+                component=type(self._embedder).__name__,
+                pipeline_id=pipeline_id,
+                cause=e,
+            ) from e
+        self._emit(
+            pipeline_id,
+            "embedder",
+            "completed",
+            t,
+            {"dimensions": len(embedding)},
+        )
+        return embedding
+
     def _run_retriever(
         self,
         query: str,
+        query_embedding: list[float],
         collection: str,
         top_k: int,
         score_threshold: float,
@@ -154,6 +182,7 @@ class QueryPipeline:
         try:
             chunks = self._retriever.retrieve(
                 query=query,
+                query_embedding=query_embedding,
                 top_k=top_k,
                 collection=collection,
                 score_threshold=score_threshold,

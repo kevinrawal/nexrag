@@ -1600,6 +1600,8 @@ name = "nexrag"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "chromadb" },
+    { name = "openai" },
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
@@ -1672,6 +1674,7 @@ word = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.20" },
     { name = "beautifulsoup4", marker = "extra == 'html'", specifier = ">=4.12" },
+    { name = "chromadb", specifier = ">=1.5.9" },
     { name = "chromadb", marker = "extra == 'chromadb'", specifier = ">=0.5" },
     { name = "lxml", marker = "extra == 'html'", specifier = ">=5.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
@@ -1687,6 +1690,7 @@ requires-dist = [
     { name = "nexrag", extras = ["pdf"], marker = "extra == 'all-loaders'" },
     { name = "nexrag", extras = ["word"], marker = "extra == 'all-loaders'" },
     { name = "ollama", marker = "extra == 'ollama'", specifier = ">=0.1" },
+    { name = "openai", specifier = ">=2.38.0" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.0" },
     { name = "openpyxl", marker = "extra == 'excel'", specifier = ">=3.1" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.7" },

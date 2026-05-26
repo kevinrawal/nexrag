@@ -35,6 +35,8 @@ classifiers = [
 
 # Keep this minimal. Only what the pipeline skeleton needs.
 dependencies = [
+    "chromadb>=1.5.9",
+    "openai>=2.38.0",
     "pydantic>=2.0",   # config schema validation
     "pyyaml>=6.0",     # YAML config loading
 ]

@@ -1,6 +1,13 @@
 """
 BaseLoader — contract for all document loaders.
+A Loader receives raw data in some format and returns a list of Documents.
 """
+
+# TODO: required critical changes.
+# Loader should be something, which load and convert the data into document.
+# default behaviour of loader is having raw data, always.
+# User can write a wrapper where they can fetch the data from source and then pass it to loader.
+# loader can accept row data and the type of data.
 
 from __future__ import annotations
 
@@ -15,7 +22,6 @@ class BaseLoader(ABC):
     Abstract base class for all NexRAG document loaders.
 
     Subclass this to parse any data format into Documents.
-    Fetching is your responsibility — load() receives already-fetched data.
     """
 
     @abstractmethod

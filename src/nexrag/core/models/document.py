@@ -40,7 +40,7 @@ class Document:
 
     def with_metadata(self, extra: dict[str, Any]) -> Document:
         """
-        Return a new Document with merged metadata (extra wins on conflict).
+        Return a new Document with merged metadata.
         """
         return Document(
             content=self.content,

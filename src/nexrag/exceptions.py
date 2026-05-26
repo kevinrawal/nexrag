@@ -2,8 +2,7 @@
 NexRAG exception hierarchy.
 
 Every exception carries: stage name, component name, pipeline_id, and the
-original exception. No generic "something went wrong" — every failure is
-traceable to an exact stage and component.
+original exception.
 """
 
 from __future__ import annotations
@@ -42,6 +41,7 @@ class NexRAGError(Exception):
 
 # Configuration
 
+
 class ConfigError(NexRAGError):
     """Bad or missing nexrag.yaml values."""
 
@@ -51,6 +51,7 @@ class ClassResolutionError(ConfigError):
 
 
 # Ingestion stages
+
 
 class LoaderError(NexRAGError):
     """Failed to read or parse a source file."""
@@ -108,6 +109,7 @@ class VectorDBUpsertError(VectorDBError):
 
 # Query stages
 
+
 class RetrieverError(NexRAGError):
     """Retrieval failed or returned no results."""
 
@@ -130,6 +132,7 @@ class LLMRateLimitError(LLMError):
 
 # Pipeline orchestration
 
+
 class PipelineError(NexRAGError):
     """
     Orchestration-level error.
@@ -137,4 +140,3 @@ class PipelineError(NexRAGError):
     Wraps a stage-level exception with pipeline context.
     Inspect .cause for the original stage error.
     """
-

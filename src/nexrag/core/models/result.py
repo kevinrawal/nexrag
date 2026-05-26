@@ -1,5 +1,5 @@
 """
-PipelineResult is what the user receives from pipeline.query().
+PipelineResult is what the user receives from query.
 NexRAG never returns a raw string — always this structured object.
 
 Source is a user-facing view of a ScoredChunk — flattened for convenience
@@ -67,8 +67,6 @@ class Source:
 class PipelineResult:
     """
     Structured result returned by QueryPipeline.run().
-
-    Never a raw string. Always this object.
 
     Attributes:
         answer:          The LLM's response text.

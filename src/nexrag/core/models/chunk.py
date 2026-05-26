@@ -1,3 +1,5 @@
+"""Chunk Models for RAG pipelines."""
+
 from __future__ import annotations
 
 import hashlib

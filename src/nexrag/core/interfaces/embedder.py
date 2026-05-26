@@ -5,7 +5,7 @@ The Embedder is the only component shared between both pipelines:
     - Ingestion pipeline: embed(texts) to convert chunks to vectors.
     - Query pipeline:     embed_query(text) to convert the user query to a vector.
 
-Both pipelines must use the same Embedder instance configured in nexrag.yaml.
+Both pipelines must use the same Embedder instance configured in .yaml(user created).
 A different model in query vs ingestion = vectors in different spaces = broken retrieval.
 This is enforced at startup by the fingerprint check (Phase 1).
 
