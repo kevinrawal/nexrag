@@ -4,17 +4,22 @@ OpenAILLM — wraps the OpenAI Chat Completions API.
 Supports any OpenAI-compatible endpoint via base_url (Azure OpenAI, local proxies,
 OpenAI-compatible servers). The prompt string from DefaultPromptBuilder is split
 into system and user messages automatically.
+Retries transient failures (rate limits, server errors) with exponential backoff.
 
 Requires: pip install "nexrag[openai]"  (openai)
 """
 
 from __future__ import annotations
 
+import random
+import time
 from collections.abc import Iterator
 from typing import Any
 
 from nexrag.core.interfaces.llm import BaseLLM
 from nexrag.exceptions import LLMError, LLMRateLimitError, LLMTimeoutError
+
+_BASE_BACKOFF = 1.0  # seconds; doubles each retry
 
 
 class OpenAILLM(BaseLLM):
@@ -28,6 +33,7 @@ class OpenAILLM(BaseLLM):
         temperature: Sampling temperature. Default 0.2.
         max_tokens:  Max tokens in the response. Default 1024.
         timeout:     Request timeout in seconds. Default 30.
+        max_retries: Retry attempts after the first failure. 0 = no retries. Default 2.
     """
 
     def __init__(
@@ -38,11 +44,13 @@ class OpenAILLM(BaseLLM):
         temperature: float = 0.2,
         max_tokens: int = 1024,
         timeout: int = 30,
+        max_retries: int = 2,
     ) -> None:
         self._model = model
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._timeout = timeout
+        self._max_retries = max_retries
         self._client: Any = self._build_client(api_key, base_url)
 
     def generate(self, prompt: str) -> str:
@@ -56,27 +64,37 @@ class OpenAILLM(BaseLLM):
             The assistant response text.
 
         Raises:
-            LLMRateLimitError: On 429 rate limit.
+            LLMRateLimitError: On 429 rate limit (after retries exhausted).
             LLMTimeoutError:   On timeout.
             LLMError:          On any other failure.
         """
         messages = self._build_messages(prompt)
-        try:
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                temperature=self._temperature,
-                max_tokens=self._max_tokens,
-                timeout=self._timeout,
-            )
-            return response.choices[0].message.content or ""
-        except Exception as e:
-            self._map_exception(e)
-            raise  # unreachable but satisfies type checker
+        for attempt in range(self._max_retries + 1):
+            try:
+                response = self._client.chat.completions.create(
+                    model=self._model,
+                    messages=messages,
+                    temperature=self._temperature,
+                    max_tokens=self._max_tokens,
+                    timeout=self._timeout,
+                )
+                return response.choices[0].message.content or ""
+            except Exception as e:
+                if self._is_retryable(e) and attempt < self._max_retries:
+                    time.sleep(_BASE_BACKOFF * (2**attempt) + random.uniform(0, 1))
+                    continue
+                self._map_exception(e)
+                raise  # unreachable — _map_exception always raises
+
+        raise LLMError(
+            "Retry loop exhausted without returning.", stage="llm", component="OpenAILLM"
+        )  # unreachable
 
     def stream(self, prompt: str) -> Iterator[str]:
         """
         Stream the response token by token.
+
+        Note: streaming calls are not retried — a partial stream cannot be resumed.
 
         Yields:
             Response text chunks as they arrive from the API.
@@ -130,6 +148,18 @@ class OpenAILLM(BaseLLM):
                 {"role": "user", "content": user_part.strip()},
             ]
         return [{"role": "user", "content": prompt.strip()}]
+
+    @staticmethod
+    def _is_retryable(exc: Exception) -> bool:
+        try:
+            import openai as _openai
+
+            return isinstance(
+                exc,
+                _openai.RateLimitError | _openai.InternalServerError | _openai.APIConnectionError,
+            )
+        except ImportError:
+            return False
 
     def _map_exception(self, exc: Exception) -> None:
         try:

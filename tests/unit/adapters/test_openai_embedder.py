@@ -119,3 +119,53 @@ class TestOpenAIEmbedder:
         with patch.dict("sys.modules", {"openai": None}):
             with pytest.raises((EmbedderError, ImportError, AttributeError)):
                 embedder._build_client(None, None)
+
+    def test_retries_on_rate_limit_then_succeeds(self):
+        import openai
+
+        embedder = _make_embedder([[0.1, 0.2]])
+        rate_err = openai.RateLimitError("rate limited", response=MagicMock(), body={})
+        # Fail twice, succeed on third attempt
+        good_resp = embedder._client.embeddings.create.return_value
+        embedder._client.embeddings.create.side_effect = [rate_err, rate_err, good_resp]
+
+        with patch("time.sleep"):  # don't actually wait
+            result = embedder.embed(["hello"])
+        assert len(result) == 1
+
+    def test_retries_exhausted_raises_embedder_error(self):
+        import openai
+
+        embedder = _make_embedder([[0.1]])
+        rate_err = openai.RateLimitError("rate limited", response=MagicMock(), body={})
+        embedder._client.embeddings.create.side_effect = [rate_err, rate_err, rate_err]
+
+        with patch("time.sleep"):
+            with pytest.raises(EmbedderError):
+                embedder.embed(["hello"])
+
+    def test_auth_error_not_retried(self):
+        import openai
+
+        embedder = _make_embedder([[0.1]])
+        auth_err = openai.AuthenticationError("bad key", response=MagicMock(), body={})
+        embedder._client.embeddings.create.side_effect = auth_err
+
+        # Should raise immediately — no sleep
+        with patch("time.sleep") as mock_sleep:
+            with pytest.raises(EmbedderError):
+                embedder.embed(["hello"])
+        mock_sleep.assert_not_called()
+
+    def test_max_retries_zero_never_retries(self):
+        import openai
+
+        embedder = _make_embedder([[0.1]], max_retries=0)
+        rate_err = openai.RateLimitError("rate limited", response=MagicMock(), body={})
+        embedder._client.embeddings.create.side_effect = rate_err
+
+        with patch("time.sleep") as mock_sleep:
+            with pytest.raises(EmbedderError):
+                embedder.embed(["hello"])
+        mock_sleep.assert_not_called()
+        assert embedder._client.embeddings.create.call_count == 1

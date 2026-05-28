@@ -80,6 +80,7 @@ class EmbedderConfig(BaseModel):
     api_key: str | None = None
     base_url: str | None = None
     batch_size: int = 100
+    max_retries: int = 2
     class_path: str | None = Field(default=None, alias="class")
     params: dict[str, Any] = Field(default_factory=dict)
 
@@ -93,7 +94,7 @@ class CollectionConfig(BaseModel):
     path: str | None = None  # local ChromaDB persist path
     host: str | None = None  # remote ChromaDB HTTP host
     port: int | None = None
-    mode: Literal["memory", "persistent"] = "persistent"
+    mode: Literal["memory", "persistent", "server"] = "persistent"
     description: str | None = None  # used by V2 router
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -163,7 +164,7 @@ class LLMConfig(BaseModel):
     temperature: float = 0.2
     max_tokens: int = 1024
     timeout: int = 30
-    streaming: bool = False
+    max_retries: int = 2
     class_path: str | None = Field(default=None, alias="class")
     params: dict[str, Any] = Field(default_factory=dict)
 

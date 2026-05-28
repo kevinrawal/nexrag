@@ -20,7 +20,7 @@ from nexrag.core.pipeline.ingestion import IngestionPipeline, IngestionResult
 from nexrag.core.pipeline.query import QueryPipeline
 from nexrag.exceptions import NexRAGError
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
     "NexRAG",
     "PipelineResult",
@@ -86,6 +86,23 @@ class NexRAG:
             IngestionResult with document count, chunk count, and latency.
         """
         return self._ingestion.ingest(data, loader)
+
+    def ingest_batch(
+        self,
+        sources: list[str | Path],
+        loader: BaseLoader | None = None,
+    ) -> list[IngestionResult]:
+        """
+        Ingest multiple sources in sequence.
+
+        Args:
+            sources: File paths or data items to ingest.
+            loader:  Optional loader override applied to every item in this batch.
+
+        Returns:
+            One IngestionResult per source, in the same order.
+        """
+        return [self.ingest(source, loader=loader) for source in sources]
 
     def ingest_documents(self, documents: list[Any]) -> IngestionResult:
         """

@@ -114,7 +114,7 @@ pipeline = NexRAG.from_config("nexrag.yaml")
 
 result = pipeline.ingest("contracts/agreement.pdf")
 
-print(f"Ingested {result.docs} document(s)")
+print(f"Ingested {result.documents_loaded} document(s)")
 print(f"Wrote {result.chunks_written} chunks in {result.latency_ms:.1f} ms")
 ```
 
@@ -133,7 +133,7 @@ result = pipeline.query("What are the termination clauses?")
 print(result.answer)
 
 for source in result.sources:
-    print(f"  [{source.rank}] score={source.score:.3f}  {source.chunk.metadata.get('source')}")
+    print(f"  [{source.rank}] score={source.score:.3f}  {source.source}")
 ```
 
 The full `PipelineResult` fields are documented in [Result reference](#result-reference).
@@ -192,8 +192,8 @@ env:
 ```python
 text = "Alice joined Acme Corp in 2019 as a senior engineer..."
 
-result = pipeline.ingest(("alice_bio", text))
-# The first element becomes metadata["source"]
+result = pipeline.ingest((text, "alice_bio"))
+# The second element becomes metadata["source"]
 ```
 
 Or configure `loader.type: txt` and call:
@@ -404,8 +404,8 @@ Returned by `pipeline.ingest()` and `pipeline.ingest_documents()`.
 | Field | Type | Description |
 |---|---|---|
 | `pipeline_id` | `str` | UUID for this ingestion run |
-| `docs` | `int` | Number of documents loaded |
-| `chunks` | `int` | Total chunks produced by the chunker |
+| `documents_loaded` | `int` | Number of documents loaded |
+| `chunks_produced` | `int` | Total chunks produced by the chunker |
 | `chunks_written` | `int` | Chunks actually written (skips duplicates on `skip` conflict strategy) |
 | `latency_ms` | `float` | Wall-clock time for the full ingestion pipeline |
 
@@ -417,18 +417,21 @@ Returned by `pipeline.query()`.
 |---|---|---|
 | `pipeline_id` | `str` | UUID for this query run |
 | `answer` | `str` | LLM-generated answer |
-| `sources` | `list[ScoredChunk]` | Retrieved chunks, ordered by similarity score |
+| `query` | `str` | The original query string |
+| `sources` | `list[Source]` | Retrieved sources, ordered by similarity score |
+| `scores` | `list[float]` | Convenience list of scores mirroring `sources` order |
+| `collection_used` | `str` | Which vector DB collection was queried |
 | `latency_ms` | `float` | Wall-clock time for the full query pipeline |
+| `token_usage` | `TokenUsage \| None` | Token counts from the LLM (None if provider doesn't expose them) |
 
-### `ScoredChunk`
+### `Source`
 
-Each element in `result.sources`.
+Each element in `result.sources`. Fields are flat — no nested chunk object.
 
 | Field | Type | Description |
 |---|---|---|
-| `chunk.text` | `str` | The chunk's text content |
-| `chunk.metadata` | `dict` | Metadata from the original document (e.g. `source`, `page_count`) |
-| `chunk.chunk_index` | `int` | Position of this chunk within its parent document |
-| `chunk.total_chunks` | `int` | Total chunks from the same parent document |
+| `content` | `str` | The chunk's text content |
+| `source` | `str` | Origin identifier from `chunk.metadata["source"]` (file path, URL, etc.) |
+| `metadata` | `dict` | Full metadata dict from the chunk (all fields set by the loader) |
 | `score` | `float` | Cosine similarity score (0–1, higher = more similar) |
 | `rank` | `int` | 1-based rank in the result list |

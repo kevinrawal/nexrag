@@ -1,4 +1,5 @@
 import uuid
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -110,3 +111,31 @@ class TestChromaDBAdapter:
         adapter.upsert([c2], [[0.3, 0.4]], col_b)
         assert adapter.count(col_a) == 1
         assert adapter.count(col_b) == 1
+
+
+class TestChromaDBAdapterServerMode:
+    def test_server_mode_calls_http_client(self):
+        mock_http = MagicMock()
+        with patch("chromadb.HttpClient", return_value=mock_http) as patched:
+            adapter = ChromaDBAdapter(mode="server", host="chroma.internal", port=8000)
+        patched.assert_called_once_with(host="chroma.internal", port=8000)
+        assert adapter._client is mock_http
+
+    def test_server_mode_default_host_and_port(self):
+        with patch("chromadb.HttpClient") as patched:
+            ChromaDBAdapter(mode="server")
+        call_kwargs = patched.call_args
+        assert call_kwargs.kwargs["host"] == "localhost"
+        assert call_kwargs.kwargs["port"] == 8000
+
+    def test_server_mode_custom_port(self):
+        with patch("chromadb.HttpClient") as patched:
+            ChromaDBAdapter(mode="server", host="chroma.internal", port=9000)
+        assert patched.call_args.kwargs["port"] == 9000
+
+    def test_server_mode_connection_error_raises_vector_db_connection_error(self):
+        from nexrag.exceptions import VectorDBConnectionError
+
+        with patch("chromadb.HttpClient", side_effect=Exception("connection refused")):
+            with pytest.raises(VectorDBConnectionError):
+                ChromaDBAdapter(mode="server", host="unreachable")

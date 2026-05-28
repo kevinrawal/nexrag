@@ -120,3 +120,57 @@ class TestOpenAILLM:
 
         msgs = OpenAILLM._build_messages("just user")
         assert msgs == [{"role": "user", "content": "just user"}]
+
+    def test_retries_on_rate_limit_then_succeeds(self):
+        import openai
+
+        llm = _make_llm("Answer.")
+        rate_err = openai.RateLimitError("rate limited", response=MagicMock(), body={})
+        good_resp = llm._client.chat.completions.create.return_value
+        llm._client.chat.completions.create.side_effect = [rate_err, rate_err, good_resp]
+
+        with patch("time.sleep"):
+            result = llm.generate("hello")
+        assert result == "Answer."
+
+    def test_retries_exhausted_raises_llm_rate_limit_error(self):
+        import openai
+
+        llm = _make_llm()
+        rate_err = openai.RateLimitError("rate limited", response=MagicMock(), body={})
+        llm._client.chat.completions.create.side_effect = [rate_err, rate_err, rate_err]
+
+        with patch("time.sleep"):
+            with pytest.raises(LLMRateLimitError):
+                llm.generate("hello")
+
+    def test_auth_error_not_retried(self):
+        import openai
+
+        llm = _make_llm()
+        auth_err = openai.AuthenticationError("bad key", response=MagicMock(), body={})
+        llm._client.chat.completions.create.side_effect = auth_err
+
+        with patch("time.sleep") as mock_sleep:
+            with pytest.raises(LLMError):
+                llm.generate("hello")
+        mock_sleep.assert_not_called()
+
+    def test_max_retries_zero_never_retries(self):
+        import openai
+
+        from nexrag.adapters.llms.openai import OpenAILLM
+
+        mock_client = MagicMock()
+        rate_err = openai.RateLimitError("rate limited", response=MagicMock(), body={})
+        mock_client.chat.completions.create.side_effect = rate_err
+
+        with patch("openai.OpenAI", return_value=mock_client):
+            llm = OpenAILLM(api_key="sk-test", max_retries=0)
+        llm._client = mock_client
+
+        with patch("time.sleep") as mock_sleep:
+            with pytest.raises(LLMRateLimitError):
+                llm.generate("hello")
+        mock_sleep.assert_not_called()
+        assert llm._client.chat.completions.create.call_count == 1

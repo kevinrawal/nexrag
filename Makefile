@@ -1,6 +1,6 @@
 .PHONY: install install-all dev lint format typecheck test test-unit test-integration clean build help
 
-# Setup 
+# Setup
 
 install:
 	uv pip install -e ".[dev]"
@@ -38,7 +38,7 @@ test-integration:
 test-cov:
 	pytest tests/unit/ --cov=nexrag --cov-report=term-missing --cov-report=html
 
-# Build 
+# Build
 
 build:
 	uv build

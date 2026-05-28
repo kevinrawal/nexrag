@@ -31,6 +31,7 @@ from nexrag.core.interfaces.vector_db import BaseVectorDB
 from nexrag.core.pipeline.ingestion import IngestionPipeline, IngestionResult  # noqa: F401
 from nexrag.core.pipeline.query import QueryPipeline
 from nexrag.exceptions import ConfigError
+from nexrag.loaders.auto import AutoLoader
 
 
 def wire(config: NexRAGConfig) -> tuple[IngestionPipeline, QueryPipeline]:
@@ -107,24 +108,30 @@ def _build_embedder(config: EmbedderConfig) -> BaseEmbedder:
             api_key=config.api_key,
             base_url=config.base_url,
             batch_size=config.batch_size,
+            max_retries=config.max_retries,
         )
 
-    # TODO: yet to implement in adapters/embedders
-    # if config.provider == "ollama":
-    #     from nexrag.adapters.embedders.ollama import (
-    #         OllamaEmbedder,  # type: ignore[import-not-found]
-    #     )
-    #     return OllamaEmbedder(model=config.model, base_url=config.base_url, **config.params)  # type: ignore[no-any-return]
+    if config.provider == "ollama":
+        from nexrag.adapters.embedders.ollama import OllamaEmbedder
 
-    # TODO: yet to implement in adapters/embedders
-    # if config.provider == "huggingface":
-    #     from nexrag.adapters.embedders.huggingface import (
-    #         HuggingFaceEmbedder,  # type: ignore[import-not-found]
-    #     )
-    #     return HuggingFaceEmbedder(model=config.model, **config.params)  # type: ignore[no-any-return]
+        return OllamaEmbedder(
+            model=config.model,
+            base_url=config.base_url or "http://localhost:11434",
+            batch_size=config.batch_size,
+        )
+
+    if config.provider == "huggingface":
+        from nexrag.adapters.embedders.huggingface import HuggingFaceEmbedder
+
+        return HuggingFaceEmbedder(
+            model=config.model,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            batch_size=config.batch_size,
+        )
 
     raise ConfigError(
-        f"Unknown embedder provider: {config.provider!r}. " f"Supported: openai, custom",
+        f"Unknown embedder provider: {config.provider!r}. Supported: openai, huggingface, ollama, custom",
         stage="config",
         component="embedder",
     )
@@ -167,7 +174,7 @@ def _build_chunker(config: ChunkerConfig) -> BaseChunker:
 
 def _build_loader(config: LoaderConfig) -> BaseLoader | None:
     if config.type == "auto":
-        return None
+        return AutoLoader()
 
     if config.type == "custom":
         if not config.class_path:
@@ -223,6 +230,8 @@ def _build_vector_db(config: VectorDBConfig) -> BaseVectorDB:
         return ChromaDBAdapter(
             path=coll_cfg.path,
             mode=coll_cfg.mode,
+            host=coll_cfg.host,
+            port=coll_cfg.port,
         )
 
     raise ConfigError(
@@ -258,9 +267,9 @@ def _build_prompt_builder(config: PromptConfig) -> BasePromptBuilder:
     if config.class_path:
         return resolve_class(
             config.class_path,
-            BasePromptBuilder,
+            BasePromptBuilder,  # type: ignore[type-abstract]
             config.params,
-            stage="prompt_builder",  # type: ignore[type-abstract]
+            stage="prompt_builder",
         )
 
     from nexrag.defaults.prompt_builder import DefaultPromptBuilder
@@ -291,6 +300,7 @@ def _build_llm(config: LLMConfig) -> BaseLLM:
             temperature=config.temperature,
             max_tokens=config.max_tokens,
             timeout=config.timeout,
+            max_retries=config.max_retries,
         )
 
     if config.provider == "ollama":
@@ -304,19 +314,21 @@ def _build_llm(config: LLMConfig) -> BaseLLM:
             timeout=config.timeout,
         )
 
-    # TODO: yet to implement in adapters/llms
-    # if config.provider == "anthropic":
-    #     from nexrag.adapters.llms.anthropic import AnthropicLLM  # type: ignore[import-not-found]
-    #     return AnthropicLLM(  # type: ignore[no-any-return]
-    #         model=config.model,
-    #         api_key=config.api_key,
-    #         temperature=config.temperature,
-    #         max_tokens=config.max_tokens,
-    #         **config.params,
-    #     )
+    if config.provider == "anthropic":
+        from nexrag.adapters.llms.anthropic import AnthropicLLM
+
+        return AnthropicLLM(
+            model=config.model,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            timeout=config.timeout,
+            max_retries=config.max_retries,
+        )
 
     raise ConfigError(
-        f"Unknown LLM provider: {config.provider!r}. " f"Supported: openai, ollama, custom",
+        f"Unknown LLM provider: {config.provider!r}. Supported: openai, ollama, anthropic, custom",
         stage="config",
         component="llm",
     )
@@ -340,9 +352,9 @@ def _build_observer(config: ObservabilityConfig) -> BaseObserver:
             )
         return resolve_class(
             config.class_path,
-            BaseObserver,
+            BaseObserver,  # type: ignore[type-abstract]
             config.params,
-            stage="observer",  # type: ignore[type-abstract]
+            stage="observer",
         )
 
     raise ConfigError(

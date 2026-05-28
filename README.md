@@ -31,43 +31,54 @@ Every stage — loading, chunking, embedding, retrieval, generation — is a cle
 
 ## Quickstart
 
-> **Note:** NexRAG v1.0 is under active development. This section will be updated on first release.
+```bash
+pip install "nexrag[openai,pdf]"
+export OPENAI_API_KEY=sk-...
+cp nexrag.example.yaml nexrag.yaml   # edit to taste
+```
 
 ```python
 from nexrag import NexRAG
 
 pipeline = NexRAG.from_config("nexrag.yaml")
 
-# Ingest documents
-pipeline.ingest("docs/contracts/")
+# Ingest a PDF
+result = pipeline.ingest("contracts/agreement.pdf")
+print(f"Ingested {result.documents_loaded} doc, {result.chunks_written} chunks")
 
 # Query
 result = pipeline.query("What are the termination clauses?")
 print(result.answer)
-print(result.source_chunks)
+for source in result.sources:
+    print(f"  [{source.rank}] score={source.score:.3f}  {source.chunk.metadata.get('source')}")
 ```
 
 ```yaml
-# nexrag.yaml
-nexrag:
-  version: "1.0"
-
+# nexrag.yaml (minimal)
 ingestion:
-  chunker:
-    strategy: recursive
-    chunk_size: 512
+  loader:
+    type: pdf
   embedder:
     provider: openai
     model: text-embedding-3-small
+    api_key: ${OPENAI_API_KEY}
   vector_db:
     provider: chroma
-    default_collection: contracts
+    default_collection: documents
+    collections:
+      documents:
+        mode: persistent
+        path: ./.nexrag/chroma
 
 query:
+  embedder: inherit
   llm:
     provider: openai
     model: gpt-4o
+    api_key: ${OPENAI_API_KEY}
 ```
+
+See [docs/user-guide.md](docs/user-guide.md) for the full guide.
 
 ---
 
@@ -111,14 +122,25 @@ See [Architecture Documentation](docs/) for full pipeline diagrams.
 
 ---
 
-## Supported Providers (V1)
+## Supported Providers
+
+**Available now**
 
 | Category | Providers |
 |---|---|
-| Embedders | OpenAI, HuggingFace, Ollama |
-| Vector DBs | ChromaDB (local + remote) |
-| LLMs | OpenAI, Anthropic, Ollama |
-| Loaders | PDF, TXT/MD, Word, Excel, JSON, HTML, Code |
+| Embedders | OpenAI |
+| Vector DBs | ChromaDB (local persistent, in-memory) |
+| LLMs | OpenAI, Ollama |
+| Loaders | PDF, plain text |
+| Chunkers | Recursive (separator-aware) |
+
+**Coming in V1**
+
+| Category | Providers |
+|---|---|
+| Embedders | Ollama, HuggingFace |
+| Vector DBs | ChromaDB (remote server via HttpClient) |
+| LLMs | Anthropic |
 
 ---
 

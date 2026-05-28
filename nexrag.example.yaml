@@ -1,0 +1,154 @@
+# nexrag.example.yaml
+#
+# Copy this file to nexrag.yaml and fill in your values.
+# All API keys must be set via environment variables — never hardcode them here.
+#
+# Usage:
+#   cp nexrag.example.yaml nexrag.yaml
+#   export OPENAI_API_KEY=sk-...
+#   python -c "from nexrag import NexRAG; p = NexRAG.from_config(); print(p.query('hello'))"
+
+# ── Ingestion pipeline ──────────────────────────────────────────────────────────
+
+ingestion:
+
+  # Loader: how raw data is read into Documents.
+  # type: auto   → no built-in loader; you must pass a loader to ingest() at call time,
+  #                or call ingest_documents() with pre-built Document objects.
+  # type: pdf    → loads PDF files (requires nexrag[pdf])
+  # type: txt    → loads plain text files / strings
+  # type: custom → bring your own loader (requires 'class:' field below)
+  loader:
+    type: pdf                           # auto | pdf | txt | custom
+    # class: myapp.loaders.MyLoader    # dotted path — required when type: custom
+    # params:
+    #   source_override: "my-source"   # passed as kwargs to __init__
+
+  # Chunker: splits Documents into retrievable Chunks.
+  chunker:
+    strategy: recursive                 # recursive | custom
+    chunk_size: 512                     # max characters per chunk
+    chunk_overlap: 64                   # overlap between consecutive chunks
+    min_chunk_size: 50                  # chunks below this size are dropped
+    # class: myapp.chunkers.MyChunker  # required when strategy: custom
+
+  # Embedder: converts chunk text to vectors.
+  embedder:
+    provider: openai                    # openai | ollama | huggingface | custom
+    model: text-embedding-3-small       # text-embedding-3-small | text-embedding-3-large | text-embedding-ada-002
+    api_key: ${OPENAI_API_KEY}          # required for openai — set via env var
+    # base_url: ${OPENAI_BASE_URL:-}    # optional: custom endpoint (Azure, proxy)
+    batch_size: 100                     # texts per API call
+    # max_retries: 2                    # retry attempts on transient failures (0 = no retries)
+
+  # Vector DB: stores chunks and their vectors.
+  vector_db:
+    provider: chroma                    # chroma | custom
+    default_collection: documents       # must match a key under collections:
+    on_conflict: overwrite              # overwrite | skip | append
+
+    collections:
+      documents:
+        mode: persistent                # persistent | memory | server
+        path: ./.nexrag/chroma          # local storage path (persistent mode only)
+        # host: chroma.internal         # server hostname (server mode only)
+        # port: 8000                    # server port (server mode only)
+
+    # class: myapp.stores.MyVectorDB    # required when provider: custom
+    # params:
+    #   index_name: my-index
+
+  # Sanitizer: optional pre-processing step before chunking.
+  # Disabled by default. Provide a custom class to enable.
+  sanitizer:
+    enabled: false
+    # class: myapp.sanitizers.MySanitizer
+    # params: {}
+
+# ── Query pipeline ──────────────────────────────────────────────────────────────
+
+query:
+
+  # Embedder for queries. 'inherit' reuses the ingestion embedder (recommended).
+  # Must be the same model used during ingestion — different models produce
+  # incompatible vectors and will cause poor or wrong retrieval results.
+  embedder: inherit                     # inherit | openai | ollama | huggingface | custom
+
+  # Retriever: finds the most relevant chunks for a query vector.
+  retriever:
+    provider: dense                     # dense | custom
+    top_k: 5                            # number of chunks to retrieve
+    score_threshold: 0.0                # minimum cosine similarity (0.0 = return all)
+    # class: myapp.retrievers.MyRetriever
+
+  # LLM: generates the final answer from the retrieved context.
+  llm:
+    provider: openai                    # openai | ollama | anthropic | custom
+    model: gpt-4o                       # gpt-4o | gpt-4o-mini | gpt-3.5-turbo
+    api_key: ${OPENAI_API_KEY}          # required for openai
+    # base_url: ${OPENAI_BASE_URL:-}    # optional: Azure OpenAI or proxy
+    temperature: 0.2                    # 0.0 = deterministic, 1.0 = creative
+    max_tokens: 1024                    # max tokens in the response
+    timeout: 30                         # request timeout in seconds
+    # max_retries: 2                    # retry attempts on transient failures (0 = no retries)
+
+  # Prompt: controls how context and query are assembled into the LLM prompt.
+  prompt:
+    system: |
+      You are a helpful assistant. Answer the user's question using only the
+      context provided below. If the answer is not in the context, say
+      "I don't know based on the provided documents."
+    context_format: numbered            # numbered | labeled | plain
+    # class: myapp.prompts.MyPromptBuilder  # custom prompt builder
+
+# ── Observability ───────────────────────────────────────────────────────────────
+
+observability:
+  enabled: true
+  observer: console                     # console | custom
+  log_level: INFO                       # DEBUG | INFO | WARNING | ERROR
+  format: json                          # json | text
+  # class: myapp.observers.MyObserver   # required when observer: custom
+
+# ── Ollama example (fully local, no API keys) ───────────────────────────────────
+#
+# ingestion:
+#   loader:
+#     type: pdf
+#   chunker:
+#     strategy: recursive
+#     chunk_size: 512
+#   embedder:
+#     provider: ollama
+#     model: nomic-embed-text           # run: ollama pull nomic-embed-text
+#   vector_db:
+#     provider: chroma
+#     default_collection: documents
+#     collections:
+#       documents:
+#         mode: persistent
+#         path: ./.nexrag/chroma
+#
+# query:
+#   embedder: inherit
+#   llm:
+#     provider: ollama
+#     model: llama3.2                   # run: ollama pull llama3.2
+#     base_url: http://localhost:11434
+
+# ── Anthropic example ───────────────────────────────────────────────────────────
+#
+# query:
+#   llm:
+#     provider: anthropic
+#     model: claude-3-5-sonnet-20241022
+#     api_key: ${ANTHROPIC_API_KEY}
+
+# ── Custom component example ────────────────────────────────────────────────────
+#
+# ingestion:
+#   embedder:
+#     provider: custom
+#     class: myapp.embedders.SentenceTransformerEmbedder
+#     params:
+#       model: all-MiniLM-L6-v2

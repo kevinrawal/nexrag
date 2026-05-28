@@ -73,7 +73,7 @@ class PDFLoader(BaseLoader):
                     component="PDFLoader",
                     cause=e,
                 ) from e
-        elif isinstance(data, (str, Path)):
+        elif isinstance(data, str | Path):
             path = Path(data)
             source = self._source_override or str(path.resolve())
             if not path.exists():

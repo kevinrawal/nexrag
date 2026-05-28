@@ -1,10 +1,11 @@
 """
-ChromaDBAdapter — local in-process ChromaDB vector store.
+ChromaDBAdapter — ChromaDB vector store, three modes.
 
-Supports two modes:
   - persistent (default): data written to disk at the configured path.
     Survives container restarts when the path is a mounted volume.
   - memory: ephemeral in-process store. Fast, no disk I/O. Ideal for tests/CI.
+  - server: connects to a remote ChromaDB HTTP server via HttpClient.
+    Requires host (and optionally port, default 8000).
 
 Requires: pip install "nexrag[chromadb]"  (chromadb)
 """
@@ -26,18 +27,25 @@ class ChromaDBAdapter(BaseVectorDB):
 
     Args:
         path:  Filesystem path for persistent storage. Relative to CWD.
-               Ignored when mode="memory".
-        mode:  "persistent" (default) or "memory".
-               "memory" uses chromadb.EphemeralClient — data is lost on process exit.
+               Ignored when mode is not "persistent".
+        mode:  "persistent" (default), "memory", or "server".
+               "memory"     — chromadb.EphemeralClient, data lost on exit.
+               "server"     — chromadb.HttpClient connecting to host:port.
+        host:  Remote ChromaDB server hostname. Required when mode="server".
+        port:  Remote ChromaDB server port. Default 8000.
     """
 
     def __init__(
         self,
         path: str | None = None,
         mode: str = "persistent",
+        host: str | None = None,
+        port: int | None = None,
     ) -> None:
         self._path = path
         self._mode = mode
+        self._host = host
+        self._port = port
         self._client: Any = self._connect()
 
     # BaseVectorDB implementation
@@ -186,11 +194,16 @@ class ChromaDBAdapter(BaseVectorDB):
             if self._mode == "memory":
                 return chromadb.EphemeralClient()
 
+            if self._mode == "server":
+                host = self._host or "localhost"
+                port = self._port or 8000
+                return chromadb.HttpClient(host=host, port=port)
+
             path = self._path or ".nexrag/chroma"
             return chromadb.PersistentClient(path=path)
         except Exception as e:
             raise VectorDBConnectionError(
-                f"ChromaDB connection failed (mode={self._mode!r}, path={self._path!r}): {e}",
+                f"ChromaDB connection failed (mode={self._mode!r}, host={self._host!r}, path={self._path!r}): {e}",
                 stage="pipeline",
                 component="ChromaDBAdapter",
                 cause=e,
@@ -215,7 +228,7 @@ class ChromaDBAdapter(BaseVectorDB):
         """ChromaDB metadata values must be str/int/float/bool — flatten others."""
         result: dict[str, Any] = {}
         for k, v in metadata.items():
-            if isinstance(v, (str, int, float, bool)):
+            if isinstance(v, str | int | float | bool):
                 result[k] = v
             else:
                 result[k] = str(v)
