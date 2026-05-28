@@ -26,7 +26,7 @@ from nexrag.exceptions import (
 def test_version_exists():
     assert hasattr(nexrag, "__version__")
     assert isinstance(nexrag.__version__, str)
-    assert nexrag.__version__ == "0.1.0"
+    assert nexrag.__version__ == "0.2.0"
 
 
 def test_public_api_importable():
@@ -35,18 +35,18 @@ def test_public_api_importable():
     assert NexRAGError is not None
 
 
-def test_nexrag_raises_not_implemented():
-    try:
-        NexRAG()
-    except NotImplementedError:
-        pass
+def test_nexrag_requires_pipelines():
+    import pytest
+
+    with pytest.raises(TypeError):
+        NexRAG()  # type: ignore[call-arg]
 
 
-def test_pipeline_result_raises_not_implemented():
-    try:
-        PipelineResult()
-    except NotImplementedError:
-        pass
+def test_pipeline_result_requires_fields():
+    import pytest
+
+    with pytest.raises(TypeError):
+        PipelineResult()  # type: ignore[call-arg]
 
 
 def test_exception_hierarchy():

@@ -4,10 +4,10 @@ build-backend = "uv_build"
 
 [project]
 name = "nexrag"
-version = "0.1.0"
+version = "0.2.0"
 description = "Framework-agnostic RAG pipeline SDK. Plug in any component, swap any stage, configure everything in YAML"
 readme = "README.md"
-license = { text = "TBD" }
+license = { text = "MIT" }
 authors = [
     { name = "KevinRawal", email = "kevinrawal30@gmail.com" }
 ]
@@ -24,7 +24,7 @@ keywords = [
     "sdk",
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
@@ -35,6 +35,8 @@ classifiers = [
 
 # Keep this minimal. Only what the pipeline skeleton needs.
 dependencies = [
+    "chromadb>=1.5.9",
+    "openai>=2.38.0",
     "pydantic>=2.0",   # config schema validation
     "pyyaml>=6.0",     # YAML config loading
 ]
@@ -55,7 +57,7 @@ chromadb = [
     "chromadb>=0.5",
 ]
 huggingface = [
-    "sentence-transformers>=2.0",
+    "huggingface-hub>=0.20",
 ]
 
 # Document loaders
