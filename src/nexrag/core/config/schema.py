@@ -32,6 +32,11 @@ class LoaderConfig(BaseModel):
     type: Literal["auto", "pdf", "txt", "excel", "json", "code", "word", "html", "custom"] = "auto"
     class_path: str | None = Field(default=None, alias="class")
     params: dict[str, Any] = Field(default_factory=dict)
+    # ignore this if Loader doesn't support metadata extraction
+    # but if it does, these fields will be extracted and stored in the vector DB
+    # Extraction logic will be loader specific
+    metadata_fields: list[str] | None = None
+    include_metadata: bool = True
 
     model_config = {"populate_by_name": True}
 

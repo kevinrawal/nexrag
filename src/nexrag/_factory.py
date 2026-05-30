@@ -220,7 +220,11 @@ def _build_loader(config: LoaderConfig) -> BaseLoader | None:
     if config.type == "pdf":
         from nexrag.loaders.pdf import PDFLoader
 
-        return PDFLoader(**config.params)
+        return PDFLoader(
+            metadata_fields=config.metadata_fields,
+            include_metadata=config.include_metadata,
+            **config.params,
+        )
 
     if config.type in ("txt", "text"):
         from nexrag.loaders.raw import RawTextLoader
