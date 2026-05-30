@@ -33,7 +33,7 @@ from nexrag.core.interfaces.vector_db import BaseVectorDB
 from nexrag.core.models.chunk import Chunk
 from nexrag.core.models.document import Document
 from nexrag.core.models.event import PipelineEvent
-from nexrag.core.pipeline.ingestion import IngestionResult, _compute_fingerprint
+from nexrag.core.pipeline.ingestion import IngestionResult, _compute_fingerprint, _stabilise_doc_ids
 from nexrag.exceptions import (
     ChunkError,
     EmbedderError,
@@ -92,6 +92,7 @@ class AsyncIngestionPipeline:
         self,
         data: Any,
         loader: BaseLoader | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> IngestionResult:
         """
         Sync entry point — wraps aingest() in asyncio.run() for non-async callers.
@@ -100,7 +101,7 @@ class AsyncIngestionPipeline:
         async_ingest() / aingest() there instead.
         """
         self._assert_no_running_loop()
-        return asyncio.run(self.aingest(data, loader))
+        return asyncio.run(self.aingest(data, loader, metadata))
 
     def ingest_documents(self, documents: list[Document]) -> IngestionResult:
         """Sync entry point for pre-built Documents — wraps aingest_documents()."""
@@ -111,13 +112,17 @@ class AsyncIngestionPipeline:
         self,
         data: Any,
         loader: BaseLoader | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> IngestionResult:
         """
         Async ingest: parse data through a loader, then run the pipeline.
 
         Args:
-            data:   Anything the loader accepts.
-            loader: Optional loader override for this call.
+            data:     Anything the loader accepts.
+            loader:   Optional loader override for this call.
+            metadata: Optional metadata merged into every Document after loading.
+                      Keys here overwrite loader-set defaults.
+                      Example: {"source": "contract-456", "tenant": "acme"}
 
         Returns:
             IngestionResult with counts and pipeline_id.
@@ -137,6 +142,9 @@ class AsyncIngestionPipeline:
 
         try:
             documents = await self._run_loader(active_loader, data, pipeline_id)
+            if metadata:
+                for doc in documents:
+                    doc.metadata.update(metadata)
             return await self._run_from_documents(documents, pipeline_id, started_at)
         except PipelineError:
             raise
@@ -194,6 +202,7 @@ class AsyncIngestionPipeline:
         pipeline_id: str,
         started_at: float,
     ) -> IngestionResult:
+        documents = _stabilise_doc_ids(documents)
         # Stages before DB: run WITHOUT the lock (safe, pure compute or read-only).
         chunks = await self._run_sanitizer_and_chunker(documents, pipeline_id)
         embeddings = await self._run_embedder(chunks, pipeline_id)

@@ -37,8 +37,8 @@ class TestIngestBatch:
         pipeline = _make_pipeline()
         pipeline._ingestion.ingest.return_value = _make_result()
         pipeline.ingest_batch(["a.pdf", "b.txt"])
-        pipeline._ingestion.ingest.assert_any_call("a.pdf", None)
-        pipeline._ingestion.ingest.assert_any_call("b.txt", None)
+        pipeline._ingestion.ingest.assert_any_call("a.pdf", None, metadata=None)
+        pipeline._ingestion.ingest.assert_any_call("b.txt", None, metadata=None)
 
     def test_empty_list_returns_empty(self):
         pipeline = _make_pipeline()
@@ -59,7 +59,7 @@ class TestIngestBatch:
         pipeline.ingest_batch(["a.pdf", "b.pdf"], loader=mock_loader)
         pipeline._ingestion.ingest.assert_has_calls(
             [
-                call("a.pdf", mock_loader),
-                call("b.pdf", mock_loader),
+                call("a.pdf", mock_loader, metadata=None),
+                call("b.pdf", mock_loader, metadata=None),
             ]
         )

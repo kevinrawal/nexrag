@@ -90,20 +90,23 @@ class IngestionPipeline:
         self,
         data: Any,
         loader: BaseLoader | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> IngestionResult:
         """
         Ingest any data by parsing it through a Loader first.
 
-        The loader receives data as-is — file path, bytes, dict, list,
-        raw text, or any other type the loader accepts.
-        The loader's job is to parse it into Documents.
-        NexRAG takes over from Documents onward.
+        The loader receives data as-is. NexRAG takes over from Documents onward.
 
         Args:
-            data:   Anything the loader accepts.
-            loader: Optional loader override for this call.
-                    Falls back to the loader passed at pipeline construction.
-                    If neither is set, raises PipelineError.
+            data:     Anything the loader accepts (bytes, str, tuple, etc.).
+            loader:   Optional loader override for this call. Falls back to the
+                      loader passed at pipeline construction. If neither is set,
+                      raises PipelineError.
+            metadata: Optional metadata merged into every Document produced by
+                      the loader. Keys in this dict overwrite loader-set defaults,
+                      so passing metadata={"source": "contract-456"} correctly
+                      sets the idempotency key regardless of loader defaults.
+                      Example: {"source": "s3://bucket/file.pdf", "tenant": "acme"}
 
         Returns:
             IngestionResult with counts and pipeline_id.
@@ -127,6 +130,9 @@ class IngestionPipeline:
 
         try:
             documents = self._run_loader(active_loader, data, pipeline_id)
+            if metadata:
+                for doc in documents:
+                    doc.metadata.update(metadata)
             return self._run_from_documents(documents, pipeline_id, started_at)
         except PipelineError:
             raise
@@ -200,6 +206,7 @@ class IngestionPipeline:
         Common path for both ingest() and ingest_documents().
         Receives Documents and runs all remaining stages.
         """
+        documents = _stabilise_doc_ids(documents)
         chunks = self._run_sanitizer_and_chunker(documents, pipeline_id)
         embeddings = self._run_embedder(chunks, pipeline_id)
         self._run_fingerprint_check(pipeline_id)
@@ -577,3 +584,26 @@ class IngestionResult:
 def _compute_fingerprint(model_name: str, dimensions: int) -> str:
     """Stable hash of model identity. Detects embedding model changes."""
     return hashlib.sha256(f"{model_name}:{dimensions}".encode()).hexdigest()
+
+
+def _stabilise_doc_ids(documents: list[Document]) -> list[Document]:
+    """
+    Derive a deterministic doc_id from metadata["source"] when available.
+
+    Without this, Document generates a fresh UUID on every instantiation, so
+    parent_doc_id stored in chunks changes on every re-ingest of the same file.
+    A stable doc_id means parent_doc_id in ChromaDB is consistent across ingestions,
+    which makes per-document chunk queries and citation attribution reliable.
+
+    Documents without a source keep their random UUID — they are ephemeral by
+    design (no source = no idempotency, always written fresh).
+    """
+    out: list[Document] = []
+    for doc in documents:
+        source = doc.metadata.get("source")
+        if source:
+            stable_id = hashlib.sha256(str(source).encode()).hexdigest()[:32]
+            if doc.doc_id != stable_id:
+                doc = Document(content=doc.content, metadata=doc.metadata, doc_id=stable_id)
+        out.append(doc)
+    return out

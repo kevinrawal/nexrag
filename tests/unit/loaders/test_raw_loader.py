@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from nexrag.exceptions import LoaderError
@@ -17,9 +19,9 @@ class TestRawTextLoader:
         docs = self.loader.load(text)
         assert docs[0].content == text
 
-    def test_default_source_metadata(self):
+    def test_no_source_when_not_provided(self):
         docs = self.loader.load("Some text")
-        assert docs[0].metadata["source"] == "raw_text"
+        assert "source" not in docs[0].metadata
 
     def test_custom_default_source(self):
         loader = RawTextLoader(source="my-doc-id")
@@ -51,3 +53,11 @@ class TestRawTextLoader:
         docs = self.loader.load("text")
         assert docs[0].doc_id
         assert isinstance(docs[0].doc_id, str)
+
+    def test_path_input_raises_loader_error(self):
+        with pytest.raises(LoaderError, match="expects str"):
+            self.loader.load(Path("file.txt"))  # type: ignore
+
+    def test_bytes_input_raises_loader_error(self):
+        with pytest.raises(LoaderError, match="expects str"):
+            self.loader.load(b"some bytes")  # type: ignore

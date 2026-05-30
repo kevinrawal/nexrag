@@ -1,11 +1,10 @@
 """
-PDFLoader — extracts text from PDF files using pypdf.
+PDFLoader — converts PDF bytes into a Document.
 
-Accepts:
-  - str / Path  → reads from filesystem, sets metadata["source"] = resolved path
-  - bytes       → reads from memory (e.g. downloaded from S3, received over HTTP)
-
-All pages are merged into a single Document. Use RecursiveChunker to split it.
+Accepts bytes only. Fetch the bytes yourself before calling load():
+    data = Path("file.pdf").read_bytes()          # local file
+    data = s3_client.get_object(...)["Body"].read()  # S3
+    data = response.content                         # HTTP
 
 Requires: pip install "nexrag[pdf]"  (pypdf)
 """
@@ -13,7 +12,6 @@ Requires: pip install "nexrag[pdf]"  (pypdf)
 from __future__ import annotations
 
 import io
-from pathlib import Path
 from typing import Any
 
 from nexrag.core.interfaces.loader import BaseLoader
@@ -47,20 +45,21 @@ def _parse_pdf_date(raw: str) -> str | None:
         minute = digits[10:12] if len(digits) >= 12 else "00"
         second = digits[12:14] if len(digits) >= 14 else "00"
         return f"{year}-{month}-{day}T{hour}:{minute}:{second}"
-    except Exception:
+    except (ValueError, IndexError):
         return None
 
 
 class PDFLoader(BaseLoader):
     """
-    Loads a PDF file into a single Document containing all page text.
+    Converts PDF bytes into a single Document containing all page text.
 
-    By default extracts all available PDF metadata fields alongside page text.
-    Fields are silently omitted when not present in the source PDF.
+    Accepts bytes only. File reading and path resolution are the caller's
+    responsibility.
 
     Args:
-        source_override:  If set, overrides the auto-detected source identifier.
-                          Useful when loading bytes from a known URI (e.g. an S3 key).
+        source_override:  Stable identifier for the content (used by idempotency
+                          check). Set this to the origin URI, S3 key, or filename.
+                          Defaults to "pdf_bytes" when not provided.
         metadata_fields:  Whitelist of metadata field names to include. Default (None)
                           includes all available fields. Supported names:
                           author, title, subject, creator, producer,
@@ -79,20 +78,30 @@ class PDFLoader(BaseLoader):
         self._metadata_fields = metadata_fields
         self._include_metadata = include_metadata
 
-    def load(self, data: str | Path | bytes) -> list[Document]:
+    def load(self, data: bytes) -> list[Document]:
         """
         Args:
-            data: A file path (str or Path) or raw PDF bytes.
+            data: Raw PDF bytes. Must be bytes — passing a file path raises LoaderError.
+                  To load from a file: loader.load(Path("file.pdf").read_bytes())
 
         Returns:
             A list containing one Document with all page text joined by double newlines.
-            metadata["source"] is always set (resolved file path or "pdf_bytes").
-            Additional metadata fields are included per include_metadata / metadata_fields config.
+            metadata["source"] is always set (source_override or "pdf_bytes").
+            Additional metadata fields are extracted per include_metadata / metadata_fields.
 
         Raises:
-            LoaderError: If pypdf is not installed, the file cannot be read,
+            LoaderError: If data is not bytes, pypdf is not installed,
                          the PDF is encrypted, or no text could be extracted.
         """
+        if not isinstance(data, bytes):
+            raise LoaderError(
+                f"PDFLoader expects bytes. "
+                f"Read the file first: data = Path('file.pdf').read_bytes(). "
+                f"Got: {type(data).__name__}",
+                stage="loader",
+                component="PDFLoader",
+            )
+
         try:
             from pypdf import PdfReader  # type: ignore[import-not-found]
         except ImportError as e:
@@ -107,43 +116,19 @@ class PDFLoader(BaseLoader):
         reader, source = self._open(data, PdfReader)
         return self._extract(reader, source)
 
-    # TODO: rename the PdfReader type to avoid the type: ignore[import-not-found] in the signature
-    def _open(self, data: str | Path | bytes, PdfReader: type) -> tuple:  # type: ignore[type-arg]
-        if isinstance(data, bytes):
-            source = self._source_override or "pdf_bytes"
-            try:
-                reader = PdfReader(io.BytesIO(data))
-            except Exception as e:
-                raise LoaderError(
-                    f"Failed to parse PDF from bytes: {e}",
-                    stage="loader",
-                    component="PDFLoader",
-                    cause=e,
-                ) from e
-        elif isinstance(data, str | Path):
-            path = Path(data)
-            source = self._source_override or str(path.resolve())
-            if not path.exists():
-                raise LoaderError(
-                    f"PDF file not found: {path.resolve()}",
-                    stage="loader",
-                    component="PDFLoader",
-                )
-            try:
-                reader = PdfReader(str(path))
-            except Exception as e:
-                raise LoaderError(
-                    f"Failed to open PDF '{path}': {e}",
-                    stage="loader",
-                    component="PDFLoader",
-                    cause=e,
-                ) from e
-        else:
+    def _open(self, data: bytes, pdf_reader_cls: type) -> tuple:  # type: ignore[type-arg]
+        source = (
+            self._source_override
+        )  # None when unset; idempotency disabled until caller provides one
+        try:
+            reader = pdf_reader_cls(io.BytesIO(data))
+        except Exception as e:
             raise LoaderError(
-                f"PDFLoader expects str, Path, or bytes. Got: {type(data).__name__}",
+                f"Failed to parse PDF from bytes: {e}",
                 stage="loader",
                 component="PDFLoader",
-            )
+                cause=e,
+            ) from e
 
         if reader.is_encrypted:
             raise LoaderError(
@@ -154,7 +139,7 @@ class PDFLoader(BaseLoader):
 
         return reader, source
 
-    def _extract(self, reader: object, source: str) -> list[Document]:
+    def _extract(self, reader: object, source: str | None) -> list[Document]:
         page_texts: list[str] = []
         for page in reader.pages:  # type: ignore[attr-defined]
             text = page.extract_text()
@@ -169,7 +154,9 @@ class PDFLoader(BaseLoader):
                 component="PDFLoader",
             )
 
-        metadata: dict[str, Any] = {"source": source}
+        metadata: dict[str, Any] = {}
+        if source is not None:
+            metadata["source"] = source
         metadata.update(self._extract_pdf_metadata(reader))
 
         return [Document(content="\n\n".join(page_texts), metadata=metadata)]
@@ -190,7 +177,6 @@ class PDFLoader(BaseLoader):
 
         meta = getattr(reader, "metadata", None)
         if meta is not None:
-            # String fields — try pypdf attribute access first, fall back to dict key
             for attr, key in [
                 ("author", "author"),
                 ("title", "title"),
@@ -204,8 +190,6 @@ class PDFLoader(BaseLoader):
                 if val:
                     result[key] = str(val)
 
-            # Date fields — pypdf ≥ 3.x returns datetime objects via .creation_date /
-            # .modification_date; older versions return raw D:... strings via dict access.
             for attr, dict_key, output_key in [
                 ("creation_date", "/CreationDate", "created_at"),
                 ("modification_date", "/ModDate", "modified_at"),

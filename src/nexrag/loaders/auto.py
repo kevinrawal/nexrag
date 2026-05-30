@@ -1,53 +1,76 @@
 """
-AutoLoader — selects the appropriate loader based on file extension.
+AutoLoader — detects data format from content and dispatches to the right loader.
 
-Dispatches to PDFLoader (.pdf) or RawTextLoader (.txt, .md).
-Raises LoaderError for unknown extensions with a clear message.
+Accepts bytes or str. No file paths — fetch the data yourself before passing it in.
 
-This is used when loader.type is set to 'auto' in nexrag.yaml.
+Currently supported formats:
+    bytes starting with %PDF  →  PDFLoader
+    str                       →  RawTextLoader
+
+Unsupported formats (images, JSON, Excel, etc.) raise NotImplementedError with a
+message directing the caller to use a specific loader. Support grows as new loaders
+are added to NexRAG.
 """
 
 from __future__ import annotations
-
-from pathlib import Path
-from typing import Any
 
 from nexrag.core.interfaces.loader import BaseLoader
 from nexrag.core.models.document import Document
 from nexrag.exceptions import LoaderError
 
-_EXTENSION_MAP = {
-    ".pdf": "nexrag.loaders.pdf.PDFLoader",
-    ".txt": "nexrag.loaders.raw.RawTextLoader",
-    ".md": "nexrag.loaders.raw.RawTextLoader",
-}
+_PDF_MAGIC = b"%PDF"
 
 
 class AutoLoader(BaseLoader):
     """
-    Extension-based loader dispatcher.
+    Content-type-aware loader dispatcher.
 
-    Supported extensions: .pdf, .txt, .md
+    Detects the data format from the content itself (magic bytes for binary
+    formats, Python type for text), then delegates to the appropriate loader.
+
+    Supports multi-format upload use cases: pass any supported bytes or str
+    through the same pipeline without pre-selecting a loader.
+
+    Args:
+        source_override: Propagated to the delegated loader as source identifier.
     """
 
-    def load(self, source: Any) -> list[Document]:
-        ext = Path(str(source)).suffix.lower()
+    def __init__(self, source_override: str | None = None) -> None:
+        self._source_override = source_override
 
-        if ext == ".pdf":
-            from nexrag.loaders.pdf import PDFLoader
+    def load(self, data: bytes | str) -> list[Document]:
+        """
+        Args:
+            data: Raw content as bytes or str. File paths are not accepted.
 
-            return PDFLoader().load(source)
+        Returns:
+            Documents produced by the detected loader.
 
-        if ext in (".txt", ".md"):
+        Raises:
+            LoaderError: If data is not bytes or str.
+            NotImplementedError: If the bytes content format is not yet supported.
+        """
+        if isinstance(data, bytes):
+            if data[:4] == _PDF_MAGIC:
+                from nexrag.loaders.pdf import PDFLoader
+
+                return PDFLoader(source_override=self._source_override).load(data)
+
+            raise NotImplementedError(
+                "AutoLoader could not identify the data format from its content. "
+                f"Got bytes starting with {data[:8]!r}. "
+                "Supported: PDF (bytes starting with %PDF). "
+                "Use a specific loader: PDFLoader(bytes), RawTextLoader(str)."
+            )
+
+        if isinstance(data, str):
             from nexrag.loaders.raw import RawTextLoader
 
-            return RawTextLoader().load(source)
+            return RawTextLoader(source=self._source_override).load(data)
 
-        supported = ", ".join(sorted(_EXTENSION_MAP))
         raise LoaderError(
-            f"Cannot auto-detect loader for extension {ext!r}. "
-            f"Supported extensions: {supported}. "
-            "Use an explicit loader type (pdf, txt, custom) in nexrag.yaml.",
+            f"AutoLoader expects bytes or str. Got: {type(data).__name__}. "
+            "File paths are not accepted — fetch the data first.",
             stage="loader",
             component="AutoLoader",
         )

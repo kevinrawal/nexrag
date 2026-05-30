@@ -1,13 +1,11 @@
 """
 BaseLoader — contract for all document loaders.
-A Loader receives raw data in some format and returns a list of Documents.
-"""
 
-# TODO: required critical changes.
-# Loader should be something, which load and convert the data into document.
-# default behaviour of loader is having raw data, always.
-# User can write a wrapper where they can fetch the data from source and then pass it to loader.
-# loader can accept row data and the type of data.
+Loaders are converters, not fetchers. They accept already-fetched raw data
+(bytes from S3/HTTP, str from a database, etc.) and return Document objects.
+
+File I/O, HTTP calls, and path resolution are the caller's responsibility.
+"""
 
 from __future__ import annotations
 
@@ -21,26 +19,27 @@ class BaseLoader(ABC):
     """
     Abstract base class for all NexRAG document loaders.
 
-    Subclass this to parse any data format into Documents.
+    Contract:
+        - load() accepts raw data (bytes or str), never a file path
+        - load() performs no file I/O or network calls
+        - metadata["source"] is optional. When set it must be a stable identifier
+          used by the idempotency check to detect re-ingestion. When absent the
+          pipeline always writes (no dedup). Set it via source_override at
+          construction or via the loader's per-call mechanism (e.g. tuple input).
     """
 
     @abstractmethod
     def load(self, data: Any) -> list[Document]:
         """
-        Parse data into a list of Documents.
-
-        data is whatever you fetched — its type depends on this loader's
-        implementation.
-
-        Every returned Document MUST have metadata["source"] set to a stable
-        identifier for this content. The idempotency check depends on it.
+        Convert raw data into a list of Documents.
 
         Args:
-            data: Already-fetched content in whatever format this loader accepts.
-                  Could be str, bytes, dict, list[dict], Path, or any other type.
+            data: Already-fetched content. Type depends on the concrete loader:
+                  PDFLoader expects bytes; RawTextLoader expects str.
+                  Passing a file path raises LoaderError — read bytes first.
 
         Returns:
-            One or more Document objects.
+            One or more Document objects with metadata["source"] set.
 
         Raises:
             LoaderError: If data is the wrong type, malformed, or unparseable.

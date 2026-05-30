@@ -75,8 +75,10 @@ class TestIngestionE2E:
 
     def test_second_ingest_same_content_is_skipped(self, pipeline):
         text = _varied_text(30)
-        r1 = pipeline.ingest(text)
-        r2 = pipeline.ingest(text)
+        # Source must be set explicitly for idempotency to work — without it every
+        # ingest always writes (safe default, but no deduplication).
+        r1 = pipeline.ingest(text, metadata={"source": "doc-idempotency-test"})
+        r2 = pipeline.ingest(text, metadata={"source": "doc-idempotency-test"})
         assert r1.chunks_written > 0
         assert r2.chunks_written == 0  # idempotency: all hashes match
 
