@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Showcase — NexRAG</title>
+  <meta name="description" content="Projects built with NexRAG. A RAG pipeline SDK for Python.">
+  <script>(function(){var t=localStorage.getItem('nexrag-theme')||'dark';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Showcase hero ──────────────────────── */
+    .sc-hero {
+      padding: 96px 0 72px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    .sc-hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 50% -10%,
+        oklch(68% 0.19 270 / 0.06), transparent 60%);
+      pointer-events: none;
+    }
+    .sc-hero-inner { max-width: 680px; }
+    .sc-hero-title {
+      font-size: clamp(40px, 6vw, 64px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      margin-bottom: 20px;
+    }
+    .sc-hero-sub {
+      font-size: 17px;
+      color: var(--text-2);
+      line-height: 1.7;
+      max-width: 520px;
+      margin-bottom: 32px;
+    }
+    .sc-hero-meta {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-3);
+    }
+
+    /* ── Grid ───────────────────────────────── */
+    .sc-body { padding: 72px 0; }
+    .sc-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+    }
+    .sc-card {
+      background: var(--bg);
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      transition: background 0.2s;
+      min-height: 260px;
+    }
+    .sc-card:hover { background: var(--bg-2); }
+    .sc-card.submit-card {
+      background: var(--bg-2);
+      border: none;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+    .sc-card.submit-card:hover { background: var(--bg-3); }
+
+    .sc-tag {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      padding: 3px 8px;
+      border: 1px solid var(--border-2);
+      border-radius: 2px;
+      width: fit-content;
+      margin-bottom: 20px;
+    }
+    .sc-title {
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      margin-bottom: 10px;
+    }
+    .sc-desc {
+      font-size: 14px;
+      color: var(--text-2);
+      line-height: 1.65;
+      flex: 1;
+      margin-bottom: 24px;
+    }
+    .sc-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: auto;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    .sc-stack {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .sc-chip {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-3);
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      padding: 2px 8px;
+      border-radius: 2px;
+    }
+    .sc-author {
+      font-size: 13px;
+      color: var(--text-3);
+    }
+
+    /* placeholder overlay */
+    .sc-placeholder {
+      opacity: 0.45;
+      pointer-events: none;
+      user-select: none;
+    }
+    .placeholder-notice {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      font-size: 13px;
+      color: var(--text-3);
+      margin-bottom: 32px;
+    }
+    .placeholder-notice span {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-border);
+      padding: 2px 8px;
+      border-radius: 2px;
+    }
+
+    /* submit card */
+    .submit-cta {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 16px;
+    }
+    .submit-title {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+    .submit-desc {
+      font-size: 14px;
+      color: var(--text-2);
+      line-height: 1.65;
+      margin-bottom: 28px;
+    }
+
+    /* ── Use cases section ──────────────────── */
+    .usecases-section {
+      padding: 72px 0;
+      border-top: 1px solid var(--border);
+    }
+    .uc-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      margin-top: 48px;
+    }
+    .uc-card {
+      padding: 28px 32px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+    }
+    .uc-icon {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+    .uc-title {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin-bottom: 8px;
+    }
+    .uc-desc {
+      font-size: 14px;
+      color: var(--text-2);
+      line-height: 1.65;
+    }
+
+    /* ── Responsive ─────────────────────────── */
+    @media (max-width: 960px) {
+      .sc-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 640px) {
+      .sc-grid { grid-template-columns: 1fr; }
+      .uc-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="index.html" class="nav-logo">
+        <span class="logo-dot">●</span>NexRAG
+      </a>
+      <div class="nav-links">
+        <a href="story.html">Story</a>
+        <a href="showcase.html" class="active">Showcase</a>
+        <a href="docs.html">Docs</a>
+        <a href="https://github.com/kevinrawal/nexrag" target="_blank" class="nav-gh">GitHub ↗</a>
+        <button class="theme-btn" id="themeBtn" title="Toggle theme">◑</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Showcase hero ─────────────────────── -->
+  <section class="sc-hero">
+    <div class="container">
+      <div class="sc-hero-inner">
+        <div class="label" style="margin-bottom: 24px;">Showcase</div>
+        <h1 class="sc-hero-title">Built with NexRAG.</h1>
+        <p class="sc-hero-sub">
+          Projects from the community. If you've built something with NexRAG, open a GitHub issue to get it listed here.
+        </p>
+        <div class="sc-hero-meta">v0.2.0 · public release · May 2026</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Showcase grid ─────────────────────── -->
+  <section class="sc-body">
+    <div class="container">
+
+      <div class="placeholder-notice fade-up">
+        <span>note</span>
+        NexRAG launched May 2026. The cards below are illustrative examples of what you can build — not real submissions yet. Be the first.
+      </div>
+
+      <div class="sc-grid">
+
+        <!-- Card 1 -->
+        <div class="sc-card sc-placeholder fade-up">
+          <div class="sc-tag">Document Q&amp;A</div>
+          <div class="sc-title">Contract Intelligence</div>
+          <p class="sc-desc">Query a corpus of legal contracts for specific clauses, obligations, and dates. Ingest PDFs, ask in plain English, get structured answers with source citations.</p>
+          <div class="sc-meta">
+            <div class="sc-stack">
+              <span class="sc-chip">OpenAI</span>
+              <span class="sc-chip">ChromaDB</span>
+              <span class="sc-chip">PDF</span>
+            </div>
+            <a href="https://github.com/kevinrawal/nexrag/issues" target="_blank" class="sc-author" style="color:var(--text-3);text-decoration:none;transition:color 0.15s" onmouseover="this.style.color='var(--text-2)'" onmouseout="this.style.color='var(--text-3)'">submit real project ↗</a>
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="sc-card sc-placeholder fade-up">
+          <div class="sc-tag">Knowledge Base</div>
+          <div class="sc-title">Internal Wiki Assistant</div>
+          <p class="sc-desc">An always-accurate assistant over internal documentation. Ingests Confluence exports, Notion pages, and Markdown files. Employees ask questions, get cited answers.</p>
+          <div class="sc-meta">
+            <div class="sc-stack">
+              <span class="sc-chip">Anthropic</span>
+              <span class="sc-chip">ChromaDB</span>
+              <span class="sc-chip">txt/md</span>
+            </div>
+            <a href="https://github.com/kevinrawal/nexrag/issues" target="_blank" class="sc-author" style="color:var(--text-3);text-decoration:none;transition:color 0.15s" onmouseover="this.style.color='var(--text-2)'" onmouseout="this.style.color='var(--text-3)'">submit real project ↗</a>
+          </div>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="sc-card sc-placeholder fade-up">
+          <div class="sc-tag">Research</div>
+          <div class="sc-title">Paper Analyst</div>
+          <p class="sc-desc">Load a folder of academic PDFs, embed with a local HuggingFace model, retrieve with a strict score threshold. Cross-paper synthesis with zero API costs.</p>
+          <div class="sc-meta">
+            <div class="sc-stack">
+              <span class="sc-chip">Ollama</span>
+              <span class="sc-chip">HuggingFace</span>
+              <span class="sc-chip">Local</span>
+            </div>
+            <a href="https://github.com/kevinrawal/nexrag/issues" target="_blank" class="sc-author" style="color:var(--text-3);text-decoration:none;transition:color 0.15s" onmouseover="this.style.color='var(--text-2)'" onmouseout="this.style.color='var(--text-3)'">submit real project ↗</a>
+          </div>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="sc-card sc-placeholder fade-up">
+          <div class="sc-tag">Customer Support</div>
+          <div class="sc-title">Support Copilot</div>
+          <p class="sc-desc">Index product docs and past support tickets. Surface relevant context to agents in real time. Fully local with Ollama — no customer data leaves the org.</p>
+          <div class="sc-meta">
+            <div class="sc-stack">
+              <span class="sc-chip">Ollama</span>
+              <span class="sc-chip">ChromaDB</span>
+              <span class="sc-chip">Custom loader</span>
+            </div>
+            <a href="https://github.com/kevinrawal/nexrag/issues" target="_blank" class="sc-author" style="color:var(--text-3);text-decoration:none;transition:color 0.15s" onmouseover="this.style.color='var(--text-2)'" onmouseout="this.style.color='var(--text-3)'">submit real project ↗</a>
+          </div>
+        </div>
+
+        <!-- Card 5 -->
+        <div class="sc-card sc-placeholder fade-up">
+          <div class="sc-tag">Dev tooling</div>
+          <div class="sc-title">Codebase Q&amp;A</div>
+          <p class="sc-desc">Point NexRAG at a repo's Markdown docs and source comments. Ask architecture questions, get cited answers. Custom chunker preserves function boundaries.</p>
+          <div class="sc-meta">
+            <div class="sc-stack">
+              <span class="sc-chip">OpenAI</span>
+              <span class="sc-chip">Custom chunker</span>
+            </div>
+            <a href="https://github.com/kevinrawal/nexrag/issues" target="_blank" class="sc-author" style="color:var(--text-3);text-decoration:none;transition:color 0.15s" onmouseover="this.style.color='var(--text-2)'" onmouseout="this.style.color='var(--text-3)'">submit real project ↗</a>
+          </div>
+        </div>
+
+        <!-- Card 6 — Streaming API -->
+        <div class="sc-card sc-placeholder fade-up">
+          <div class="sc-tag">Streaming API</div>
+          <div class="sc-title">Live Answer Chatbot</div>
+          <p class="sc-desc">FastAPI backend serving SSE token streams via <code>astream_query()</code>. Ingestion runs async with parallel embedding batches. Users see answers appear word-by-word as the LLM generates them.</p>
+          <div class="sc-meta">
+            <div class="sc-stack">
+              <span class="sc-chip">mode: async</span>
+              <span class="sc-chip">FastAPI</span>
+              <span class="sc-chip">Anthropic</span>
+            </div>
+            <a href="https://github.com/kevinrawal/nexrag/issues" target="_blank" class="sc-author" style="color:var(--text-3);text-decoration:none;transition:color 0.15s" onmouseover="this.style.color='var(--text-2)'" onmouseout="this.style.color='var(--text-3)'">submit real project ↗</a>
+          </div>
+        </div>
+
+        <!-- Submit card -->
+        <div class="sc-card submit-card fade-up">
+          <div>
+            <div class="submit-cta">Submit yours →</div>
+            <div class="submit-title">Built something with NexRAG?</div>
+            <p class="submit-desc">Open a GitHub issue with your project name, description, stack, and a link. We'll add it here.</p>
+          </div>
+          <a href="https://github.com/kevinrawal/nexrag/issues" target="_blank" class="btn-primary">Open an issue ↗</a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Use cases ─────────────────────────── -->
+  <section class="usecases-section">
+    <div class="container">
+      <div class="label fade-up">Use cases</div>
+      <h2 class="section-title fade-up">What NexRAG is good at.</h2>
+      <p class="section-sub fade-up">Any problem where the answer lives in your documents — not in the model's training data.</p>
+      <div class="uc-grid">
+        <div class="uc-card fade-up">
+          <div class="uc-icon">[ doc → answer ]</div>
+          <div class="uc-title">Document Q&amp;A</div>
+          <p class="uc-desc">PDFs, Word docs, plain text — ingest any document corpus and query it in natural language. Sources and scores are always returned.</p>
+        </div>
+        <div class="uc-card fade-up">
+          <div class="uc-icon">[ wiki → assistant ]</div>
+          <div class="uc-title">Internal knowledge bases</div>
+          <p class="uc-desc">Give teams an always-accurate assistant over internal docs. Ingest incrementally. Deduplication handles re-ingestion safely.</p>
+        </div>
+        <div class="uc-card fade-up">
+          <div class="uc-icon">[ data → insight ]</div>
+          <div class="uc-title">Research &amp; analysis</div>
+          <p class="uc-desc">Load academic papers, reports, or structured data. Run local embeddings with Ollama — no API costs, no data leaving your machine.</p>
+        </div>
+        <div class="uc-card fade-up">
+          <div class="uc-icon">[ context → generation ]</div>
+          <div class="uc-title">Grounded generation</div>
+          <p class="uc-desc">Use NexRAG as the retrieval backbone for any LLM-powered product. Control exactly what context the model sees, and verify it with citations.</p>
+        </div>
+        <div class="uc-card fade-up">
+          <div class="uc-icon">[ query → stream ]</div>
+          <div class="uc-title">Streaming chatbots &amp; APIs</div>
+          <p class="uc-desc">Set <code>mode: async</code> and wire <code>astream_query()</code> into a FastAPI SSE endpoint. Tokens arrive live from the LLM — no buffering, no polling.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.2.0</div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="story.html">Story</a>
+        <a href="docs.html">Docs</a>
+        <a href="https://github.com/kevinrawal/nexrag" target="_blank">GitHub ↗</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Theme toggle
+    (function () {
+      var btn = document.getElementById('themeBtn');
+      var root = document.documentElement;
+      function update() {
+        var dark = root.dataset.theme === 'dark';
+        btn.textContent = dark ? '◑' : '◐';
+        btn.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+      }
+      update();
+      btn.addEventListener('click', function () {
+        var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        localStorage.setItem('nexrag-theme', next);
+        update();
+      });
+    })();
+
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('vis'); obs.unobserve(e.target); } });
+    }, { threshold: 0.08, rootMargin: '0px 0px -30px 0px' });
+    document.querySelectorAll('.fade-up').forEach(el => obs.observe(el));
+  </script>
+
+</body>
+</html>

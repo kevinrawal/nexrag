@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Docs — NexRAG</title>
+  <meta name="description" content="NexRAG documentation. Installation, configuration, quickstart, and API reference.">
+  <script>(function(){var t=localStorage.getItem('nexrag-theme')||'dark';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Docs layout ────────────────────────── */
+    .docs-wrap {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: calc(100vh - var(--nav-h));
+      border-top: 1px solid var(--border);
+    }
+
+    /* sidebar */
+    .docs-sidebar {
+      position: sticky;
+      top: var(--nav-h);
+      height: calc(100vh - var(--nav-h));
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      padding: 32px 0 40px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-2) transparent;
+    }
+    .sidebar-group { margin-bottom: 28px; }
+    .sidebar-group-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      padding: 0 24px;
+      margin-bottom: 6px;
+    }
+    .sidebar-link {
+      display: block;
+      font-size: 13px;
+      color: var(--text-2);
+      padding: 6px 24px;
+      border-left: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .sidebar-link:hover { color: var(--text); background: var(--bg-2); }
+    .sidebar-link.active { color: var(--text); border-left-color: var(--accent); background: var(--bg-2); }
+
+    /* main content */
+    .docs-main { padding: 48px 64px 80px; max-width: 800px; }
+
+    /* ── Doc sections ───────────────────────── */
+    .doc-section { margin-bottom: 72px; scroll-margin-top: 80px; }
+    .doc-section:last-child { margin-bottom: 0; }
+
+    .doc-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .doc-h1 {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 16px;
+    }
+    .doc-h2 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin: 40px 0 14px;
+      padding-top: 40px;
+      border-top: 1px solid var(--border);
+    }
+    .doc-h2:first-of-type { margin-top: 28px; padding-top: 0; border-top: none; }
+    .doc-h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 28px 0 10px;
+    }
+    .doc-p {
+      font-size: 15px;
+      color: var(--text-2);
+      line-height: 1.75;
+      margin-bottom: 16px;
+    }
+    .doc-p strong { color: var(--text); font-weight: 600; }
+    .doc-p:last-child { margin-bottom: 0; }
+    .doc-lead {
+      font-size: 17px;
+      color: var(--text-2);
+      line-height: 1.7;
+      margin-bottom: 28px;
+    }
+
+    pre.doc-code {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 20px 24px;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.8;
+      margin: 16px 0 24px;
+    }
+    pre.doc-code code { color: #c8c8c8; }
+
+    /* callout */
+    .callout {
+      display: flex;
+      gap: 14px;
+      padding: 16px 20px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--r);
+      margin: 20px 0;
+    }
+    .callout-icon { color: var(--accent); font-family: var(--mono); font-size: 13px; flex-shrink: 0; }
+    .callout p { font-size: 14px; color: var(--text-2); line-height: 1.65; margin: 0; }
+    .callout p strong { color: var(--text); }
+
+    .callout.warn {
+      background: oklch(80% 0.14 65 / 0.07);
+      border-color: oklch(80% 0.14 65 / 0.25);
+    }
+    .callout.warn .callout-icon { color: var(--amber); }
+
+    /* table */
+    .doc-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      font-size: 14px;
+    }
+    .doc-table th {
+      text-align: left;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      padding: 10px 14px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+    }
+    .doc-table td {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      color: var(--text-2);
+      vertical-align: top;
+      line-height: 1.55;
+    }
+    .doc-table td:first-child { color: var(--text); font-family: var(--mono); font-size: 13px; }
+    .doc-table tr:nth-child(even) td { background: var(--bg-2); }
+
+    /* extras grid */
+    .extras-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+      margin: 16px 0 24px;
+    }
+    .extra-cell {
+      background: var(--bg);
+      padding: 16px 20px;
+    }
+    .extra-name { font-family: var(--mono); font-size: 13px; color: var(--accent); margin-bottom: 4px; }
+    .extra-desc { font-size: 13px; color: var(--text-3); }
+
+    /* result fields table variant */
+    .field-table { width: 100%; border-collapse: collapse; margin: 12px 0 24px; font-size: 14px; }
+    .field-table th {
+      text-align: left; font-family: var(--mono); font-size: 10px;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3);
+      padding: 8px 12px; border-bottom: 1px solid var(--border);
+    }
+    .field-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text-2); vertical-align: top; }
+    .field-table td:first-child { font-family: var(--mono); font-size: 13px; color: var(--green); width: 160px; }
+    .field-table td:nth-child(2) { color: var(--cyan); font-family: var(--mono); font-size: 13px; width: 140px; }
+
+    /* changelog */
+    .cl-ver-bar {
+      display: flex; gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin: 4px 0 32px;
+    }
+    .cl-vtab {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 18px 11px;
+      font-family: var(--mono); font-size: 13px; color: var(--text-3);
+      cursor: pointer; border: none;
+      border-bottom: 2px solid transparent;
+      background: none; margin-bottom: -1px;
+      transition: color 0.15s;
+    }
+    .cl-vtab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .cl-vtab-latest {
+      font-size: 9px; padding: 1px 7px; border-radius: 2px;
+      background: oklch(74% 0.16 145 / 0.1); color: var(--green);
+      border: 1px solid oklch(74% 0.16 145 / 0.22);
+      font-family: var(--mono);
+    }
+    .cl-panel { display: none; }
+    .cl-panel.active { display: block; }
+    .cl-meta {
+      display: flex; align-items: baseline; gap: 16px;
+      padding-bottom: 14px; border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .cl-ver-name {
+      font-family: var(--mono); font-size: 20px;
+      font-weight: 700; color: var(--text); letter-spacing: -0.02em;
+    }
+    .cl-date {
+      font-family: var(--mono); font-size: 12px; color: var(--text-3);
+    }
+    .cl-summary {
+      font-size: 14px; color: var(--text-2);
+      line-height: 1.7; margin-bottom: 24px;
+    }
+    .cl-table { width: 100%; border-collapse: collapse; }
+    .cl-table tr { border-bottom: 1px solid var(--border); }
+    .cl-table tr:last-child { border-bottom: none; }
+    .cl-table td {
+      padding: 9px 0; vertical-align: top;
+      font-size: 14px; color: var(--text-2); line-height: 1.6;
+    }
+    .cl-table td:first-child { width: 106px; padding-right: 16px; }
+    .cl-cat {
+      display: inline-block;
+      font-family: var(--mono); font-size: 10px; color: var(--text-3);
+      background: var(--bg-3); border: 1px solid var(--border-2);
+      padding: 2px 0; border-radius: 2px;
+      width: 90px; text-align: center;
+      white-space: nowrap; letter-spacing: 0.02em;
+    }
+    .cl-empty {
+      padding: 40px 0; color: var(--text-3);
+      font-size: 14px; font-family: var(--mono);
+    }
+
+    /* mobile menu */
+    .docs-mobile-nav {
+      display: none;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-2);
+    }
+    .docs-mobile-select {
+      width: 100%;
+      background: var(--bg-3);
+      border: 1px solid var(--border-2);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 8px 12px;
+      border-radius: var(--r);
+    }
+
+    /* ── Responsive ─────────────────────────── */
+    @media (max-width: 900px) {
+      .docs-wrap { grid-template-columns: 1fr; }
+      .docs-sidebar { display: none; }
+      .docs-mobile-nav { display: block; }
+      .docs-main { padding: 32px 20px 60px; max-width: 100%; }
+      .extras-grid { grid-template-columns: 1fr 1fr; }
+      .doc-h2 { font-size: 20px; }
+    }
+    @media (max-width: 540px) {
+      .extras-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="index.html" class="nav-logo">
+        <span class="logo-dot">●</span>NexRAG
+      </a>
+      <div class="nav-links">
+        <a href="story.html">Story</a>
+        <a href="showcase.html">Showcase</a>
+        <a href="docs.html" class="active">Docs</a>
+        <a href="https://github.com/kevinrawal/nexrag" target="_blank" class="nav-gh">GitHub ↗</a>
+        <button class="theme-btn" id="themeBtn" title="Toggle theme">◑</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- mobile nav -->
+  <div class="docs-mobile-nav">
+    <select class="docs-mobile-select" onchange="location.hash=this.value">
+      <option value="#installation">Installation</option>
+      <option value="#configuration">Configuration</option>
+      <option value="#quickstart">Quickstart</option>
+      <option value="#ingestion">Ingestion guide</option>
+      <option value="#querying">Querying</option>
+      <option value="#custom">Custom components</option>
+      <option value="#async">Async &amp; streaming</option>
+      <option value="#testing">Testing</option>
+      <option value="#api">API reference</option>
+      <option value="#changelog">Changelog</option>
+    </select>
+  </div>
+
+  <div class="docs-wrap">
+
+    <!-- ── Sidebar ─────────────────────────── -->
+    <aside class="docs-sidebar">
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Getting started</div>
+        <a href="#installation" class="sidebar-link active">Installation</a>
+        <a href="#configuration" class="sidebar-link">Configuration</a>
+        <a href="#quickstart" class="sidebar-link">Quickstart</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Guides</div>
+        <a href="#ingestion" class="sidebar-link">Ingestion</a>
+        <a href="#querying" class="sidebar-link">Querying</a>
+        <a href="#async" class="sidebar-link">Async &amp; streaming</a>
+        <a href="#secrets" class="sidebar-link">Secrets</a>
+        <a href="#custom" class="sidebar-link">Custom components</a>
+        <a href="#testing" class="sidebar-link">Testing</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Reference</div>
+        <a href="#api" class="sidebar-link">API reference</a>
+        <a href="#changelog" class="sidebar-link">Changelog</a>
+      </div>
+    </aside>
+
+    <!-- ── Main content ────────────────────── -->
+    <main class="docs-main">
+
+      <!-- ── Installation ─────────────────── -->
+      <div class="doc-section" id="installation">
+        <div class="doc-label">Getting started</div>
+        <h1 class="doc-h1">Installation</h1>
+        <p class="doc-lead">NexRAG is on PyPI. Install the core plus the extras you need.</p>
+
+        <pre class="doc-code"><code><span class="cmt"># Core + OpenAI + PDF (most common setup)</span>
+pip install <span class="str">"nexrag[openai,pdf]"</span>
+
+<span class="cmt"># Core only — bring your own adapters</span>
+pip install nexrag
+
+<span class="cmt"># Everything</span>
+pip install <span class="str">"nexrag[all]"</span></code></pre>
+
+        <div class="doc-h3">Available extras</div>
+        <div class="extras-grid">
+          <div class="extra-cell"><div class="extra-name">openai</div><div class="extra-desc">OpenAI embeddings &amp; LLM</div></div>
+          <div class="extra-cell"><div class="extra-name">pdf</div><div class="extra-desc">PDF ingestion via pypdf</div></div>
+          <div class="extra-cell"><div class="extra-name">ollama</div><div class="extra-desc">Local Ollama LLM &amp; embeddings</div></div>
+          <div class="extra-cell"><div class="extra-name">chromadb</div><div class="extra-desc">Default vector store</div></div>
+          <div class="extra-cell"><div class="extra-name">anthropic</div><div class="extra-desc">Claude models via Anthropic API</div></div>
+          <div class="extra-cell"><div class="extra-name">all</div><div class="extra-desc">All of the above</div></div>
+        </div>
+
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p>Requires <strong>Python 3.12+</strong>. NexRAG uses modern Python features including typed generics and structural pattern matching.</p>
+        </div>
+      </div>
+
+      <!-- ── Configuration ────────────────── -->
+      <div class="doc-section" id="configuration">
+        <div class="doc-label">Getting started</div>
+        <h1 class="doc-h1">Configuration</h1>
+        <p class="doc-lead">NexRAG is configured entirely through a YAML file — by default <code>nexrag.yaml</code> in your working directory.</p>
+
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — minimal config</span>
+
+<span class="key">mode:</span> <span class="val">sync</span>             <span class="yml-cmt"># sync (default) | async — enables native async pipeline</span>
+
+<span class="key">ingestion:</span>
+  <span class="key">loader:</span>
+    <span class="key">type:</span> <span class="val">pdf</span>
+
+  <span class="key">chunker:</span>
+    <span class="key">strategy:</span> <span class="val">recursive</span>
+    <span class="key">chunk_size:</span> <span class="val">512</span>
+    <span class="key">chunk_overlap:</span> <span class="val">64</span>
+    <span class="key">min_chunk_size:</span> <span class="val">50</span>
+
+  <span class="key">embedder:</span>
+    <span class="key">provider:</span> <span class="val">openai</span>
+    <span class="key">model:</span> <span class="val">text-embedding-3-small</span>
+    <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
+
+  <span class="key">vector_db:</span>
+    <span class="key">provider:</span> <span class="val">chroma</span>
+    <span class="key">default_collection:</span> <span class="val">documents</span>
+    <span class="key">on_conflict:</span> <span class="val">overwrite</span>   <span class="yml-cmt"># overwrite | skip | append</span>
+    <span class="key">collections:</span>
+      <span class="key">documents:</span>
+        <span class="key">mode:</span> <span class="val">persistent</span>        <span class="yml-cmt"># persistent | memory | server</span>
+        <span class="key">path:</span> <span class="val">./.nexrag/chroma</span>
+
+<span class="key">query:</span>
+  <span class="key">embedder:</span> <span class="val">inherit</span>             <span class="yml-cmt"># reuse ingestion embedder</span>
+  <span class="key">retriever:</span>
+    <span class="key">provider:</span> <span class="val">dense</span>
+    <span class="key">top_k:</span> <span class="val">5</span>
+    <span class="key">score_threshold:</span> <span class="val">0.0</span>
+  <span class="key">llm:</span>
+    <span class="key">provider:</span> <span class="val">openai</span>
+    <span class="key">model:</span> <span class="val">gpt-4o</span>
+    <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
+    <span class="key">temperature:</span> <span class="val">0.2</span>
+    <span class="key">max_tokens:</span> <span class="val">1024</span>
+  <span class="key">prompt:</span>
+    <span class="key">system:</span> <span class="val">|</span>
+      <span class="val">You are a helpful assistant. Answer using only</span>
+      <span class="val">the provided context. If unknown, say so.</span>
+
+<span class="key">observability:</span>
+  <span class="key">enabled:</span> <span class="val">true</span>
+  <span class="key">observer:</span> <span class="val">console</span>
+  <span class="key">log_level:</span> <span class="val">INFO</span>
+  <span class="key">format:</span> <span class="val">json</span></code></pre>
+
+        <div class="callout warn">
+          <div class="callout-icon">!</div>
+          <p><strong>Never hardcode API keys.</strong> Use <code>${ENV_VAR}</code> substitution. YAML files are often committed to version control.</p>
+        </div>
+      </div>
+
+      <!-- ── Quickstart ────────────────────── -->
+      <div class="doc-section" id="quickstart">
+        <div class="doc-label">Getting started</div>
+        <h1 class="doc-h1">Quickstart</h1>
+        <p class="doc-lead">Ingest a document and query it in under ten lines of Python.</p>
+
+        <pre class="doc-code"><code><span class="kw">import</span> os
+<span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
+
+os.environ[<span class="str">"OPENAI_API_KEY"</span>] = <span class="str">"sk-..."</span>  <span class="cmt"># or set in your shell</span>
+
+pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
+
+<span class="cmt"># Ingest</span>
+result = pipeline.ingest(<span class="str">"contracts/agreement.pdf"</span>)
+<span class="fn">print</span>(<span class="str">f"Ingested {result.documents_loaded} doc"</span>)
+<span class="fn">print</span>(<span class="str">f"Wrote {result.chunks_written} chunks in {result.latency_ms:.1f}ms"</span>)
+
+<span class="cmt"># Query</span>
+result = pipeline.query(<span class="str">"What are the termination clauses?"</span>)
+<span class="fn">print</span>(result.answer)
+
+<span class="kw">for</span> source <span class="kw">in</span> result.sources:
+    <span class="fn">print</span>(<span class="str">f"  [{source.rank}] score={source.score:.3f}  {source.source}"</span>)</code></pre>
+      </div>
+
+      <!-- ── Ingestion ──────────────────────── -->
+      <div class="doc-section" id="ingestion">
+        <div class="doc-label">Guides</div>
+        <h1 class="doc-h1">Ingestion</h1>
+        <p class="doc-lead"><code>pipeline.ingest()</code> accepts file paths, raw bytes, or plain strings. <code>pipeline.ingest_documents()</code> accepts pre-built <code>Document</code> objects.</p>
+
+        <div class="doc-h2">From a file path</div>
+        <pre class="doc-code"><code>result = pipeline.ingest(<span class="str">"contracts/agreement.pdf"</span>)
+<span class="cmt"># also works with pathlib.Path</span>
+result = pipeline.ingest(Path(<span class="str">"contracts/agreement.pdf"</span>))</code></pre>
+
+        <div class="doc-h2">From raw bytes (e.g. S3)</div>
+        <pre class="doc-code"><code><span class="kw">import</span> boto3
+
+s3 = boto3.client(<span class="str">"s3"</span>)
+pdf_bytes = s3.get_object(Bucket=<span class="str">"bucket"</span>, Key=<span class="str">"report.pdf"</span>)[<span class="str">"Body"</span>].read()
+
+result = pipeline.ingest(pdf_bytes)
+<span class="cmt"># metadata["source"] defaults to "pdf_bytes"</span></code></pre>
+
+        <div class="doc-h2">From a plain string</div>
+        <pre class="doc-code"><code>text = <span class="str">"Alice joined Acme Corp in 2019..."</span>
+result = pipeline.ingest((text, <span class="str">"alice_bio"</span>))
+<span class="cmt"># second element becomes metadata["source"]</span></code></pre>
+
+        <div class="doc-h2">From pre-built Document objects</div>
+        <p class="doc-p">Use <code>ingest_documents()</code> when your data comes from a database or API — anywhere a file path doesn't make sense.</p>
+        <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.models.document <span class="kw">import</span> Document
+
+docs = [
+    Document(
+        content=<span class="str">"NexRAG is a framework-agnostic RAG pipeline SDK."</span>,
+        metadata={<span class="str">"source"</span>: <span class="str">"internal-wiki"</span>, <span class="str">"team"</span>: <span class="str">"platform"</span>},
+    ),
+]
+result = pipeline.ingest_documents(docs)</code></pre>
+
+        <div class="doc-h2">Batch ingestion</div>
+        <p class="doc-p">Use <code>ingest_batch()</code> to ingest multiple files in sequence. One <code>IngestionResult</code> is returned per source, in the same order.</p>
+        <pre class="doc-code"><code>results = pipeline.ingest_batch([
+    <span class="str">"contracts/q1.pdf"</span>,
+    <span class="str">"contracts/q2.pdf"</span>,
+    <span class="str">"contracts/q3.pdf"</span>,
+])
+<span class="kw">for</span> r <span class="kw">in</span> results:
+    <span class="fn">print</span>(<span class="str">f"{r.chunks_written} chunks from pipeline_id={r.pipeline_id}"</span>)</code></pre>
+
+        <div class="doc-h2">Conflict strategies</div>
+        <p class="doc-p">Ingestion is idempotent by default. Each chunk is fingerprinted with SHA-256. The <code>on_conflict</code> setting controls what happens when a chunk already exists.</p>
+        <table class="doc-table">
+          <thead><tr><th>Strategy</th><th>Behavior</th></tr></thead>
+          <tbody>
+            <tr><td>overwrite</td><td>Delete existing chunk and write the new one (default)</td></tr>
+            <tr><td>skip</td><td>Skip chunks that already exist — safe for re-ingestion</td></tr>
+            <tr><td>append</td><td>Always write, even if the chunk exists</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ── Querying ───────────────────────── -->
+      <div class="doc-section" id="querying">
+        <div class="doc-label">Guides</div>
+        <h1 class="doc-h1">Querying</h1>
+        <p class="doc-lead">All query parameters can be overridden per-call without changing the YAML.</p>
+
+        <pre class="doc-code"><code>result = pipeline.query(<span class="str">"What is the refund policy?"</span>)
+
+<span class="cmt"># Override retrieval params</span>
+result = pipeline.query(<span class="str">"Summarize the contract"</span>, top_k=<span class="num">10</span>)
+result = pipeline.query(<span class="str">"Exact clause text"</span>, score_threshold=<span class="num">0.75</span>)
+
+<span class="cmt"># Query a specific collection</span>
+result = pipeline.query(<span class="str">"Refund policy"</span>, collection=<span class="str">"terms_of_service"</span>)
+
+<span class="cmt"># Filter by metadata</span>
+result = pipeline.query(
+    <span class="str">"What changed in 2024?"</span>,
+    metadata_filter={<span class="str">"year"</span>: <span class="num">2024</span>},
+)</code></pre>
+      </div>
+
+      <!-- ── Async & Streaming ─────────────────── -->
+      <div class="doc-section" id="async">
+        <div class="doc-label">Guides</div>
+        <h1 class="doc-h1">Async &amp; streaming</h1>
+        <p class="doc-lead">NexRAG ships two pipeline modes. <strong>Sync</strong> (default) — straightforward, thread-safe, works everywhere. <strong>Async</strong> — native async/await with parallel batch embedding and live token streaming.</p>
+
+        <div class="doc-h2">Enabling async mode</div>
+        <p class="doc-p">Add one line to your YAML. No application code changes required.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">mode:</span> <span class="val">async</span>   <span class="yml-cmt"># async | sync (default)</span>
+
+<span class="key">ingestion:</span>
+  <span class="key">embedder:</span>
+    <span class="key">provider:</span> <span class="val">openai</span>
+    <span class="key">model:</span> <span class="val">text-embedding-3-small</span>
+    <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
+    <span class="key">batch_size:</span> <span class="val">50</span>   <span class="yml-cmt"># chunks per concurrent API call batch</span></code></pre>
+
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p>In async mode, embedding batches run as <strong>concurrent API calls</strong>. For large documents this is the biggest performance win — N batches in parallel instead of N sequential requests.</p>
+        </div>
+
+        <div class="doc-h2">Sync streaming</div>
+        <p class="doc-p"><code>stream_query()</code> works with any sync caller — no event loop required. Tokens are yielded as they arrive from the LLM.</p>
+        <pre class="doc-code"><code>pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
+
+<span class="kw">for</span> token <span class="kw">in</span> pipeline.stream_query(<span class="str">"Summarize the key obligations"</span>):
+    <span class="fn">print</span>(token, end=<span class="str">""</span>, flush=<span class="kw">True</span>)
+<span class="fn">print</span>()
+
+<span class="cmt"># Runtime overrides work identically to query()</span>
+<span class="kw">for</span> token <span class="kw">in</span> pipeline.stream_query(
+    <span class="str">"What are the termination clauses?"</span>,
+    top_k=<span class="num">10</span>,
+    score_threshold=<span class="num">0.6</span>,
+):
+    <span class="fn">print</span>(token, end=<span class="str">""</span>, flush=<span class="kw">True</span>)</code></pre>
+
+        <div class="doc-h2">Async streaming</div>
+        <p class="doc-p"><code>astream_query()</code> is the async variant. With <code>mode: async</code> configured, pre-LLM stages use native async clients and tokens stream live. With <code>mode: sync</code>, the sync stream runs in a thread pool — non-blocking for the event loop, but tokens buffer until the stream completes in the thread.</p>
+        <pre class="doc-code"><code><span class="kw">import</span> asyncio
+<span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
+
+pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
+
+<span class="kw">async def</span> <span class="fn">main</span>():
+    <span class="kw">async for</span> token <span class="kw">in</span> pipeline.astream_query(
+        <span class="str">"What changed in 2024?"</span>,
+        metadata_filter={<span class="str">"year"</span>: <span class="num">2024</span>},
+    ):
+        <span class="fn">print</span>(token, end=<span class="str">""</span>, flush=<span class="kw">True</span>)
+
+asyncio.run(<span class="fn">main</span>())</code></pre>
+
+        <div class="doc-h2">FastAPI integration</div>
+        <p class="doc-p">Use <code>async_query()</code> for non-blocking queries, or <code>astream_query()</code> for SSE / streaming responses. Configure <code>mode: async</code> for true async parallelism at every stage.</p>
+        <pre class="doc-code"><code><span class="kw">from</span> fastapi <span class="kw">import</span> FastAPI
+<span class="kw">from</span> fastapi.responses <span class="kw">import</span> StreamingResponse
+<span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
+
+app = FastAPI()
+pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)  <span class="cmt"># mode: async in nexrag.yaml</span>
+
+<span class="kw">@app</span>.get(<span class="str">"/ask"</span>)
+<span class="kw">async def</span> <span class="fn">ask</span>(q: str):
+    result = <span class="kw">await</span> pipeline.async_query(q)
+    <span class="kw">return</span> {<span class="str">"answer"</span>: result.answer, <span class="str">"sources"</span>: [s.source <span class="kw">for</span> s <span class="kw">in</span> result.sources]}
+
+<span class="kw">@app</span>.get(<span class="str">"/stream"</span>)
+<span class="kw">async def</span> <span class="fn">stream</span>(q: str):
+    <span class="kw">async def</span> <span class="fn">gen</span>():
+        <span class="kw">async for</span> token <span class="kw">in</span> pipeline.astream_query(q):
+            <span class="kw">yield</span> token
+    <span class="kw">return</span> StreamingResponse(<span class="fn">gen</span>(), media_type=<span class="str">"text/plain"</span>)</code></pre>
+
+        <div class="callout warn">
+          <div class="callout-icon">!</div>
+          <p><strong>Do not call <code>pipeline.query()</code> or <code>pipeline.ingest()</code> from inside a running event loop.</strong> Use <code>async_query()</code> and <code>async_ingest()</code> inside async contexts. NexRAG raises a clear <code>NexRAGError</code> if you mix sync and async entry points.</p>
+        </div>
+
+        <div class="doc-h2">All async methods</div>
+        <table class="doc-table">
+          <thead><tr><th>Method</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>async_query(text, **kwargs)</td><td>Non-blocking query — awaitable, returns PipelineResult</td></tr>
+            <tr><td>astream_query(text, **kwargs)</td><td>Async generator — yields tokens live from the LLM</td></tr>
+            <tr><td>async_ingest(data, loader?)</td><td>Non-blocking ingest — awaitable, returns IngestionResult</td></tr>
+            <tr><td>stream_query(text, **kwargs)</td><td>Sync generator — yields tokens, no event loop needed</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ── Secrets ────────────────────────── -->
+      <div class="doc-section" id="secrets">
+        <div class="doc-label">Guides</div>
+        <h1 class="doc-h1">Secret management</h1>
+        <p class="doc-lead">NexRAG supports <code>${ENV_VAR}</code> substitution in YAML before any parsing occurs.</p>
+
+        <pre class="doc-code"><code><span class="yml-cmt"># Required — fails at startup if not set</span>
+<span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
+
+<span class="yml-cmt"># Optional with empty-string fallback</span>
+<span class="key">base_url:</span> <span class="val">${OPENAI_BASE_URL:-}</span>
+
+<span class="yml-cmt"># Default value</span>
+<span class="key">model:</span> <span class="val">${LLM_MODEL:-gpt-4o}</span></code></pre>
+
+        <pre class="doc-code"><code><span class="cmt"># Load from .env before from_config</span>
+<span class="kw">from</span> dotenv <span class="kw">import</span> load_dotenv
+load_dotenv()
+pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pre>
+      </div>
+
+      <!-- ── Custom components ──────────────── -->
+      <div class="doc-section" id="custom">
+        <div class="doc-label">Guides</div>
+        <h1 class="doc-h1">Custom components</h1>
+        <p class="doc-lead">Any pipeline stage can be replaced. Implement the interface from <code>nexrag.core.interfaces</code>, then declare it in YAML with <code>provider: custom</code> and a dotted <code>class:</code> path.</p>
+
+        <div class="doc-h2">Example: custom embedder</div>
+        <pre class="doc-code"><code><span class="cmt"># myapp/embedders.py</span>
+<span class="kw">from</span> nexrag.core.interfaces.embedder <span class="kw">import</span> BaseEmbedder
+
+<span class="kw">class</span> <span class="fn">SentenceTransformerEmbedder</span>(BaseEmbedder):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, model: str = <span class="str">"all-MiniLM-L6-v2"</span>) -> <span class="kw">None</span>:
+        <span class="kw">from</span> sentence_transformers <span class="kw">import</span> SentenceTransformer
+        self._model = SentenceTransformer(model)
+        self._model_name = model
+
+    <span class="kw">@property</span>
+    <span class="kw">def</span> <span class="fn">model_name</span>(self) -> str: <span class="kw">return</span> self._model_name
+
+    <span class="kw">@property</span>
+    <span class="kw">def</span> <span class="fn">dimensions</span>(self) -> int:
+        <span class="kw">return</span> self._model.get_sentence_embedding_dimension()
+
+    <span class="kw">def</span> <span class="fn">embed</span>(self, texts: list[str]) -> list[list[float]]:
+        <span class="kw">return</span> self._model.encode(texts).tolist()
+
+    <span class="kw">def</span> <span class="fn">embed_query</span>(self, text: str) -> list[float]:
+        <span class="kw">return</span> self._model.encode([text])[<span class="num">0</span>].tolist()</code></pre>
+
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">embedder:</span>
+    <span class="key">provider:</span> <span class="val">custom</span>
+    <span class="key">class:</span>    <span class="val">myapp.embedders.SentenceTransformerEmbedder</span>
+    <span class="key">params:</span>
+      <span class="key">model:</span>  <span class="val">all-MiniLM-L6-v2</span></code></pre>
+
+        <p class="doc-p">The same pattern works for every stage: <code>loader</code>, <code>chunker</code>, <code>sanitizer</code>, <code>vector_db</code>, <code>retriever</code>, <code>prompt_builder</code>, <code>llm</code>, and <code>observer</code>.</p>
+
+        <div class="doc-h2">Available interfaces</div>
+        <table class="doc-table">
+          <thead><tr><th>Interface</th><th>Import path</th></tr></thead>
+          <tbody>
+            <tr><td>BaseLoader</td><td>nexrag.core.interfaces.loader</td></tr>
+            <tr><td>BaseSanitizer</td><td>nexrag.core.interfaces.sanitizer</td></tr>
+            <tr><td>BaseChunker</td><td>nexrag.core.interfaces.chunker</td></tr>
+            <tr><td>BaseEmbedder</td><td>nexrag.core.interfaces.embedder</td></tr>
+            <tr><td>BaseVectorDB</td><td>nexrag.core.interfaces.vector_db</td></tr>
+            <tr><td>BaseRetriever</td><td>nexrag.core.interfaces.retriever</td></tr>
+            <tr><td>BasePromptBuilder</td><td>nexrag.core.interfaces.prompt_builder</td></tr>
+            <tr><td>BaseLLM</td><td>nexrag.core.interfaces.llm</td></tr>
+            <tr><td>BaseObserver</td><td>nexrag.core.interfaces.observer</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ── Testing ───────────────────────── -->
+      <div class="doc-section" id="testing">
+        <div class="doc-label">Guides</div>
+        <h1 class="doc-h1">Testing</h1>
+        <p class="doc-lead">Use in-memory ChromaDB and mock embedders/LLMs to test without any API calls.</p>
+
+        <div class="doc-h2">Memory mode for ChromaDB</div>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.test.yaml</span>
+<span class="key">vector_db:</span>
+  <span class="key">provider:</span> <span class="val">chroma</span>
+  <span class="key">default_collection:</span> <span class="val">test</span>
+  <span class="key">collections:</span>
+    <span class="key">test:</span>
+      <span class="key">mode:</span> <span class="val">memory</span>   <span class="yml-cmt"># ephemeral, no disk I/O</span></code></pre>
+
+        <div class="doc-h2">Mock embedder and LLM</div>
+        <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.interfaces.embedder <span class="kw">import</span> BaseEmbedder
+<span class="kw">from</span> nexrag.core.interfaces.llm <span class="kw">import</span> BaseLLM
+
+<span class="kw">class</span> <span class="fn">FixedEmbedder</span>(BaseEmbedder):
+    DIM = <span class="num">8</span>
+
+    <span class="kw">@property</span>
+    <span class="kw">def</span> <span class="fn">model_name</span>(self) -> str: <span class="kw">return</span> <span class="str">"fixed-test"</span>
+
+    <span class="kw">@property</span>
+    <span class="kw">def</span> <span class="fn">dimensions</span>(self) -> int: <span class="kw">return</span> self.DIM
+
+    <span class="kw">def</span> <span class="fn">embed</span>(self, texts):
+        <span class="kw">return</span> [[float(i % self.DIM) <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(self.DIM)] <span class="kw">for</span> _ <span class="kw">in</span> texts]
+
+    <span class="kw">def</span> <span class="fn">embed_query</span>(self, text):
+        <span class="kw">return</span> [float(i % self.DIM) <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(self.DIM)]
+
+
+<span class="kw">class</span> <span class="fn">EchoLLM</span>(BaseLLM):
+    <span class="kw">def</span> <span class="fn">generate</span>(self, prompt: str) -> str: <span class="kw">return</span> <span class="str">"test answer"</span>
+    <span class="kw">def</span> <span class="fn">stream</span>(self, prompt): <span class="kw">yield</span> <span class="str">"test answer"</span></code></pre>
+      </div>
+
+      <!-- ── API Reference ──────────────────── -->
+      <div class="doc-section" id="api">
+        <div class="doc-label">Reference</div>
+        <h1 class="doc-h1">API reference</h1>
+        <p class="doc-lead">Return types for the two main pipeline methods.</p>
+
+        <div class="doc-h2">IngestionResult</div>
+        <p class="doc-p">Returned by <code>pipeline.ingest()</code> and <code>pipeline.ingest_documents()</code>.</p>
+        <table class="field-table">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>pipeline_id</td><td>str</td><td>UUID for this ingestion run</td></tr>
+            <tr><td>documents_loaded</td><td>int</td><td>Number of documents loaded</td></tr>
+            <tr><td>chunks_produced</td><td>int</td><td>Total chunks produced by the chunker</td></tr>
+            <tr><td>chunks_written</td><td>int</td><td>Chunks actually written (skips duplicates on <code>skip</code>)</td></tr>
+            <tr><td>latency_ms</td><td>float</td><td>Wall-clock time for the full ingestion pipeline</td></tr>
+          </tbody>
+        </table>
+
+        <div class="doc-h2">PipelineResult</div>
+        <p class="doc-p">Returned by <code>pipeline.query()</code>.</p>
+        <table class="field-table">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>pipeline_id</td><td>str</td><td>UUID for this query run</td></tr>
+            <tr><td>answer</td><td>str</td><td>LLM-generated answer</td></tr>
+            <tr><td>query</td><td>str</td><td>The original query string</td></tr>
+            <tr><td>sources</td><td>list[Source]</td><td>Retrieved sources ordered by similarity score</td></tr>
+            <tr><td>scores</td><td>list[float]</td><td>Convenience list of scores mirroring sources order</td></tr>
+            <tr><td>collection_used</td><td>str</td><td>Which vector DB collection was queried</td></tr>
+            <tr><td>latency_ms</td><td>float</td><td>Wall-clock time for the full query pipeline</td></tr>
+            <tr><td>token_usage</td><td>TokenUsage | None</td><td>Token counts from the LLM (None if not exposed)</td></tr>
+          </tbody>
+        </table>
+
+        <div class="doc-h2">Source</div>
+        <p class="doc-p">Each element in <code>result.sources</code>.</p>
+        <table class="field-table">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>content</td><td>str</td><td>The chunk's text content</td></tr>
+            <tr><td>source</td><td>str</td><td>Origin identifier from <code>chunk.metadata["source"]</code></td></tr>
+            <tr><td>metadata</td><td>dict</td><td>Full metadata dict from the chunk</td></tr>
+            <tr><td>score</td><td>float</td><td>Cosine similarity score (0–1, higher = more similar)</td></tr>
+            <tr><td>rank</td><td>int</td><td>1-based rank in the result list</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ── Changelog ──────────────────────── -->
+      <div class="doc-section" id="changelog">
+        <div class="doc-label">Reference</div>
+        <h1 class="doc-h1">Changelog</h1>
+
+        <!-- version switcher -->
+        <div class="cl-ver-bar">
+          <button class="cl-vtab active" data-cl="v020">
+            v0.2.0 <span class="cl-vtab-latest">latest</span>
+          </button>
+          <button class="cl-vtab" data-cl="v010">v0.1.0</button>
+        </div>
+
+        <!-- v0.2.0 -->
+        <div class="cl-panel active" id="cl-v020">
+          <div class="cl-meta">
+            <span class="cl-ver-name">v0.2.0</span>
+            <span class="cl-date">2026-05-28</span>
+          </div>
+          <p class="cl-summary">First public release. Full naive RAG pipeline — ingest a document, query it, get a structured result. Includes async pipeline mode and token-by-token streaming.</p>
+          <table class="cl-table">
+            <tbody>
+              <tr><td><span class="cl-cat">pipeline</span></td><td>Ingestion: Loader → Sanitizer → Chunker → Embedder → VectorDB with hash-based idempotent deduplication</td></tr>
+              <tr><td><span class="cl-cat">pipeline</span></td><td>Query: Embed → Retrieve → Prompt → LLM with structured <code>PipelineResult</code></td></tr>
+              <tr><td><span class="cl-cat">async</span></td><td><code>mode: async</code> — <code>AsyncIngestionPipeline</code> + <code>AsyncQueryPipeline</code> with native async/await and parallel batch embedding</td></tr>
+              <tr><td><span class="cl-cat">streaming</span></td><td><code>stream_query()</code> (sync) and <code>astream_query()</code> (async) for token-by-token LLM responses; <code>async_query()</code> / <code>async_ingest()</code> for non-blocking calls in FastAPI and other async frameworks</td></tr>
+              <tr><td><span class="cl-cat">config</span></td><td>YAML config with <code>${ENV_VAR}</code> substitution — secrets never hardcoded. Root-level <code>mode:</code> key selects pipeline mode.</td></tr>
+              <tr><td><span class="cl-cat">interfaces</span></td><td>9 abstract base classes — all stages swappable via <code>class:</code> in YAML</td></tr>
+              <tr><td><span class="cl-cat">embedders</span></td><td>OpenAI, Ollama, HuggingFace (Inference API + Dedicated Endpoints)</td></tr>
+              <tr><td><span class="cl-cat">llms</span></td><td>OpenAI, Ollama, Anthropic — all with sync and async streaming, exponential backoff</td></tr>
+              <tr><td><span class="cl-cat">vector db</span></td><td>ChromaDB — memory, persistent, and server modes</td></tr>
+              <tr><td><span class="cl-cat">loaders</span></td><td>PDF (pypdf), plain text, auto-detect by extension</td></tr>
+              <tr><td><span class="cl-cat">chunkers</span></td><td>Recursive (separator-aware) with configurable size, overlap, and min-size</td></tr>
+              <tr><td><span class="cl-cat">ingestion</span></td><td><code>ingest_batch()</code> for sequential multi-source ingestion</td></tr>
+              <tr><td><span class="cl-cat">observability</span></td><td>Structured JSON / text console observer with configurable log level</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- v0.1.0 -->
+        <div class="cl-panel" id="cl-v010">
+          <div class="cl-meta">
+            <span class="cl-ver-name">v0.1.0</span>
+            <span class="cl-date">internal pre-release</span>
+          </div>
+          <p class="cl-summary">Internal pre-release. Not publicly available on PyPI. Foundation work — core interfaces, config schema, and initial pipeline wiring.</p>
+          <p class="cl-empty">// no public changelog for this version</p>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.2.0</div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="story.html">Story</a>
+        <a href="showcase.html">Showcase</a>
+        <a href="https://github.com/kevinrawal/nexrag" target="_blank">GitHub ↗</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Theme toggle
+    (function () {
+      var btn = document.getElementById('themeBtn');
+      var root = document.documentElement;
+      function update() {
+        var dark = root.dataset.theme === 'dark';
+        btn.textContent = dark ? '◑' : '◐';
+        btn.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+      }
+      update();
+      btn.addEventListener('click', function () {
+        var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        localStorage.setItem('nexrag-theme', next);
+        update();
+      });
+    })();
+
+    // Changelog version tabs
+    document.querySelectorAll('.cl-vtab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('.cl-vtab').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelectorAll('.cl-panel').forEach(function(p) { p.classList.remove('active'); });
+        tab.classList.add('active');
+        document.getElementById('cl-' + tab.dataset.cl).classList.add('active');
+      });
+    });
+
+    // Sidebar active link on scroll
+    const sections = document.querySelectorAll('.doc-section');
+    const sideLinks = document.querySelectorAll('.sidebar-link');
+
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          sideLinks.forEach(l => l.classList.remove('active'));
+          const link = document.querySelector(`.sidebar-link[href="#${e.target.id}"]`);
+          if (link) link.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-15% 0px -75% 0px' });
+
+    sections.forEach(s => obs.observe(s));
+
+    // Sidebar link click smooth scroll
+    sideLinks.forEach(link => {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        const target = document.querySelector(link.getAttribute('href'));
+        if (target) {
+          const top = target.getBoundingClientRect().top + window.scrollY - 80;
+          window.scrollTo({ top, behavior: 'smooth' });
+        }
+      });
+    });
+  </script>
+
+</body>
+</html>
