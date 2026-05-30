@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import random
 import time
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from nexrag.core.interfaces.llm import BaseLLM
@@ -52,6 +52,7 @@ class OpenAILLM(BaseLLM):
         self._timeout = timeout
         self._max_retries = max_retries
         self._client: Any = self._build_client(api_key, base_url)
+        self._async_client: Any = self._build_async_client(api_key, base_url)
 
     def generate(self, prompt: str) -> str:
         """
@@ -116,6 +117,47 @@ class OpenAILLM(BaseLLM):
         except Exception as e:
             self._map_exception(e)
 
+    async def async_generate(self, prompt: str) -> str:
+        """Generate using AsyncOpenAI — native async, no thread pool needed."""
+        messages = self._build_messages(prompt)
+        for attempt in range(self._max_retries + 1):
+            try:
+                response = await self._async_client.chat.completions.create(
+                    model=self._model,
+                    messages=messages,
+                    temperature=self._temperature,
+                    max_tokens=self._max_tokens,
+                    timeout=self._timeout,
+                )
+                return response.choices[0].message.content or ""
+            except Exception as e:
+                if self._is_retryable(e) and attempt < self._max_retries:
+                    import asyncio
+
+                    await asyncio.sleep(_BASE_BACKOFF * (2**attempt) + random.uniform(0, 1))
+                    continue
+                self._map_exception(e)
+                raise
+        raise LLMError("Retry loop exhausted.", stage="llm", component="OpenAILLM")
+
+    async def async_stream(self, prompt: str) -> AsyncIterator[str]:
+        """Stream using AsyncOpenAI — tokens arrive live without buffering."""
+        messages = self._build_messages(prompt)
+        try:
+            async with await self._async_client.chat.completions.stream(
+                model=self._model,
+                messages=messages,
+                temperature=self._temperature,
+                max_tokens=self._max_tokens,
+                timeout=self._timeout,
+            ) as stream:
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        yield delta
+        except Exception as e:
+            self._map_exception(e)
+
     # Private helpers
 
     def _build_client(self, api_key: str | None, base_url: str | None) -> Any:
@@ -136,6 +178,24 @@ class OpenAILLM(BaseLLM):
         if base_url:
             kwargs["base_url"] = base_url
         return openai.OpenAI(**kwargs)
+
+    def _build_async_client(self, api_key: str | None, base_url: str | None) -> Any:
+        try:
+            import openai
+        except ImportError as e:
+            raise LLMError(
+                "openai package is required for OpenAILLM. "
+                'Install it: pip install "nexrag[openai]" or pip install openai',
+                stage="llm",
+                component="OpenAILLM",
+                cause=e,
+            ) from e
+        kwargs: dict[str, Any] = {}
+        if api_key:
+            kwargs["api_key"] = api_key
+        if base_url:
+            kwargs["base_url"] = base_url
+        return openai.AsyncOpenAI(**kwargs)
 
     @staticmethod
     def _build_messages(prompt: str) -> list[dict[str, str]]:

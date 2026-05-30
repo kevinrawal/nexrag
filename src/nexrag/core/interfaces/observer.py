@@ -20,6 +20,7 @@ Why emit() never raises:
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 
 from nexrag.core.models.event import PipelineEvent
@@ -39,6 +40,14 @@ class BaseObserver(ABC):
             event: The PipelineEvent emitted by a pipeline stage.
         """
 
+    async def async_emit(self, event: PipelineEvent) -> None:
+        """
+        Async variant of emit(). Default: runs sync emit() in a thread pool.
+        Override for observers that use native async I/O (HTTP, async queues).
+        Must never raise, same contract as emit().
+        """
+        await asyncio.to_thread(self.emit, event)
+
 
 class NoOpObserver(BaseObserver):
     """
@@ -47,4 +56,7 @@ class NoOpObserver(BaseObserver):
     """
 
     def emit(self, event: PipelineEvent) -> None:
+        pass
+
+    async def async_emit(self, event: PipelineEvent) -> None:
         pass

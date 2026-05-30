@@ -205,6 +205,7 @@ class NexRAGConfig(BaseModel):
     """
 
     version: str = "1.0"
+    mode: Literal["sync", "async"] = "sync"
     ingestion: IngestionConfig
     query: QueryConfig
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)

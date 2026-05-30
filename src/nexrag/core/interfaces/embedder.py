@@ -18,6 +18,7 @@ to detect embedding model changes between ingestion runs.
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 
 
@@ -76,3 +77,16 @@ class BaseEmbedder(ABC):
         Raises:
             EmbedderError: If the API call fails.
         """
+
+    async def async_embed(self, texts: list[str]) -> list[list[float]]:
+        """
+        Async variant of embed(). Default: runs sync embed() in a thread pool.
+        Cloud API adapters (I/O-bound) benefit from this directly.
+        CPU-bound local adapters (HuggingFace) won't gain parallelism due to the GIL.
+        Override with a native async client for true async I/O.
+        """
+        return await asyncio.to_thread(self.embed, texts)
+
+    async def async_embed_query(self, text: str) -> list[float]:
+        """Async variant of embed_query(). Default: runs sync embed_query() in a thread pool."""
+        return await asyncio.to_thread(self.embed_query, text)

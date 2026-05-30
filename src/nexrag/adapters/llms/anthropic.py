@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import random
 import time
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from nexrag.core.interfaces.llm import BaseLLM
@@ -51,6 +51,7 @@ class AnthropicLLM(BaseLLM):
         self._timeout = timeout
         self._max_retries = max_retries
         self._client: Any = self._build_client(api_key, base_url)
+        self._async_client: Any = self._build_async_client(api_key, base_url)
 
     def generate(self, prompt: str) -> str:
         """
@@ -119,6 +120,50 @@ class AnthropicLLM(BaseLLM):
         except Exception as e:
             self._map_exception(e)
 
+    async def async_generate(self, prompt: str) -> str:
+        """Generate using AsyncAnthropic — native async, no thread pool needed."""
+        system, messages = self._build_messages(prompt)
+        kwargs: dict[str, Any] = {
+            "model": self._model,
+            "messages": messages,
+            "max_tokens": self._max_tokens,
+            "temperature": self._temperature,
+        }
+        if system:
+            kwargs["system"] = system
+        for attempt in range(self._max_retries + 1):
+            try:
+                response = await self._async_client.messages.create(**kwargs)
+                return response.content[0].text or ""
+            except Exception as e:
+                if self._is_retryable(e) and attempt < self._max_retries:
+                    import asyncio
+
+                    await asyncio.sleep(_BASE_BACKOFF * (2**attempt) + random.uniform(0, 1))
+                    continue
+                self._map_exception(e)
+                raise
+        raise LLMError("Retry loop exhausted.", stage="llm", component="AnthropicLLM")
+
+    async def async_stream(self, prompt: str) -> AsyncIterator[str]:
+        """Stream using AsyncAnthropic — tokens arrive live without buffering."""
+        system, messages = self._build_messages(prompt)
+        kwargs: dict[str, Any] = {
+            "model": self._model,
+            "messages": messages,
+            "max_tokens": self._max_tokens,
+            "temperature": self._temperature,
+        }
+        if system:
+            kwargs["system"] = system
+        try:
+            async with self._async_client.messages.stream(**kwargs) as stream:
+                async for text in stream.text_stream:
+                    if text:
+                        yield text
+        except Exception as e:
+            self._map_exception(e)
+
     # ── Private helpers ───────────────────────────────────────────────────────
 
     def _build_client(self, api_key: str | None, base_url: str | None) -> Any:
@@ -139,6 +184,24 @@ class AnthropicLLM(BaseLLM):
         if base_url:
             kwargs["base_url"] = base_url
         return anthropic.Anthropic(**kwargs)
+
+    def _build_async_client(self, api_key: str | None, base_url: str | None) -> Any:
+        try:
+            import anthropic
+        except ImportError as e:
+            raise LLMError(
+                "anthropic package is required for AnthropicLLM. "
+                'Install it: pip install "nexrag[anthropic]" or pip install anthropic',
+                stage="llm",
+                component="AnthropicLLM",
+                cause=e,
+            ) from e
+        kwargs: dict[str, Any] = {"timeout": self._timeout}
+        if api_key:
+            kwargs["api_key"] = api_key
+        if base_url:
+            kwargs["base_url"] = base_url
+        return anthropic.AsyncAnthropic(**kwargs)
 
     @staticmethod
     def _build_messages(prompt: str) -> tuple[str | None, list[dict[str, str]]]:

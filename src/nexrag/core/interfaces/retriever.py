@@ -22,6 +22,7 @@ Future: SparseRetriever (BM25), HybridRetriever, GraphRetriever.
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -65,3 +66,17 @@ class BaseRetriever(ABC):
         Raises:
             RetrieverError: If retrieval fails.
         """
+
+    async def async_retrieve(
+        self,
+        query: str,
+        query_embedding: list[float],
+        top_k: int,
+        collection: str,
+        score_threshold: float = 0.0,
+        filters: dict[str, Any] | None = None,
+    ) -> list[ScoredChunk]:
+        """Async variant of retrieve(). Default: runs sync retrieve() in a thread pool."""
+        return await asyncio.to_thread(
+            self.retrieve, query, query_embedding, top_k, collection, score_threshold, filters
+        )

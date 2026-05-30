@@ -11,11 +11,15 @@ All other symbols are implementation detail. Import from nexrag, not from intern
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
 
 from nexrag.core.interfaces.loader import BaseLoader
 from nexrag.core.models.result import PipelineResult
+from nexrag.core.pipeline.async_ingestion import AsyncIngestionPipeline
+from nexrag.core.pipeline.async_query import AsyncQueryPipeline
 from nexrag.core.pipeline.ingestion import IngestionPipeline, IngestionResult
 from nexrag.core.pipeline.query import QueryPipeline
 from nexrag.exceptions import NexRAGError
@@ -43,8 +47,8 @@ class NexRAG:
 
     def __init__(
         self,
-        ingestion: IngestionPipeline,
-        query: QueryPipeline,
+        ingestion: IngestionPipeline | AsyncIngestionPipeline,
+        query: QueryPipeline | AsyncQueryPipeline,
     ) -> None:
         self._ingestion = ingestion
         self._query = query
@@ -148,3 +152,144 @@ class NexRAG:
             score_threshold=score_threshold,
             metadata_filter=metadata_filter,
         )
+
+    def stream_query(
+        self,
+        text: str,
+        *,
+        collection: str | None = None,
+        top_k: int | None = None,
+        score_threshold: float | None = None,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> Iterator[str]:
+        """
+        Stream the LLM response token by token (sync).
+
+        All pipeline stages run synchronously except the LLM generation step,
+        which yields tokens as they arrive. Compatible with any sync caller.
+
+        Args:
+            text:             The user's question.
+            collection:       Override the default collection.
+            top_k:            Override the top_k retrieval count.
+            score_threshold:  Override the minimum similarity score.
+            metadata_filter:  Optional metadata filters.
+
+        Yields:
+            Response text tokens as they stream from the LLM.
+        """
+        return self._query.stream(
+            text,
+            collection=collection,
+            top_k=top_k,
+            score_threshold=score_threshold,
+            metadata_filter=metadata_filter,
+        )
+
+    async def astream_query(
+        self,
+        text: str,
+        *,
+        collection: str | None = None,
+        top_k: int | None = None,
+        score_threshold: float | None = None,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> AsyncIterator[str]:
+        """
+        Stream the LLM response token by token (async).
+
+        With mode: async — pre-LLM stages use native async clients; tokens arrive
+        live as they stream from the LLM.
+
+        With mode: sync — the sync stream() runs in a thread pool (non-blocking for
+        the event loop) and tokens are yielded after the full stream completes in the
+        thread. Configure mode: async for true live token streaming.
+
+        Args:
+            text:             The user's question.
+            collection:       Override the default collection.
+            top_k:            Override the top_k retrieval count.
+            score_threshold:  Override the minimum similarity score.
+            metadata_filter:  Optional metadata filters.
+
+        Yields:
+            Response text tokens as they stream from the LLM.
+        """
+        if isinstance(self._query, AsyncQueryPipeline):
+            async for token in self._query.astream(
+                text,
+                collection=collection,
+                top_k=top_k,
+                score_threshold=score_threshold,
+                metadata_filter=metadata_filter,
+            ):
+                yield token
+        else:
+            tokens = await asyncio.to_thread(
+                list,
+                self._query.stream(
+                    text,
+                    collection=collection,
+                    top_k=top_k,
+                    score_threshold=score_threshold,
+                    metadata_filter=metadata_filter,
+                ),
+            )
+            for token in tokens:
+                yield token
+
+    async def async_query(
+        self,
+        text: str,
+        *,
+        collection: str | None = None,
+        top_k: int | None = None,
+        score_threshold: float | None = None,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> PipelineResult:
+        """
+        Async variant of query(). Use inside async frameworks (FastAPI, Starlette).
+
+        When mode: async is configured, all pipeline stages use native async clients.
+        When mode: sync is configured, stages run via asyncio.to_thread (non-blocking
+        for the event loop but no true async parallelism).
+
+        Returns:
+            PipelineResult with answer, sources, scores, and latency.
+        """
+        if isinstance(self._query, AsyncQueryPipeline):
+            return await self._query.arun(
+                text,
+                collection=collection,
+                top_k=top_k,
+                score_threshold=score_threshold,
+                metadata_filter=metadata_filter,
+            )
+
+        return await asyncio.to_thread(
+            self._query.run,
+            text,
+            collection=collection,
+            top_k=top_k,
+            score_threshold=score_threshold,
+            metadata_filter=metadata_filter,
+        )
+
+    async def async_ingest(
+        self,
+        data: Any,
+        loader: Any | None = None,
+    ) -> IngestionResult:
+        """
+        Async variant of ingest(). Use inside async frameworks (FastAPI, Starlette).
+
+        When mode: async is configured, embedding runs in parallel batches.
+        When mode: sync is configured, runs ingest() via asyncio.to_thread.
+
+        Returns:
+            IngestionResult with document count, chunk count, and latency.
+        """
+        if isinstance(self._ingestion, AsyncIngestionPipeline):
+            return await self._ingestion.aingest(data, loader)
+
+        return await asyncio.to_thread(self._ingestion.ingest, data, loader)
