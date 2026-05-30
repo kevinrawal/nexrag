@@ -22,9 +22,11 @@ StageName = Literal[
     "idempotency_check",
     "index_writer",
     "retriever",
+    "reranker",
     "prompt_builder",
     "llm",
     "response_builder",
+    "pipeline",
 ]
 
 EventStatus = Literal["started", "completed", "failed"]

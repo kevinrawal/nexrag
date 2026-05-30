@@ -82,44 +82,56 @@ class NexRAG:
         data: Any,
         loader: BaseLoader | None = None,
         metadata: dict[str, Any] | None = None,
+        collection: str | None = None,
     ) -> IngestionResult:
         """
         Ingest data through the configured loader, chunker, embedder, and vector DB.
 
         Args:
-            data:     Anything the loader accepts — bytes, str, tuple, etc.
-            loader:   Optional loader override for this call only.
-                      If not given, uses the loader from nexrag.yaml.
-            metadata: Optional metadata merged into every Document after loading.
-                      Keys here overwrite loader-set defaults, so you can set
-                      the idempotency source and any domain fields in one call:
-                      metadata={"source": "contract-456", "tenant": "acme"}
+            data:       Anything the loader accepts — bytes, str, tuple, etc.
+            loader:     Optional loader override for this call only.
+                        If not given, uses the loader from nexrag.yaml.
+            metadata:   Optional metadata merged into every Document after loading.
+                        Keys here overwrite loader-set defaults, so you can set
+                        the idempotency source and any domain fields in one call:
+                        metadata={"source": "contract-456", "tenant": "acme"}
+            collection: Override the default collection for this ingest call.
+                        Must be one of the collections defined in nexrag.yaml.
 
         Returns:
-            IngestionResult with document count, chunk count, and latency.
+            IngestionResult with document count, chunk count, latency, and collection_used.
         """
-        return self._ingestion.ingest(data, loader, metadata=metadata)
+        return self._ingestion.ingest(data, loader, metadata=metadata, collection=collection)
 
     def ingest_batch(
         self,
         sources: list[Any],
         loader: BaseLoader | None = None,
         metadata: dict[str, Any] | None = None,
+        collection: str | None = None,
     ) -> list[IngestionResult]:
         """
         Ingest multiple items in sequence.
 
         Args:
-            sources:  Data items to ingest (bytes, str, tuples, etc.).
-            loader:   Optional loader override applied to every item in this batch.
-            metadata: Optional metadata merged into every Document for every item.
+            sources:    Data items to ingest (bytes, str, tuples, etc.).
+            loader:     Optional loader override applied to every item in this batch.
+            metadata:   Optional metadata merged into every Document for every item.
+            collection: Override the default collection for every item in this batch.
 
         Returns:
             One IngestionResult per source, in the same order.
         """
-        return [self.ingest(source, loader=loader, metadata=metadata) for source in sources]
+        return [
+            self.ingest(source, loader=loader, metadata=metadata, collection=collection)
+            for source in sources
+        ]
 
-    def ingest_documents(self, documents: list[Any]) -> IngestionResult:
+    def ingest_documents(
+        self,
+        documents: list[Any],
+        collection: str | None = None,
+    ) -> IngestionResult:
         """
         Ingest pre-built Document objects, skipping the loader stage.
 
@@ -127,12 +139,13 @@ class NexRAG:
         that doesn't fit a file path. You produce the Documents; NexRAG handles the rest.
 
         Args:
-            documents: List of nexrag.core.models.document.Document objects.
+            documents:  List of nexrag.core.models.document.Document objects.
+            collection: Override the default collection for this ingest call.
 
         Returns:
-            IngestionResult with counts and pipeline_id.
+            IngestionResult with counts, pipeline_id, and collection_used.
         """
-        return self._ingestion.ingest_documents(documents)
+        return self._ingestion.ingest_documents(documents, collection=collection)
 
     def query(
         self,
@@ -291,6 +304,7 @@ class NexRAG:
         data: Any,
         loader: Any | None = None,
         metadata: dict[str, Any] | None = None,
+        collection: str | None = None,
     ) -> IngestionResult:
         """
         Async variant of ingest(). Use inside async frameworks (FastAPI, Starlette).
@@ -307,6 +321,6 @@ class NexRAG:
             IngestionResult with document count, chunk count, and latency.
         """
         if isinstance(self._ingestion, AsyncIngestionPipeline):
-            return await self._ingestion.aingest(data, loader, metadata)
+            return await self._ingestion.aingest(data, loader, metadata, collection)
 
-        return await asyncio.to_thread(self._ingestion.ingest, data, loader, metadata)
+        return await asyncio.to_thread(self._ingestion.ingest, data, loader, metadata, collection)

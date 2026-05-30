@@ -115,6 +115,32 @@ class BaseVectorDB(ABC):
         Called on first ingestion to persist the embedding model fingerprint.
         """
 
+    def get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
+        """
+        Return all chunks stored in the collection.
+
+        Used by BM25Retriever to build a keyword index over the full corpus.
+        Not abstract — existing adapters that don't need BM25 don't have to implement it.
+
+        Args:
+            collection_name: Collection to fetch from.
+            limit:           Optional cap on number of chunks returned.
+
+        Returns:
+            List of Chunk objects (no scores). Empty list if collection is empty.
+
+        Raises:
+            NotImplementedError: If the adapter does not implement this method.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__}.get_all() is not implemented. "
+            "Required for BM25/hybrid retrieval (issue #10)."
+        )
+
+    async def async_get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
+        """Async variant of get_all(). Default: runs sync get_all() in a thread pool."""
+        return await asyncio.to_thread(self.get_all, collection_name, limit)
+
     def list_collections(self) -> list[str]:
         """
         Return all collection names in this vector DB instance.

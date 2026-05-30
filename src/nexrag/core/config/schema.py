@@ -59,7 +59,7 @@ class SanitizerConfig(BaseModel):
 
 
 class ChunkerConfig(BaseModel):
-    strategy: Literal["fixed", "sentence", "paragraph", "recursive", "custom"] = "recursive"
+    strategy: Literal["recursive", "custom"] = "recursive"
     chunk_size: int = 512
     chunk_overlap: int = 64
     min_chunk_size: int = 50
@@ -109,6 +109,10 @@ class VectorDBConfig(BaseModel):
     default_collection: str
     collections: dict[str, CollectionConfig]
     on_conflict: Literal["overwrite", "skip", "append"] = "overwrite"
+    upsert_batch_size: int = 500
+    query_batch_size: int = 100
+    max_retries: int = 3
+    retry_delay: float = 1.0
     class_path: str | None = Field(default=None, alias="class")
     params: dict[str, Any] = Field(default_factory=dict)
 
@@ -137,10 +141,13 @@ class IngestionConfig(BaseModel):
 
 
 class RetrieverConfig(BaseModel):
-    provider: Literal["dense", "custom"] = "dense"
+    provider: Literal["dense", "hybrid", "custom"] = "dense"
     top_k: int = 5
     score_threshold: float = 0.0
     metadata_filter: dict[str, Any] | None = None
+    # hybrid-specific — ignored when provider != "hybrid"
+    alpha: float = 0.7
+    bm25_top_k: int | None = None
     class_path: str | None = Field(default=None, alias="class")
     params: dict[str, Any] = Field(default_factory=dict)
 
@@ -179,9 +186,31 @@ class LLMConfig(BaseModel):
         return f"LLMConfig(provider={self.provider!r}, model={self.model!r}, api_key=***)"
 
 
+class RerankerConfig(BaseModel):
+    provider: Literal["cohere", "cross_encoder", "custom"]
+    model: str
+    api_key: str | None = None
+    top_n: int = 5
+    device: str | None = None
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def class_required_for_custom(self) -> RerankerConfig:
+        if self.provider == "custom" and not self.class_path:
+            raise ValueError(
+                "reranker.class is required when reranker.provider is 'custom'. "
+                "Provide a dotted class path: myproject.rerankers.MyReranker"
+            )
+        return self
+
+
 class QueryConfig(BaseModel):
     embedder: EmbedderConfig | Literal["inherit"] = "inherit"
     retriever: RetrieverConfig = Field(default_factory=RetrieverConfig)
+    reranker: RerankerConfig | None = None
     prompt: PromptConfig = Field(default_factory=PromptConfig)
     llm: LLMConfig
 

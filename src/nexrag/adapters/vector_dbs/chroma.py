@@ -189,6 +189,37 @@ class ChromaDBAdapter(BaseVectorDB):
                 cause=e,
             ) from e
 
+    def get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
+        collection = self._get_or_create(collection_name)
+        try:
+            kwargs: dict[str, Any] = {"include": ["documents", "metadatas"]}
+            if limit is not None:
+                kwargs["limit"] = limit
+            results = collection.get(**kwargs)
+        except Exception as e:
+            raise VectorDBError(
+                f"ChromaDB get_all failed on collection '{collection_name}': {e}",
+                stage="retriever",
+                component="ChromaDBAdapter",
+                cause=e,
+            ) from e
+
+        if not results or not results.get("ids"):
+            return []
+
+        chunks: list[Chunk] = []
+        for text, meta in zip(results["documents"], results["metadatas"], strict=True):
+            meta = meta or {}
+            chunk = Chunk(
+                text=text,
+                chunk_index=meta.get("chunk_index", 0),
+                total_chunks=meta.get("total_chunks", 1),
+                parent_doc_id=meta.get("parent_doc_id", ""),
+                metadata={k: v for k, v in meta.items() if k not in _CHUNK_STRUCT_KEYS},
+            )
+            chunks.append(chunk)
+        return chunks
+
     def list_collections(self) -> list[str]:
         try:
             return [c.name for c in self._client.list_collections()]

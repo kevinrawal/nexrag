@@ -1,9 +1,11 @@
 """
 BaseLLM — contract for all LLM adapters.
 
-The LLM adapter takes the assembled prompt string and returns the model's
-response. Local and cloud providers both implement this same interface —
-the pipeline doesn't know or care which one it's talking to.
+The LLM adapter takes the assembled prompt string and returns both the model's
+response text and token usage (when the provider exposes it).
+
+generate() returns a tuple[str, TokenUsage | None] so callers get both the
+answer and usage in a single call — no separate generate_with_usage() needed.
 
 Built-in adapters (Phase 1):
     OpenAILLM, AnthropicLLM, OllamaLLM
@@ -14,7 +16,7 @@ Local via Ollama:
 
 Custom implementation pattern:
     class InternalModelAdapter(BaseLLM):
-        def generate(self, prompt: str) -> str: ...
+        def generate(self, prompt: str) -> tuple[str, TokenUsage | None]: ...
         def stream(self, prompt: str) -> Iterator[str]: ...
 """
 
@@ -24,20 +26,26 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator
 
+from nexrag.core.models.metrics import TokenUsage
+
 
 class BaseLLM(ABC):
     """Abstract base class for all NexRAG LLM adapters."""
 
     @abstractmethod
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str) -> tuple[str, TokenUsage | None]:
         """
-        Send a prompt and return the complete response as a string.
+        Send a prompt and return (response_text, token_usage).
+
+        token_usage is None when the provider does not expose token counts
+        (e.g. Ollama with some models). The pipeline always receives the tuple;
+        callers that only need the text use result[0].
 
         Args:
             prompt: The assembled prompt string from PromptBuilder.
 
         Returns:
-            The LLM's full response text.
+            (response_text, TokenUsage | None)
 
         Raises:
             LLMTimeoutError:    If the call exceeds the configured timeout.
@@ -49,6 +57,9 @@ class BaseLLM(ABC):
     def stream(self, prompt: str) -> Iterator[str]:
         """
         Send a prompt and yield response tokens as they arrive.
+
+        Streaming does not return token usage — most provider streaming APIs
+        do not expose usage mid-stream. Use generate() when you need usage counts.
 
         Args:
             prompt: The assembled prompt string from PromptBuilder.
@@ -62,7 +73,7 @@ class BaseLLM(ABC):
             LLMError:           For all other LLM failures.
         """
 
-    async def async_generate(self, prompt: str) -> str:
+    async def async_generate(self, prompt: str) -> tuple[str, TokenUsage | None]:
         """
         Async variant of generate(). Default: runs sync generate() in a thread pool.
         Override with a native async client (AsyncOpenAI, AsyncAnthropic) for true async I/O.

@@ -15,6 +15,7 @@ from nexrag.core.config.schema import (
     NexRAGConfig,
     ObservabilityConfig,
     PromptConfig,
+    RerankerConfig,
     RetrieverConfig,
     SanitizerConfig,
     VectorDBConfig,
@@ -25,6 +26,7 @@ from nexrag.core.interfaces.llm import BaseLLM
 from nexrag.core.interfaces.loader import BaseLoader
 from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
 from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
+from nexrag.core.interfaces.reranker import BaseReranker
 from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.interfaces.sanitizer import BaseSanitizer
 from nexrag.core.interfaces.vector_db import BaseVectorDB
@@ -66,8 +68,10 @@ def wire(
         query_embedder = _build_embedder(config.query.embedder)
 
     retriever = _build_retriever(config.query.retriever, vector_db)
+    reranker = _build_reranker(config.query.reranker) if config.query.reranker is not None else None
     prompt_builder = _build_prompt_builder(config.query.prompt)
     llm = _build_llm(config.query.llm)
+    valid_collections = frozenset(config.ingestion.vector_db.collections.keys())
 
     ingestion_pipeline: IngestionPipeline | AsyncIngestionPipeline
     query_pipeline: QueryPipeline | AsyncQueryPipeline
@@ -83,6 +87,7 @@ def wire(
             on_conflict=config.ingestion.vector_db.on_conflict,
             observer=observer,
             embed_batch_size=config.ingestion.embedder.batch_size,
+            valid_collections=valid_collections,
         )
         query_pipeline = AsyncQueryPipeline(
             embedder=query_embedder,
@@ -93,6 +98,7 @@ def wire(
             top_k=config.query.retriever.top_k,
             score_threshold=config.query.retriever.score_threshold,
             observer=observer,
+            reranker=reranker,
         )
     else:
         ingestion_pipeline = IngestionPipeline(
@@ -104,6 +110,7 @@ def wire(
             sanitizer=sanitizer,
             on_conflict=config.ingestion.vector_db.on_conflict,
             observer=observer,
+            valid_collections=valid_collections,
         )
         query_pipeline = QueryPipeline(
             embedder=query_embedder,
@@ -114,6 +121,7 @@ def wire(
             top_k=config.query.retriever.top_k,
             score_threshold=config.query.retriever.score_threshold,
             observer=observer,
+            reranker=reranker,
         )
 
     return ingestion_pipeline, query_pipeline
@@ -268,6 +276,10 @@ def _build_vector_db(config: VectorDBConfig) -> BaseVectorDB:
             mode=coll_cfg.mode,
             host=coll_cfg.host,
             port=coll_cfg.port,
+            upsert_batch_size=config.upsert_batch_size,
+            query_batch_size=config.query_batch_size,
+            max_retries=config.max_retries,
+            retry_delay=config.retry_delay,
         )
 
     raise ConfigError(
@@ -292,8 +304,17 @@ def _build_retriever(config: RetrieverConfig, vector_db: BaseVectorDB) -> BaseRe
 
         return DenseRetriever(vector_db=vector_db)
 
+    if config.provider == "hybrid":
+        from nexrag.retrievers.hybrid import HybridRetriever
+
+        return HybridRetriever(
+            vector_db=vector_db,
+            alpha=config.alpha,
+            bm25_top_k=config.bm25_top_k,
+        )
+
     raise ConfigError(
-        f"Unknown retriever provider: {config.provider!r}. Supported: dense, custom",
+        f"Unknown retriever provider: {config.provider!r}. Supported: dense, hybrid, custom",
         stage="config",
         component="retriever",
     )
@@ -367,6 +388,41 @@ def _build_llm(config: LLMConfig) -> BaseLLM:
         f"Unknown LLM provider: {config.provider!r}. Supported: openai, ollama, anthropic, custom",
         stage="config",
         component="llm",
+    )
+
+
+def _build_reranker(config: RerankerConfig) -> BaseReranker:
+    if config.provider == "custom":
+        if not config.class_path:
+            raise ConfigError(
+                "reranker.class is required when reranker.provider is 'custom'.",
+                stage="config",
+                component="reranker",
+            )
+        return resolve_class(config.class_path, BaseReranker, config.params, stage="reranker")  # type: ignore[type-abstract]
+
+    if config.provider == "cohere":
+        from nexrag.adapters.rerankers.cohere import CohereReranker
+
+        return CohereReranker(
+            model=config.model,
+            api_key=config.api_key,
+            top_n=config.top_n,
+        )
+
+    if config.provider == "cross_encoder":
+        from nexrag.adapters.rerankers.cross_encoder import CrossEncoderReranker
+
+        return CrossEncoderReranker(
+            model=config.model,
+            top_n=config.top_n,
+            device=config.device,
+        )
+
+    raise ConfigError(
+        f"Unknown reranker provider: {config.provider!r}. Supported: cohere, cross_encoder, custom",
+        stage="config",
+        component="reranker",
     )
 
 

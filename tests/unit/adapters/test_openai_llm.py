@@ -20,10 +20,10 @@ def _make_llm(response_text: str = "Answer."):
 
 
 class TestOpenAILLM:
-    def test_generate_returns_string(self):
+    def test_generate_returns_tuple(self):
         llm = _make_llm("This is the answer.")
-        result = llm.generate("What is NexRAG?")
-        assert result == "This is the answer."
+        text, usage = llm.generate("What is NexRAG?")
+        assert text == "This is the answer."
 
     def test_generate_prompt_split_into_system_user(self):
         llm = _make_llm("ok")
@@ -50,8 +50,8 @@ class TestOpenAILLM:
     def test_empty_response_returns_empty_string(self):
         llm = _make_llm(None)  # type: ignore[arg-type]
         llm._client.chat.completions.create.return_value.choices[0].message.content = None
-        result = llm.generate("q")
-        assert result == ""
+        text, _ = llm.generate("q")
+        assert text == ""
 
     def test_rate_limit_error_raises_llm_rate_limit_error(self):
         import openai
@@ -130,8 +130,8 @@ class TestOpenAILLM:
         llm._client.chat.completions.create.side_effect = [rate_err, rate_err, good_resp]
 
         with patch("time.sleep"):
-            result = llm.generate("hello")
-        assert result == "Answer."
+            text, _ = llm.generate("hello")
+        assert text == "Answer."
 
     def test_retries_exhausted_raises_llm_rate_limit_error(self):
         import openai
