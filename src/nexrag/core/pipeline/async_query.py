@@ -1,14 +1,19 @@
 """
-QueryPipeline orchestrates the full query flow:
+AsyncQueryPipeline — async version of QueryPipeline.
 
-    User Query → Embedder → Retriever → PromptBuilder → LLM → ResponseBuilder
+Enabled by setting `mode: async` in nexrag.yaml. All stage helpers call
+async ABC variants, allowing true non-blocking I/O with native async clients
+(AsyncOpenAI, AsyncAnthropic) and non-blocking event loop use in async frameworks.
+
+Concurrent reads (multiple simultaneous queries) are safe — no locking needed.
 """
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from nexrag.core.interfaces.embedder import BaseEmbedder
@@ -22,30 +27,29 @@ from nexrag.core.models.result import PipelineResult, Source
 from nexrag.exceptions import (
     EmbedderError,
     LLMError,
+    NexRAGError,
     PipelineError,
     PromptError,
     RetrieverError,
 )
 
 
-class QueryPipeline:
+class AsyncQueryPipeline:
     """
-    Orchestrates the NexRAG query pipeline.
+    Async orchestrator for the NexRAG query pipeline.
 
     Stages (in order):
-        1. Embedder       — embeds the user query string → vector
-        2. Retriever      — semantic search → list[ScoredChunk]
-        3. PromptBuilder  — assembles prompt from query + chunks
-        4. LLM            — generates response from prompt
+        1. Embedder       — async embeds the user query string → vector
+        2. Retriever      — async semantic search → list[ScoredChunk]
+        3. PromptBuilder  — assembles prompt (CPU-bound, runs in thread)
+        4. LLM            — async generates response from prompt
         5. ResponseBuilder— wraps everything into a PipelineResult
 
     Args:
-        embedder:        Embeds the user query. Must be the same model used
-                         during ingestion — enforced by the fingerprint check
-                         in IngestionPipeline.
-        retriever:       Retrieves relevant chunks from the vector DB.
+        embedder:        Embeds the user query (async_embed_query used).
+        retriever:       Retrieves relevant chunks (async_retrieve used).
         prompt_builder:  Assembles the final prompt string.
-        llm:             Generates the answer.
+        llm:             Generates the answer (async_generate used).
         collection:      Which vector collection to query.
         top_k:           Maximum chunks to retrieve. Default: 5.
         score_threshold: Minimum similarity score for retrieved chunks. Default: 0.0.
@@ -72,8 +76,6 @@ class QueryPipeline:
         self._score_threshold = score_threshold
         self._observer = observer or NoOpObserver()
 
-    # Public API
-
     def run(
         self,
         query: str,
@@ -84,7 +86,65 @@ class QueryPipeline:
         metadata_filter: dict[str, Any] | None = None,
     ) -> PipelineResult:
         """
-        Run the full query pipeline for a user query.
+        Sync entry point — wraps arun() in asyncio.run() for non-async callers.
+
+        Raises NexRAGError if called from inside a running event loop; use
+        async_query() / arun() there instead.
+        """
+        self._assert_no_running_loop()
+        return asyncio.run(
+            self.arun(
+                query,
+                collection=collection,
+                top_k=top_k,
+                score_threshold=score_threshold,
+                metadata_filter=metadata_filter,
+            )
+        )
+
+    def stream(
+        self,
+        query: str,
+        *,
+        collection: str | None = None,
+        top_k: int | None = None,
+        score_threshold: float | None = None,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> Iterator[str]:
+        """
+        Sync streaming — collects tokens from astream() via asyncio.run().
+
+        Note: tokens are buffered until the full stream completes before yielding.
+        For true live token streaming, use astream_query() with mode: async.
+        Raises NexRAGError if called from inside a running event loop.
+        """
+        self._assert_no_running_loop()
+
+        async def _collect() -> list[str]:
+            return [
+                t
+                async for t in self.astream(
+                    query,
+                    collection=collection,
+                    top_k=top_k,
+                    score_threshold=score_threshold,
+                    metadata_filter=metadata_filter,
+                )
+            ]
+
+        return iter(asyncio.run(_collect()))
+
+    async def arun(
+        self,
+        query: str,
+        *,
+        collection: str | None = None,
+        top_k: int | None = None,
+        score_threshold: float | None = None,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> PipelineResult:
+        """
+        Run the full async query pipeline for a user query.
 
         Args:
             query:           The user's question as a plain string.
@@ -92,7 +152,6 @@ class QueryPipeline:
             top_k:           Override default top_k for this query.
             score_threshold: Override default score_threshold for this query.
             metadata_filter: Optional metadata filters applied during retrieval.
-                             e.g. {"vendor": "Acme", "year": 2024}
 
         Returns:
             PipelineResult with answer, sources, scores, and latency.
@@ -108,8 +167,8 @@ class QueryPipeline:
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
 
         try:
-            query_embedding = self._run_query_embedder(query, pipeline_id)
-            chunks = self._run_retriever(
+            query_embedding = await self._run_query_embedder(query, pipeline_id)
+            chunks = await self._run_retriever(
                 query,
                 query_embedding,
                 active_collection,
@@ -118,22 +177,21 @@ class QueryPipeline:
                 metadata_filter,
                 pipeline_id,
             )
-            prompt = self._run_prompt_builder(query, chunks, pipeline_id)
-            answer = self._run_llm(prompt, pipeline_id)
+            prompt = await self._run_prompt_builder(query, chunks, pipeline_id)
+            answer = await self._run_llm(prompt, pipeline_id)
         except PipelineError:
             raise
         except Exception as e:
             raise PipelineError(
-                f"Unexpected error during query pipeline: {e}",
+                f"Unexpected error during async query pipeline: {e}",
                 stage="pipeline",
-                component="query",
+                component="async_query",
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
 
         latency_ms = (time.monotonic() - started_at) * 1000
-
-        return self._build_result(
+        return await self._build_result(
             answer=answer,
             query=query,
             chunks=chunks,
@@ -142,7 +200,7 @@ class QueryPipeline:
             pipeline_id=pipeline_id,
         )
 
-    def stream(
+    async def astream(
         self,
         query: str,
         *,
@@ -150,34 +208,21 @@ class QueryPipeline:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
-    ) -> Iterator[str]:
+    ) -> AsyncIterator[str]:
         """
-        Run the query pipeline and stream LLM response tokens as they arrive.
-
-        All stages before the LLM (embed, retrieve, prompt_builder) run synchronously.
-        Tokens are yielded as they stream from the LLM. Pipeline events fire for all
-        stages; the llm 'completed' event fires after the last token is yielded.
-
-        Args:
-            query:           The user's question as a plain string.
-            collection:      Override the default collection for this call.
-            top_k:           Override default top_k for this call.
-            score_threshold: Override default score_threshold for this call.
-            metadata_filter: Optional metadata filters applied during retrieval.
+        Async streaming variant. Pre-LLM stages run via async ABCs,
+        then tokens are yielded live from llm.async_stream().
 
         Yields:
             Response text tokens as they arrive from the LLM.
-
-        Raises:
-            PipelineError: Wraps any stage-level error with full context.
         """
         pipeline_id = str(uuid.uuid4())
         active_collection = collection or self._collection
         active_top_k = top_k if top_k is not None else self._top_k
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
 
-        query_embedding = self._run_query_embedder(query, pipeline_id)
-        chunks = self._run_retriever(
+        query_embedding = await self._run_query_embedder(query, pipeline_id)
+        chunks = await self._run_retriever(
             query,
             query_embedding,
             active_collection,
@@ -186,31 +231,32 @@ class QueryPipeline:
             metadata_filter,
             pipeline_id,
         )
-        prompt = self._run_prompt_builder(query, chunks, pipeline_id)
+        prompt = await self._run_prompt_builder(query, chunks, pipeline_id)
 
-        self._emit(pipeline_id, "llm", "started")
+        await self._emit(pipeline_id, "llm", "started")
         t = time.monotonic()
         try:
-            yield from self._llm.stream(prompt)
+            async for token in self._llm.async_stream(prompt):
+                yield token
         except LLMError:
             raise
         except Exception as e:
             raise PipelineError(
-                "LLM failed during streaming.",
+                "LLM failed during async streaming.",
                 stage="llm",
                 component=type(self._llm).__name__,
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        self._emit(pipeline_id, "llm", "completed", t)
+        await self._emit(pipeline_id, "llm", "completed", t)
 
     # Stage runners
 
-    def _run_query_embedder(self, query: str, pipeline_id: str) -> list[float]:
-        self._emit(pipeline_id, "embedder", "started")
+    async def _run_query_embedder(self, query: str, pipeline_id: str) -> list[float]:
+        await self._emit(pipeline_id, "embedder", "started")
         t = time.monotonic()
         try:
-            embedding = self._embedder.embed_query(query)
+            embedding = await self._embedder.async_embed_query(query)
         except EmbedderError:
             raise
         except Exception as e:
@@ -221,16 +267,10 @@ class QueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        self._emit(
-            pipeline_id,
-            "embedder",
-            "completed",
-            t,
-            {"dimensions": len(embedding)},
-        )
+        await self._emit(pipeline_id, "embedder", "completed", t, {"dimensions": len(embedding)})
         return embedding
 
-    def _run_retriever(
+    async def _run_retriever(
         self,
         query: str,
         query_embedding: list[float],
@@ -240,10 +280,10 @@ class QueryPipeline:
         metadata_filter: dict[str, Any] | None,
         pipeline_id: str,
     ) -> list[ScoredChunk]:
-        self._emit(pipeline_id, "retriever", "started")
+        await self._emit(pipeline_id, "retriever", "started")
         t = time.monotonic()
         try:
-            chunks = self._retriever.retrieve(
+            chunks = await self._retriever.async_retrieve(
                 query=query,
                 query_embedding=query_embedding,
                 top_k=top_k,
@@ -255,13 +295,13 @@ class QueryPipeline:
             raise
         except Exception as e:
             raise PipelineError(
-                "Retriever failed during semantic search.",
+                "Retriever failed during async semantic search.",
                 stage="retriever",
                 component=type(self._retriever).__name__,
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        self._emit(
+        await self._emit(
             pipeline_id,
             "retriever",
             "completed",
@@ -270,8 +310,10 @@ class QueryPipeline:
         )
         return chunks
 
-    def _run_prompt_builder(self, query: str, chunks: list[ScoredChunk], pipeline_id: str) -> str:
-        self._emit(pipeline_id, "prompt_builder", "started")
+    async def _run_prompt_builder(
+        self, query: str, chunks: list[ScoredChunk], pipeline_id: str
+    ) -> str:
+        await self._emit(pipeline_id, "prompt_builder", "started")
         t = time.monotonic()
         try:
             prompt = self._prompt_builder.build(query, chunks)
@@ -285,20 +327,16 @@ class QueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        self._emit(
-            pipeline_id,
-            "prompt_builder",
-            "completed",
-            t,
-            {"prompt_length": len(prompt)},
+        await self._emit(
+            pipeline_id, "prompt_builder", "completed", t, {"prompt_length": len(prompt)}
         )
         return prompt
 
-    def _run_llm(self, prompt: str, pipeline_id: str) -> str:
-        self._emit(pipeline_id, "llm", "started")
+    async def _run_llm(self, prompt: str, pipeline_id: str) -> str:
+        await self._emit(pipeline_id, "llm", "started")
         t = time.monotonic()
         try:
-            answer = self._llm.generate(prompt)
+            answer = await self._llm.async_generate(prompt)
         except LLMError:
             raise
         except Exception as e:
@@ -309,12 +347,10 @@ class QueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        self._emit(pipeline_id, "llm", "completed", t, {"response_length": len(answer)})
+        await self._emit(pipeline_id, "llm", "completed", t, {"response_length": len(answer)})
         return answer
 
-    # Response assembly
-
-    def _build_result(
+    async def _build_result(
         self,
         answer: str,
         query: str,
@@ -323,15 +359,7 @@ class QueryPipeline:
         latency_ms: float,
         pipeline_id: str,
     ) -> PipelineResult:
-        """
-        Wrap all pipeline outputs into a structured PipelineResult.
-        Never return a raw string to the caller.
-
-        Source.source is pulled from chunk.metadata["source"] — the opaque
-        identifier the Loader set at ingestion time (file path, URL, S3 URI,
-        page ID, etc.). Falls back to empty string if not set.
-        """
-        self._emit(pipeline_id, "response_builder", "started")
+        await self._emit(pipeline_id, "response_builder", "started")
         t = time.monotonic()
 
         sources = [
@@ -356,12 +384,12 @@ class QueryPipeline:
             pipeline_id=pipeline_id,
         )
 
-        self._emit(pipeline_id, "response_builder", "completed", t)
+        await self._emit(pipeline_id, "response_builder", "completed", t)
         return result
 
-    # Helper
+    # Helpers
 
-    def _emit(
+    async def _emit(
         self,
         pipeline_id: str,
         stage: str,
@@ -377,4 +405,14 @@ class QueryPipeline:
             duration_ms=duration_ms,
             metadata=metadata or {},
         )
-        self._observer.emit(event)
+        await self._observer.async_emit(event)
+
+    def _assert_no_running_loop(self) -> None:
+        try:
+            asyncio.get_running_loop()
+            raise NexRAGError(
+                "This method cannot be called from inside a running event loop. "
+                "Use 'await nexrag.async_query()' or 'async for token in nexrag.astream_query()' inside async contexts."
+            )
+        except RuntimeError:
+            pass

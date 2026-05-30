@@ -20,6 +20,7 @@ Collection awareness:
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -113,3 +114,39 @@ class BaseVectorDB(ABC):
 
         Called on first ingestion to persist the embedding model fingerprint.
         """
+
+    def list_collections(self) -> list[str]:
+        """
+        Return all collection names in this vector DB instance.
+        Not abstract — existing adapters don't need to implement it immediately.
+        Required for multi-collection routing (#12) and async_list_collections().
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__}.list_collections() is not implemented. "
+            "Required for multi-collection routing (issue #12)."
+        )
+
+    # Async variants — default via asyncio.to_thread. Override with a native async client for true async I/O.
+
+    async def async_upsert(
+        self,
+        chunks: list[Chunk],
+        embeddings: list[list[float]],
+        collection_name: str,
+    ) -> None:
+        """Async variant of upsert(). Default: runs sync upsert() in a thread pool."""
+        await asyncio.to_thread(self.upsert, chunks, embeddings, collection_name)
+
+    async def async_query(
+        self,
+        embedding: list[float],
+        top_k: int,
+        collection_name: str,
+        filters: dict[str, Any] | None = None,
+    ) -> list[ScoredChunk]:
+        """Async variant of query(). Default: runs sync query() in a thread pool."""
+        return await asyncio.to_thread(self.query, embedding, top_k, collection_name, filters)
+
+    async def async_list_collections(self) -> list[str]:
+        """Async variant of list_collections(). Default: runs sync version in a thread pool."""
+        return await asyncio.to_thread(self.list_collections)

@@ -20,8 +20,9 @@ Custom implementation pattern:
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 
 
 class BaseLLM(ABC):
@@ -60,3 +61,20 @@ class BaseLLM(ABC):
             LLMRateLimitError:  If the provider returns a rate limit error.
             LLMError:           For all other LLM failures.
         """
+
+    async def async_generate(self, prompt: str) -> str:
+        """
+        Async variant of generate(). Default: runs sync generate() in a thread pool.
+        Override with a native async client (AsyncOpenAI, AsyncAnthropic) for true async I/O.
+        """
+        return await asyncio.to_thread(self.generate, prompt)
+
+    async def async_stream(self, prompt: str) -> AsyncIterator[str]:
+        """
+        Async variant of stream(). Default: collects all tokens from sync stream() in a
+        thread, then yields them. Adapters with native async clients should override this
+        to yield tokens as they arrive without buffering.
+        """
+        tokens: list[str] = await asyncio.to_thread(list, self.stream(prompt))
+        for token in tokens:
+            yield token

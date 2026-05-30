@@ -28,15 +28,22 @@ from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
 from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.interfaces.sanitizer import BaseSanitizer
 from nexrag.core.interfaces.vector_db import BaseVectorDB
+from nexrag.core.pipeline.async_ingestion import AsyncIngestionPipeline
+from nexrag.core.pipeline.async_query import AsyncQueryPipeline
 from nexrag.core.pipeline.ingestion import IngestionPipeline, IngestionResult  # noqa: F401
 from nexrag.core.pipeline.query import QueryPipeline
 from nexrag.exceptions import ConfigError
 from nexrag.loaders.auto import AutoLoader
 
 
-def wire(config: NexRAGConfig) -> tuple[IngestionPipeline, QueryPipeline]:
+def wire(
+    config: NexRAGConfig,
+) -> tuple[IngestionPipeline | AsyncIngestionPipeline, QueryPipeline | AsyncQueryPipeline]:
     """
     Instantiate all components from config and wire them into both pipelines.
+
+    When config.mode is "async", returns AsyncIngestionPipeline + AsyncQueryPipeline.
+    When config.mode is "sync" (default), returns the standard sync pipelines.
 
     Returns a (ingestion_pipeline, query_pipeline) tuple so the caller (NexRAG.from_config)
     can construct the NexRAG instance without creating a circular import.
@@ -51,17 +58,6 @@ def wire(config: NexRAGConfig) -> tuple[IngestionPipeline, QueryPipeline]:
     vector_db = _build_vector_db(config.ingestion.vector_db)
     collection = config.ingestion.vector_db.default_collection
 
-    ingestion_pipeline = IngestionPipeline(
-        chunker=chunker,
-        embedder=embedder,
-        vector_db=vector_db,
-        collection=collection,
-        loader=loader,
-        sanitizer=sanitizer,
-        on_conflict=config.ingestion.vector_db.on_conflict,
-        observer=observer,
-    )
-
     # Query components
     query_embedder: BaseEmbedder
     if config.query.embedder == "inherit":
@@ -73,16 +69,52 @@ def wire(config: NexRAGConfig) -> tuple[IngestionPipeline, QueryPipeline]:
     prompt_builder = _build_prompt_builder(config.query.prompt)
     llm = _build_llm(config.query.llm)
 
-    query_pipeline = QueryPipeline(
-        embedder=query_embedder,
-        retriever=retriever,
-        prompt_builder=prompt_builder,
-        llm=llm,
-        collection=collection,
-        top_k=config.query.retriever.top_k,
-        score_threshold=config.query.retriever.score_threshold,
-        observer=observer,
-    )
+    ingestion_pipeline: IngestionPipeline | AsyncIngestionPipeline
+    query_pipeline: QueryPipeline | AsyncQueryPipeline
+
+    if config.mode == "async":
+        ingestion_pipeline = AsyncIngestionPipeline(
+            chunker=chunker,
+            embedder=embedder,
+            vector_db=vector_db,
+            collection=collection,
+            loader=loader,
+            sanitizer=sanitizer,
+            on_conflict=config.ingestion.vector_db.on_conflict,
+            observer=observer,
+            embed_batch_size=config.ingestion.embedder.batch_size,
+        )
+        query_pipeline = AsyncQueryPipeline(
+            embedder=query_embedder,
+            retriever=retriever,
+            prompt_builder=prompt_builder,
+            llm=llm,
+            collection=collection,
+            top_k=config.query.retriever.top_k,
+            score_threshold=config.query.retriever.score_threshold,
+            observer=observer,
+        )
+    else:
+        ingestion_pipeline = IngestionPipeline(
+            chunker=chunker,
+            embedder=embedder,
+            vector_db=vector_db,
+            collection=collection,
+            loader=loader,
+            sanitizer=sanitizer,
+            on_conflict=config.ingestion.vector_db.on_conflict,
+            observer=observer,
+        )
+        query_pipeline = QueryPipeline(
+            embedder=query_embedder,
+            retriever=retriever,
+            prompt_builder=prompt_builder,
+            llm=llm,
+            collection=collection,
+            top_k=config.query.retriever.top_k,
+            score_threshold=config.query.retriever.score_threshold,
+            observer=observer,
+        )
 
     return ingestion_pipeline, query_pipeline
 
