@@ -14,23 +14,70 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+from typing import Any
 
 from nexrag.core.interfaces.loader import BaseLoader
 from nexrag.core.models.document import Document
 from nexrag.exceptions import LoaderError
 
 
+def _parse_pdf_date(raw: str) -> str | None:
+    """
+    Convert a PDF date string (D:YYYYMMDDHHmmSS[OHH'mm']) to ISO 8601.
+    Returns None if the string cannot be parsed rather than raising.
+    """
+    if not raw:
+        return None
+    s = raw.strip()
+    if s.startswith("D:"):
+        s = s[2:]
+    digits = ""
+    for ch in s:
+        if ch.isdigit():
+            digits += ch
+        else:
+            break
+    if len(digits) < 8:
+        return None
+    try:
+        year = digits[0:4]
+        month = digits[4:6] if len(digits) >= 6 else "01"
+        day = digits[6:8]
+        hour = digits[8:10] if len(digits) >= 10 else "00"
+        minute = digits[10:12] if len(digits) >= 12 else "00"
+        second = digits[12:14] if len(digits) >= 14 else "00"
+        return f"{year}-{month}-{day}T{hour}:{minute}:{second}"
+    except Exception:
+        return None
+
+
 class PDFLoader(BaseLoader):
     """
     Loads a PDF file into a single Document containing all page text.
 
+    By default extracts all available PDF metadata fields alongside page text.
+    Fields are silently omitted when not present in the source PDF.
+
     Args:
-        source_override: If set, overrides the auto-detected source identifier.
-                         Useful when loading bytes from a known URI (e.g. an S3 key).
+        source_override:  If set, overrides the auto-detected source identifier.
+                          Useful when loading bytes from a known URI (e.g. an S3 key).
+        metadata_fields:  Whitelist of metadata field names to include. Default (None)
+                          includes all available fields. Supported names:
+                          author, title, subject, creator, producer,
+                          created_at, modified_at, page_count.
+        include_metadata: Set to False to suppress all metadata extraction.
+                          Only metadata["source"] will be set on the Document.
     """
 
-    def __init__(self, source_override: str | None = None) -> None:
+    def __init__(
+        self,
+        source_override: str | None = None,
+        metadata_fields: list[str] | None = None,
+        include_metadata: bool = True,
+    ) -> None:
         self._source_override = source_override
+        self._metadata_fields = metadata_fields
+        self._include_metadata = include_metadata
 
     def load(self, data: str | Path | bytes) -> list[Document]:
         """
@@ -39,8 +86,8 @@ class PDFLoader(BaseLoader):
 
         Returns:
             A list containing one Document with all page text joined by double newlines.
-            metadata["source"] is the resolved file path or "pdf_bytes".
-            metadata["page_count"] is the number of pages.
+            metadata["source"] is always set (resolved file path or "pdf_bytes").
+            Additional metadata fields are included per include_metadata / metadata_fields config.
 
         Raises:
             LoaderError: If pypdf is not installed, the file cannot be read,
@@ -100,7 +147,7 @@ class PDFLoader(BaseLoader):
 
         if reader.is_encrypted:
             raise LoaderError(
-                f"PDF is encrypted. Decrypt it before passing to PDFLoader. " f"source={source!r}",
+                f"PDF is encrypted. Decrypt it before passing to PDFLoader. source={source!r}",
                 stage="loader",
                 component="PDFLoader",
             )
@@ -122,12 +169,63 @@ class PDFLoader(BaseLoader):
                 component="PDFLoader",
             )
 
-        return [
-            Document(
-                content="\n\n".join(page_texts),
-                metadata={
-                    "source": source,
-                    "page_count": len(reader.pages),  # type: ignore[attr-defined]
-                },
-            )
-        ]
+        metadata: dict[str, Any] = {"source": source}
+        metadata.update(self._extract_pdf_metadata(reader))
+
+        return [Document(content="\n\n".join(page_texts), metadata=metadata)]
+
+    def _extract_pdf_metadata(self, reader: object) -> dict[str, Any]:
+        """
+        Extract available metadata fields from the PDF reader.
+
+        Returns an empty dict when include_metadata=False.
+        Silently omits fields that are not present in the source PDF.
+        Applies metadata_fields whitelist if configured.
+        """
+        if not self._include_metadata:
+            return {}
+
+        pages = getattr(reader, "pages", [])
+        result: dict[str, Any] = {"page_count": len(pages)}
+
+        meta = getattr(reader, "metadata", None)
+        if meta is not None:
+            # String fields — try pypdf attribute access first, fall back to dict key
+            for attr, key in [
+                ("author", "author"),
+                ("title", "title"),
+                ("subject", "subject"),
+                ("creator", "creator"),
+                ("producer", "producer"),
+            ]:
+                val = getattr(meta, attr, None)
+                if not val:
+                    val = meta.get(f"/{attr.capitalize()}")
+                if val:
+                    result[key] = str(val)
+
+            # Date fields — pypdf ≥ 3.x returns datetime objects via .creation_date /
+            # .modification_date; older versions return raw D:... strings via dict access.
+            for attr, dict_key, output_key in [
+                ("creation_date", "/CreationDate", "created_at"),
+                ("modification_date", "/ModDate", "modified_at"),
+            ]:
+                val = getattr(meta, attr, None)
+                if val is not None:
+                    if hasattr(val, "isoformat"):
+                        result[output_key] = val.isoformat()
+                    else:
+                        parsed = _parse_pdf_date(str(val))
+                        if parsed:
+                            result[output_key] = parsed
+                else:
+                    raw = meta.get(dict_key)
+                    if raw:
+                        parsed = _parse_pdf_date(str(raw))
+                        if parsed:
+                            result[output_key] = parsed
+
+        if self._metadata_fields is not None:
+            result = {k: v for k, v in result.items() if k in self._metadata_fields}
+
+        return result
