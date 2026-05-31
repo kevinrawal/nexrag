@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexRAG — RAG Pipeline SDK</title>
+  <meta name="description" content="Framework-agnostic RAG pipeline SDK. Plug in any component, swap any stage, configure everything in YAML.">
+  <script>(function(){var t=localStorage.getItem('nexrag-theme')||'dark';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Hero ───────────────────────────────────── */
+    .hero {
+      padding: 96px 0 80px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 70% 55% at 50% -5%,
+        oklch(68% 0.19 270 / 0.07), transparent 65%);
+      pointer-events: none;
+    }
+    .hero-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+    .hero-badge { margin-bottom: 28px; }
+    .hero-name {
+      font-size: clamp(56px, 8vw, 88px);
+      font-weight: 700;
+      letter-spacing: -0.045em;
+      line-height: 1;
+      margin-bottom: 18px;
+    }
+    .hero-tagline {
+      font-family: var(--mono);
+      font-size: clamp(15px, 2vw, 20px);
+      color: var(--text-2);
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      letter-spacing: 0.01em;
+    }
+    .hero-tagline .sym { color: var(--accent); }
+    .hero-desc {
+      font-size: 16px;
+      color: var(--text-2);
+      line-height: 1.7;
+      margin-bottom: 28px;
+      max-width: 430px;
+    }
+    .hero-actions { display: flex; gap: 12px; align-items: center; margin-top: 20px; }
+
+    /* ── Architecture ───────────────────────────── */
+    .arch-section {
+      padding: 80px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-2);
+    }
+    .arch-wrap {
+      margin-top: 48px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-2) transparent;
+    }
+    .arch-legend {
+      display: flex;
+      gap: 24px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-3);
+      font-family: var(--mono);
+    }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      border: 1px solid;
+      flex-shrink: 0;
+    }
+    .legend-dot.shared { background: var(--accent-dim); border-color: var(--accent-border); }
+    .legend-dot.stage  { background: var(--bg-3); border-color: var(--border-2); }
+    .legend-dot.entry  { background: var(--bg-2); border-color: var(--border); }
+    .legend-line {
+      width: 20px; height: 1px;
+      border-top: 2px dashed;
+      border-color: var(--accent-border);
+      opacity: 0.6;
+    }
+
+    /* ── Features ───────────────────────────────── */
+    .features-section { padding: 80px 0; }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+      margin-top: 48px;
+    }
+    .feat {
+      background: var(--bg);
+      padding: 32px;
+      transition: background 0.2s;
+    }
+    .feat:hover { background: var(--bg-2); }
+    .feat-num {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-3);
+      margin-bottom: 14px;
+      letter-spacing: 0.04em;
+    }
+    .feat-title { font-size: 15px; font-weight: 600; margin-bottom: 10px; letter-spacing: -0.01em; }
+    .feat-desc  { font-size: 14px; color: var(--text-2); line-height: 1.65; }
+
+    /* ── Code showcase ──────────────────────────── */
+    .code-section { padding: 80px 0; border-top: 1px solid var(--border); }
+    .code-tabs { display: flex; border-bottom: 1px solid var(--border); }
+    .ctab {
+      padding: 10px 20px;
+      font-family: var(--mono); font-size: 13px;
+      color: var(--text-3); cursor: pointer;
+      border: none; border-bottom: 2px solid transparent;
+      background: none; margin-bottom: -1px;
+      transition: color 0.15s;
+    }
+    .ctab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .ctab-panel { display: none; }
+    .ctab-panel.active { display: block; }
+    .ctab-panel pre.code-block { border-top: none; border-radius: 0 0 var(--r) var(--r); }
+    .code-frame {
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+      margin-top: 48px;
+    }
+
+    /* ── Providers ──────────────────────────────── */
+    .providers-section { padding: 80px 0; border-top: 1px solid var(--border); }
+    .providers-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-top: 48px;
+    }
+    .pcol-title {
+      font-family: var(--mono);
+      font-size: 10px; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-3);
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ptable { width: 100%; border-collapse: collapse; }
+    .ptable th {
+      text-align: left; font-family: var(--mono); font-size: 10px;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3);
+      padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .ptable td {
+      padding: 10px 0; font-size: 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-2); vertical-align: top;
+    }
+    .ptable td:first-child { color: var(--text); font-weight: 500; width: 130px; }
+
+    /* ── CTA strip ──────────────────────────────── */
+    .cta-section { padding: 80px 0; border-top: 1px solid var(--border); }
+    .cta-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 32px;
+    }
+    .cta-title { font-size: clamp(24px, 3vw, 36px); font-weight: 600; letter-spacing: -0.025em; }
+    .cta-sub   { font-size: 15px; color: var(--text-2); margin-top: 8px; }
+    .cta-actions { display: flex; gap: 12px; flex-shrink: 0; }
+
+    /* ── Responsive ─────────────────────────────── */
+    @media (max-width: 900px) {
+      .hero-inner { grid-template-columns: 1fr; }
+      .hero-code  { display: none; }
+      .features-grid { grid-template-columns: 1fr 1fr; }
+      .providers-grid { grid-template-columns: 1fr; }
+      .cta-inner { flex-direction: column; align-items: flex-start; }
+    }
+    @media (max-width: 640px) {
+      .features-grid { grid-template-columns: 1fr; }
+      .hero-name { font-size: 56px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Navigation ───────────────────────────── -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="index.html" class="nav-logo">
+        <span class="logo-dot">●</span>NexRAG
+      </a>
+      <div class="nav-links">
+        <!-- architecture.html exists but is not ready — link hidden until v1 -->
+        <a href="docs.html">Docs</a>
+        <a href="story.html">Story</a>
+        <a href="showcase.html">Showcase</a>
+        <a href="https://github.com/kevinrawal/nexrag" target="_blank" class="nav-gh">GitHub ↗</a>
+        <button class="theme-btn" id="themeBtn" title="Toggle theme">◑</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Hero ─────────────────────────────────── -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-inner">
+
+        <div class="hero-content">
+          <div class="hero-badge">
+            <span class="badge">
+              <span class="badge-dot"></span>v0.3.0 — now on PyPI
+            </span>
+          </div>
+          <h1 class="hero-name">NexRAG</h1>
+          <div class="hero-tagline">
+            <span class="sym">●</span>plug
+            <span class="sym">⇄</span>swap
+            <span class="sym">▶</span>scale
+          </div>
+          <p class="hero-desc">
+            The infrastructure layer between your RAG components. Configure providers in YAML, swap any stage, and get a production-grade RAG pipeline with zero framework lock-in.
+          </p>
+          <div class="install-strip">
+            <code>pip install "nexrag[all]"</code>
+            <button class="copy-btn" id="copyBtn">copy</button>
+          </div>
+          <div class="hero-actions">
+            <a href="docs.html" class="btn-primary">Get started →</a>
+            <a href="https://github.com/kevinrawal/nexrag" target="_blank" class="btn-secondary">GitHub ↗</a>
+          </div>
+        </div>
+
+        <div class="hero-code">
+          <div class="code-window">
+            <div class="code-win-bar">
+              <div class="win-dots"><span></span><span></span><span></span></div>
+              <span class="win-name">quickstart.py</span>
+            </div>
+<pre class="code-block"><code><span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
+
+pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
+
+<span class="cmt"># Ingest your documents</span>
+result = pipeline.ingest(<span class="str">"docs/manual.pdf"</span>)
+<span class="fn">print</span>(<span class="str">f"Wrote {result.chunks_written} chunks"</span>)
+<span class="fn">print</span>(<span class="str">f"Done in {result.latency_ms:.0f}ms"</span>)
+
+<span class="cmt"># Ask anything</span>
+result = pipeline.query(
+    <span class="str">"What are the termination clauses?"</span>
+)
+<span class="fn">print</span>(result.answer)
+
+<span class="kw">for</span> src <span class="kw">in</span> result.sources:
+    <span class="fn">print</span>(<span class="str">f"  [{src.rank}] {src.source}"</span>)</code></pre>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ──────────────────────────── -->
+  <section class="arch-section">
+    <div class="container">
+      <div class="label">Architecture</div>
+      <h2 class="section-title">The full RAG pipeline.</h2>
+      <p class="section-sub">Two pipelines. One shared <code>Embedder</code>. One shared <code>VectorDB</code>. Ten swappable stages. One YAML file to wire it all.</p>
+
+      <div class="arch-wrap fade-up">
+<svg viewBox="0 0 980 308" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;min-width:720px">
+<style>
+.b   { fill: var(--bg-3); stroke: var(--border-2); stroke-width: 1; }
+.b-a { fill: var(--accent-dim); stroke: var(--accent-border); stroke-width: 1.5; }
+.b-e { fill: var(--bg-2); stroke: var(--border); stroke-width: 1; stroke-dasharray: 4 3; }
+.t   { fill: var(--text); font-family: 'Space Grotesk', sans-serif; font-size: 11.5px; font-weight: 600; text-anchor: middle; }
+.s   { fill: var(--text-3); font-family: 'JetBrains Mono', monospace; font-size: 9px; text-anchor: middle; }
+.ln  { stroke: var(--border-2); stroke-width: 1.5; }
+.ch  { stroke: var(--border-2); stroke-width: 1.5; fill: none; }
+.cn  { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; fill: none; opacity: 0.4; }
+.cha { stroke: var(--accent); stroke-width: 1.5; fill: none; opacity: 0.4; }
+.rl  { fill: var(--text-3); font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.09em; }
+.an  { fill: var(--bg-2); stroke: var(--accent-border); stroke-width: 1; }
+.ant { fill: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-anchor: middle; }
+.ob  { fill: var(--bg-3); stroke: var(--border); stroke-width: 1; }
+.ot  { fill: var(--text-3); font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.05em; text-anchor: middle; }
+</style>
+
+<!-- INGESTION label -->
+<text x="12" y="72" class="rl">// INGESTION PIPELINE</text>
+
+<!-- Loader [col 1, x=12] -->
+<rect x="12" y="80" width="100" height="42" rx="3" class="b"/>
+<text x="62" y="104" class="t">Loader</text>
+<line x1="113" y1="101" x2="131" y2="101" class="ln"/>
+<polyline points="127,97.5 131,101 127,104.5" class="ch"/>
+
+<!-- Sanitizer [col 2, x=135] -->
+<rect x="135" y="80" width="100" height="42" rx="3" class="b"/>
+<text x="185" y="104" class="t">Sanitizer</text>
+<line x1="236" y1="101" x2="254" y2="101" class="ln"/>
+<polyline points="250,97.5 254,101 250,104.5" class="ch"/>
+
+<!-- Chunker [col 3, x=258] -->
+<rect x="258" y="80" width="100" height="42" rx="3" class="b"/>
+<text x="308" y="104" class="t">Chunker</text>
+<line x1="359" y1="101" x2="377" y2="101" class="ln"/>
+<polyline points="373,97.5 377,101 373,104.5" class="ch"/>
+
+<!-- Embedder [col 4, x=381 — SHARED] -->
+<rect x="381" y="80" width="100" height="42" rx="3" class="b-a"/>
+<text x="431" y="104" class="t">Embedder</text>
+<line x1="482" y1="101" x2="500" y2="101" class="ln"/>
+<polyline points="496,97.5 500,101 496,104.5" class="ch"/>
+
+<!-- Dedup [col 5, x=504] -->
+<rect x="504" y="80" width="100" height="42" rx="3" class="b"/>
+<text x="554" y="104" class="t">Dedup</text>
+<line x1="605" y1="101" x2="623" y2="101" class="ln"/>
+<polyline points="619,97.5 623,101 619,104.5" class="ch"/>
+
+<!-- VectorDB [col 6, x=627] -->
+<rect x="627" y="80" width="100" height="42" rx="3" class="b"/>
+<text x="677" y="104" class="t">VectorDB</text>
+
+<!-- ── CROSS-PIPELINE CONNECTIONS ── -->
+
+<!-- VectorDB bottom → Retriever top -->
+<path d="M 677,122 C 677,165 308,165 308,208" class="cn"/>
+<polyline points="304,204 308,208 312,204" class="cha"/>
+
+<!-- Embedder(ing) bottom → Embedder(qry) top (shared instance) -->
+<path d="M 431,122 C 431,165 185,165 185,208" class="cn"/>
+<polyline points="181,204 185,208 189,204" class="cha"/>
+
+<!-- "reads" annotation on VectorDB→Retriever path (midpoint t=0.5 ≈ x=493, y=165) -->
+<rect x="474" y="158" width="38" height="13" rx="2" class="an"/>
+<text x="493" y="168" class="ant">reads</text>
+
+<!-- "inherit" annotation on Embedder→Embedder path (midpoint t=0.5 ≈ x=308, y=165) -->
+<rect x="284" y="158" width="48" height="13" rx="2" class="an"/>
+<text x="308" y="168" class="ant">inherit</text>
+
+<!-- ── QUERY PIPELINE ── -->
+<text x="12" y="200" class="rl">// QUERY PIPELINE</text>
+
+<!-- User Query [col 1, x=12 — entry] -->
+<rect x="12" y="208" width="100" height="42" rx="3" class="b-e"/>
+<text x="62" y="232" class="t">User Query</text>
+<line x1="113" y1="229" x2="131" y2="229" class="ln"/>
+<polyline points="127,225.5 131,229 127,232.5" class="ch"/>
+
+<!-- Embedder [col 2, x=135 — SHARED, inherit] -->
+<rect x="135" y="208" width="100" height="42" rx="3" class="b-a"/>
+<text x="185" y="232" class="t">Embedder</text>
+<line x1="236" y1="229" x2="254" y2="229" class="ln"/>
+<polyline points="250,225.5 254,229 250,232.5" class="ch"/>
+
+<!-- Retriever [col 3, x=258] -->
+<rect x="258" y="208" width="100" height="42" rx="3" class="b"/>
+<text x="308" y="232" class="t">Retriever</text>
+<line x1="359" y1="229" x2="377" y2="229" class="ln"/>
+<polyline points="373,225.5 377,229 373,232.5" class="ch"/>
+
+<!-- Reranker [col 4, x=381 — optional] -->
+<rect x="381" y="208" width="100" height="42" rx="3" class="b"/>
+<text x="431" y="232" class="t">Reranker</text>
+<line x1="482" y1="229" x2="500" y2="229" class="ln"/>
+<polyline points="496,225.5 500,229 496,232.5" class="ch"/>
+
+<!-- PromptBuilder [col 5, x=504] -->
+<rect x="504" y="208" width="100" height="42" rx="3" class="b"/>
+<text x="554" y="232" class="t">PromptBuilder</text>
+<line x1="605" y1="229" x2="623" y2="229" class="ln"/>
+<polyline points="619,225.5 623,229 619,232.5" class="ch"/>
+
+<!-- LLM [col 6, x=627] -->
+<rect x="627" y="208" width="100" height="42" rx="3" class="b"/>
+<text x="677" y="232" class="t">LLM</text>
+<line x1="728" y1="229" x2="746" y2="229" class="ln"/>
+<polyline points="742,225.5 746,229 742,232.5" class="ch"/>
+
+<!-- PipelineResult [col 7, x=750] -->
+<rect x="750" y="208" width="100" height="42" rx="3" class="b"/>
+<text x="800" y="232" class="t">PipelineResult</text>
+
+<!-- ── OBSERVER ── -->
+<rect x="12" y="270" width="838" height="22" rx="2" class="ob"/>
+<text x="431" y="284" class="ot">OBSERVER — emits structured PipelineEvent at every stage · ConsoleObserver | NoOpObserver | custom</text>
+</svg>
+      </div>
+
+      <div class="arch-legend">
+        <div class="legend-item"><span class="legend-dot shared"></span>Shared instance (Embedder / VectorDB)</div>
+        <div class="legend-item"><span class="legend-dot stage"></span>Swappable stage</div>
+        <div class="legend-item"><span class="legend-dot entry"></span>Entry point</div>
+        <div class="legend-item"><span class="legend-line"></span>Cross-pipeline connection</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Features ──────────────────────────────── -->
+  <section class="features-section">
+    <div class="container">
+      <div class="label fade-up">Design</div>
+      <h2 class="section-title fade-up">Built on six principles.</h2>
+      <div class="features-grid">
+        <div class="feat fade-up">
+          <div class="feat-num">01.</div>
+          <div class="feat-title">Interface-first</div>
+          <p class="feat-desc">Every stage is a contract. All 10 pipeline stages are clean abstract interfaces. Swap anything by extending the base class.</p>
+        </div>
+        <div class="feat fade-up">
+          <div class="feat-num">02.</div>
+          <div class="feat-title">Config-driven</div>
+          <p class="feat-desc">YAML configures the pipeline. Secrets via <code>${ENV_VAR}</code> substitution. No runtime configuration in application code.</p>
+        </div>
+        <div class="feat fade-up">
+          <div class="feat-num">03.</div>
+          <div class="feat-title">Zero lock-in</div>
+          <p class="feat-desc">Core has no dependency on LangChain, LlamaIndex, or any AI SDK. Bring your model. Swap providers without changing application code.</p>
+        </div>
+        <div class="feat fade-up">
+          <div class="feat-num">04.</div>
+          <div class="feat-title">Explicit over implicit</div>
+          <p class="feat-desc">No hidden defaults. No magic. Every behavior is declared in YAML or documented. What you configure is exactly what runs.</p>
+        </div>
+        <div class="feat fade-up">
+          <div class="feat-num">05.</div>
+          <div class="feat-title">Production-ready</div>
+          <p class="feat-desc">SHA-256 deduplication, idempotent ingestion, exponential backoff with jitter, typed exceptions, and structured JSON observability at every stage.</p>
+        </div>
+        <div class="feat fade-up">
+          <div class="feat-num">06.</div>
+          <div class="feat-title">Async &amp; streaming</div>
+          <p class="feat-desc">Set <code>mode: async</code> in YAML for native async pipelines. Stream token-by-token with <code>stream_query()</code> or <code>astream_query()</code> — no extra setup.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Code Showcase ─────────────────────────── -->
+  <section class="code-section">
+    <div class="container">
+      <div class="label fade-up">Example</div>
+      <h2 class="section-title fade-up">Configure once. Swap anything.</h2>
+      <p class="section-sub fade-up">Three lines of Python. One YAML file. The rest is NexRAG.</p>
+      <div class="code-frame fade-up">
+        <div class="code-tabs">
+          <button class="ctab active" data-tab="py">Python</button>
+          <button class="ctab" data-tab="yaml">nexrag.yaml</button>
+          <button class="ctab" data-tab="stream">Streaming</button>
+          <button class="ctab" data-tab="custom">Custom component</button>
+        </div>
+        <div class="ctab-panel active" id="tab-py">
+<pre class="code-block"><code><span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
+<span class="kw">from</span> dotenv <span class="kw">import</span> load_dotenv
+
+load_dotenv()
+pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
+
+<span class="cmt"># ── Ingest ──────────────────────────────────────────────────</span>
+result = pipeline.ingest(<span class="str">"contracts/agreement.pdf"</span>)
+<span class="fn">print</span>(<span class="str">f"Ingested {result.documents_loaded} doc, {result.chunks_written} chunks"</span>)
+<span class="cmt"># → Ingested 1 doc, 48 chunks in 1240.3 ms</span>
+
+<span class="cmt"># ── Query ────────────────────────────────────────────────────</span>
+result = pipeline.query(<span class="str">"What are the termination clauses?"</span>)
+<span class="fn">print</span>(result.answer)
+
+<span class="kw">for</span> source <span class="kw">in</span> result.sources:
+    <span class="fn">print</span>(<span class="str">f"  [{source.rank}] score={source.score:.3f}  {source.source}"</span>)
+
+<span class="cmt"># ── Runtime overrides ────────────────────────────────────────</span>
+result = pipeline.query(
+    <span class="str">"What changed in 2024?"</span>,
+    top_k=<span class="num">10</span>,
+    score_threshold=<span class="num">0.75</span>,
+    metadata_filter={<span class="str">"year"</span>: <span class="num">2024</span>},
+)</code></pre>
+        </div>
+        <div class="ctab-panel" id="tab-stream">
+<pre class="code-block"><code><span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
+
+pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
+
+<span class="cmt"># ── Sync streaming — tokens printed as they arrive ───────────</span>
+<span class="kw">for</span> token <span class="kw">in</span> pipeline.stream_query(<span class="str">"Summarize the contract"</span>):
+    <span class="fn">print</span>(token, end=<span class="str">""</span>, flush=<span class="kw">True</span>)
+
+<span class="cmt"># ── Async streaming — for FastAPI / async frameworks ─────────</span>
+<span class="kw">import</span> asyncio
+
+<span class="kw">async def</span> <span class="fn">stream_answer</span>():
+    <span class="kw">async for</span> token <span class="kw">in</span> pipeline.astream_query(
+        <span class="str">"What are the termination clauses?"</span>,
+        top_k=<span class="num">8</span>,
+    ):
+        <span class="fn">print</span>(token, end=<span class="str">""</span>, flush=<span class="kw">True</span>)
+
+asyncio.run(<span class="fn">stream_answer</span>())
+
+<span class="cmt"># ── FastAPI SSE endpoint — wire it straight in ────────────────</span>
+<span class="kw">from</span> fastapi <span class="kw">import</span> FastAPI
+<span class="kw">from</span> fastapi.responses <span class="kw">import</span> StreamingResponse
+
+app = FastAPI()
+
+<span class="kw">@app</span>.get(<span class="str">"/ask"</span>)
+<span class="kw">async def</span> <span class="fn">ask</span>(q: str):
+    <span class="kw">async def</span> <span class="fn">gen</span>():
+        <span class="kw">async for</span> token <span class="kw">in</span> pipeline.astream_query(q):
+            <span class="kw">yield</span> token
+    <span class="kw">return</span> StreamingResponse(<span class="fn">gen</span>(), media_type=<span class="str">"text/plain"</span>)</code></pre>
+        </div>
+        <div class="ctab-panel" id="tab-yaml">
+<pre class="code-block"><code><span class="yml-cmt"># nexrag.yaml — minimal config</span>
+
+<span class="key">mode:</span> <span class="val">sync</span>           <span class="yml-cmt"># sync (default) | async — enables native async pipeline</span>
+
+<span class="key">ingestion:</span>
+  <span class="key">loader:</span>
+    <span class="key">type:</span> <span class="val">pdf</span>
+
+  <span class="key">chunker:</span>
+    <span class="key">strategy:</span> <span class="val">recursive</span>
+    <span class="key">chunk_size:</span> <span class="val">512</span>
+    <span class="key">chunk_overlap:</span> <span class="val">64</span>
+
+  <span class="key">embedder:</span>
+    <span class="key">provider:</span> <span class="val">openai</span>
+    <span class="key">model:</span> <span class="val">text-embedding-3-small</span>
+    <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
+
+  <span class="key">vector_db:</span>
+    <span class="key">provider:</span> <span class="val">chroma</span>
+    <span class="key">default_collection:</span> <span class="val">documents</span>
+    <span class="key">collections:</span>
+      <span class="key">documents:</span>
+        <span class="key">mode:</span> <span class="val">persistent</span>
+        <span class="key">path:</span> <span class="val">./.nexrag/chroma</span>
+
+<span class="key">query:</span>
+  <span class="key">embedder:</span> <span class="val">inherit</span>         <span class="yml-cmt"># reuse ingestion embedder</span>
+  <span class="key">retriever:</span>
+    <span class="key">provider:</span> <span class="val">dense</span>
+    <span class="key">top_k:</span> <span class="val">5</span>
+  <span class="key">llm:</span>
+    <span class="key">provider:</span> <span class="val">openai</span>
+    <span class="key">model:</span> <span class="val">gpt-4o</span>
+    <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
+    <span class="key">temperature:</span> <span class="val">0.2</span>
+
+<span class="yml-cmt"># Swap to Ollama — no API keys, fully local:</span>
+<span class="yml-cmt">#   embedder.provider: ollama / model: nomic-embed-text</span>
+<span class="yml-cmt">#   llm.provider: ollama  / model: llama3.2</span></code></pre>
+        </div>
+        <div class="ctab-panel" id="tab-custom">
+<pre class="code-block"><code><span class="yml-cmt"># Drop in any custom component. Implement the interface,</span>
+<span class="yml-cmt"># declare it in YAML. Works for all 9 pipeline stages.</span>
+
+<span class="cmt"># myapp/embedders.py</span>
+<span class="kw">from</span> nexrag.core.interfaces.embedder <span class="kw">import</span> BaseEmbedder
+
+<span class="kw">class</span> <span class="fn">SentenceTransformerEmbedder</span>(BaseEmbedder):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, model: str = <span class="str">"all-MiniLM-L6-v2"</span>) -> <span class="kw">None</span>:
+        <span class="kw">from</span> sentence_transformers <span class="kw">import</span> SentenceTransformer
+        self._model = SentenceTransformer(model)
+
+    <span class="kw">def</span> <span class="fn">embed</span>(self, texts: list[str]) -> list[list[float]]:
+        <span class="kw">return</span> self._model.encode(texts).tolist()
+
+    <span class="kw">def</span> <span class="fn">embed_query</span>(self, text: str) -> list[float]:
+        <span class="kw">return</span> self._model.encode([text])[<span class="num">0</span>].tolist()
+
+<span class="yml-cmt">---</span>
+<span class="yml-cmt"># nexrag.yaml — wire it in:</span>
+<span class="key">ingestion:</span>
+  <span class="key">embedder:</span>
+    <span class="key">provider:</span> <span class="val">custom</span>
+    <span class="key">class:</span>    <span class="val">myapp.embedders.SentenceTransformerEmbedder</span>
+    <span class="key">params:</span>
+      <span class="key">model:</span>  <span class="val">all-MiniLM-L6-v2</span></code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Providers ─────────────────────────────── -->
+  <section class="providers-section">
+    <div class="container">
+      <div class="label fade-up">Integrations</div>
+      <h2 class="section-title fade-up">Supported providers.</h2>
+      <p class="section-sub fade-up">OpenAI, Ollama, Anthropic, HuggingFace, ChromaDB, BM25, Cohere, and CrossEncoder available now. More in v1.</p>
+      <div class="providers-grid fade-up">
+        <div>
+          <div class="pcol-title">Available now</div>
+          <table class="ptable">
+            <thead><tr><th>Category</th><th>Providers</th></tr></thead>
+            <tbody>
+              <tr><td>Embedders</td><td>OpenAI, Ollama, HuggingFace</td></tr>
+              <tr><td>LLMs</td><td>OpenAI, Ollama, Anthropic</td></tr>
+              <tr><td>Vector DBs</td><td>ChromaDB (local, memory, server)</td></tr>
+              <tr><td>Loaders</td><td>PDF, plain text, auto-detect</td></tr>
+              <tr><td>Chunkers</td><td>Recursive (separator-aware)</td></tr>
+              <tr><td>Retrievers</td><td>Dense (cosine similarity), BM25 (keyword), Hybrid (dense + BM25)</td></tr>
+              <tr><td>Rerankers</td><td>Cohere, CrossEncoder (sentence-transformers)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div class="pcol-title">Coming in v1</div>
+          <table class="ptable">
+            <thead><tr><th>Category</th><th>Providers</th></tr></thead>
+            <tbody>
+              <tr><td>Vector DBs</td><td>Pinecone, Weaviate</td></tr>
+              <tr><td>LLMs</td><td>Gemini, Mistral</td></tr>
+              <tr><td>Loaders</td><td>Word (.docx), HTML, Excel</td></tr>
+              <tr><td>Observability</td><td>OpenTelemetry, Prometheus</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CTA ───────────────────────────────────── -->
+  <section class="cta-section">
+    <div class="container">
+      <div class="cta-inner fade-up">
+        <div>
+          <h2 class="cta-title">Ready to build?</h2>
+          <p class="cta-sub">Read the docs, explore the source, or jump straight into a quickstart.</p>
+        </div>
+        <div class="cta-actions">
+          <a href="docs.html" class="btn-primary">Read the docs →</a>
+          <a href="https://github.com/kevinrawal/nexrag" target="_blank" class="btn-secondary">GitHub ↗</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Footer ────────────────────────────────── -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.3.0</div>
+      <div class="footer-links">
+        <a href="story.html">Story</a>
+        <a href="showcase.html">Showcase</a>
+        <a href="docs.html">Docs</a>
+        <a href="https://github.com/kevinrawal/nexrag" target="_blank">GitHub ↗</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Theme toggle
+    (function () {
+      var btn = document.getElementById('themeBtn');
+      var root = document.documentElement;
+      function update() {
+        var dark = root.dataset.theme === 'dark';
+        btn.textContent = dark ? '◑' : '◐';
+        btn.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+      }
+      update();
+      btn.addEventListener('click', function () {
+        var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        localStorage.setItem('nexrag-theme', next);
+        update();
+      });
+    })();
+
+    // Copy install command
+    document.getElementById('copyBtn').addEventListener('click', function () {
+      navigator.clipboard.writeText('pip install "nexrag[all]"');
+      this.textContent = 'copied!';
+      this.classList.add('copied');
+      setTimeout(() => { this.textContent = 'copy'; this.classList.remove('copied'); }, 2000);
+    });
+
+    // Code tabs
+    document.querySelectorAll('.ctab').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        document.querySelectorAll('.ctab').forEach(function (t) { t.classList.remove('active'); });
+        document.querySelectorAll('.ctab-panel').forEach(function (p) { p.classList.remove('active'); });
+        tab.classList.add('active');
+        var panel = document.getElementById('tab-' + tab.dataset.tab);
+        if (panel) panel.classList.add('active');
+      });
+    });
+
+    // Scroll fade-in
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('vis'); obs.unobserve(e.target); }
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -30px 0px' });
+    document.querySelectorAll('.fade-up').forEach(function (el) { obs.observe(el); });
+  </script>
+
+</body>
+</html>

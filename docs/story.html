@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Story — NexRAG</title>
+  <meta name="description" content="Why NexRAG exists. The philosophy behind a framework-agnostic RAG pipeline SDK.">
+  <script>(function(){var t=localStorage.getItem('nexrag-theme')||'dark';document.documentElement.setAttribute('data-theme',t)})();</script>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Story hero ─────────────────────────── */
+    .story-hero {
+      padding: 96px 0 80px;
+      position: relative;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+    }
+    .story-hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 50% -10%,
+        oklch(68% 0.19 270 / 0.06), transparent 60%);
+      pointer-events: none;
+    }
+    .story-hero-inner {
+      max-width: 720px;
+    }
+    .story-hero-label { margin-bottom: 28px; }
+    .story-hero-title {
+      font-size: clamp(40px, 6vw, 68px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      margin-bottom: 24px;
+    }
+    .story-hero-sub {
+      font-size: 18px;
+      color: var(--text-2);
+      line-height: 1.7;
+      max-width: 580px;
+    }
+
+    /* ── Story body ─────────────────────────── */
+    .story-body { padding: 80px 0; }
+    .story-grid {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 0 64px;
+    }
+    .story-toc {
+      position: sticky;
+      top: calc(var(--nav-h) + 32px);
+      align-self: start;
+    }
+    .toc-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 16px;
+    }
+    .toc-links {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .toc-links a {
+      font-size: 13px;
+      color: var(--text-3);
+      padding: 5px 0;
+      border-left: 2px solid transparent;
+      padding-left: 12px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .toc-links a:hover { color: var(--text-2); border-left-color: var(--border-2); }
+    .toc-links a.toc-active { color: var(--text); border-left-color: var(--accent); }
+
+    /* ── Story content ──────────────────────── */
+    .story-content { max-width: 660px; }
+    .story-section { margin-bottom: 72px; scroll-margin-top: 90px; }
+    .story-section-num {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+    }
+    .story-section-title {
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      margin-bottom: 20px;
+    }
+    .story-content p {
+      font-size: 16px;
+      color: var(--text-2);
+      line-height: 1.75;
+      margin-bottom: 18px;
+    }
+    .story-content p strong { color: var(--text); font-weight: 600; }
+    .story-content p:last-child { margin-bottom: 0; }
+
+    /* principle cards */
+    .principles {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+      margin-top: 28px;
+    }
+    .principle {
+      background: var(--bg);
+      padding: 20px 24px;
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 16px;
+      align-items: start;
+      transition: background 0.2s;
+    }
+    .principle:hover { background: var(--bg-2); }
+    .principle-name {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .principle-desc {
+      font-size: 14px;
+      color: var(--text-2);
+      line-height: 1.6;
+      margin: 0 !important;
+    }
+
+    /* quote block */
+    .story-quote {
+      border-left: 2px solid var(--accent);
+      padding: 16px 24px;
+      margin: 28px 0;
+      background: var(--accent-dim);
+      border-radius: 0 var(--r) var(--r) 0;
+    }
+    .story-quote p {
+      font-size: 15px;
+      color: var(--text);
+      font-style: italic;
+      margin: 0 !important;
+      line-height: 1.65;
+    }
+
+    /* roadmap */
+    .roadmap {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 28px;
+    }
+    .roadmap-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 16px 20px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+    }
+    .roadmap-tag {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 2px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .roadmap-tag.done {
+      background: oklch(74% 0.16 145 / 0.1);
+      color: var(--green);
+      border: 1px solid oklch(74% 0.16 145 / 0.25);
+    }
+    .roadmap-tag.soon {
+      background: oklch(68% 0.19 270 / 0.08);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+    }
+    .roadmap-text { font-size: 14px; color: var(--text-2); line-height: 1.6; }
+    .roadmap-text strong { color: var(--text); font-weight: 600; }
+
+    /* ── Responsive ─────────────────────────── */
+    @media (max-width: 800px) {
+      .story-grid { grid-template-columns: 1fr; }
+      .story-toc { display: none; }
+      .principle { grid-template-columns: 1fr; gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="index.html" class="nav-logo">
+        <span class="logo-dot">●</span>NexRAG
+      </a>
+      <div class="nav-links">
+        <!-- architecture.html exists but is not ready — link hidden until v1 -->
+        <a href="docs.html">Docs</a>
+        <a href="story.html" class="active">Story</a>
+        <a href="showcase.html">Showcase</a>
+        <a href="https://github.com/kevinrawal/nexrag" target="_blank" class="nav-gh">GitHub ↗</a>
+        <button class="theme-btn" id="themeBtn" title="Toggle theme">◑</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Story hero ───────────────────────────── -->
+  <section class="story-hero">
+    <div class="container">
+      <div class="story-hero-inner">
+        <div class="story-hero-label">
+          <span class="label">Story</span>
+        </div>
+        <h1 class="story-hero-title">Why NexRAG exists.</h1>
+        <p class="story-hero-sub">
+          RAG is not complicated. The pipeline is: load, chunk, embed, store, retrieve, generate. Six steps. What makes it hard is everything the frameworks add on top.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Story body ───────────────────────────── -->
+  <section class="story-body">
+    <div class="container">
+      <div class="story-grid">
+
+        <!-- TOC -->
+        <aside class="story-toc">
+          <div class="toc-label">On this page</div>
+          <div class="toc-links">
+            <a href="#the-problem" class="toc-active">The problem</a>
+            <a href="#the-idea">The idea</a>
+            <a href="#principles">Principles</a>
+            <a href="#what-is-nexrag">What NexRAG is</a>
+            <a href="#roadmap">What's coming</a>
+          </div>
+        </aside>
+
+        <!-- Content -->
+        <div class="story-content">
+
+          <div class="story-section" id="the-problem">
+            <div class="story-section-num">01 — The problem</div>
+            <h2 class="story-section-title">Frameworks that do too much.</h2>
+            <p>
+              Every serious RAG implementation ends up with the same shape. You load documents. You chunk them. You embed them. You store them in a vector database. When a query arrives, you embed it, retrieve the top chunks, build a prompt, and call the LLM. That is the entire pipeline.
+            </p>
+            <p>
+              The problem is not the pipeline. The problem is what the popular frameworks bring with them: <strong>abstractions on top of abstractions</strong>, dependency graphs that pull in half of PyPI, and opinions baked so deep into the core that swapping a single provider means migrating your entire codebase.
+            </p>
+            <p>
+              You wanted a RAG pipeline. You got a framework lock-in problem.
+            </p>
+            <div class="story-quote">
+              <p>"You bring the model. NexRAG handles the plumbing."</p>
+            </div>
+          </div>
+
+          <div class="story-section" id="the-idea">
+            <div class="story-section-num">02 — The idea</div>
+            <h2 class="story-section-title">Own the shape. Not the components.</h2>
+            <p>
+              NexRAG starts from a single constraint: <strong>the core must have zero dependency on any AI SDK or framework</strong>. Not LangChain. Not LlamaIndex. Not OpenAI's SDK. The core is interfaces all the way down.
+            </p>
+            <p>
+              Each pipeline stage — loader, sanitizer, chunker, embedder, vector DB, retriever, reranker (optional), prompt builder, LLM, observer — is a clean abstract base class. NexRAG ships default implementations for every one of them. You can swap any by implementing the interface and declaring a dotted class path in YAML.
+            </p>
+            <p>
+              The YAML file is not configuration <em>for</em> NexRAG. It <em>is</em> the pipeline. Every behavior that varies between deployments — providers, models, chunk sizes, retrieval thresholds, secrets — lives there. None of it lives in your application code.
+            </p>
+          </div>
+
+          <div class="story-section" id="principles">
+            <div class="story-section-num">03 — Principles</div>
+            <h2 class="story-section-title">The six rules everything is built on.</h2>
+            <div class="principles">
+              <div class="principle fade-up">
+                <div class="principle-name">Interface-first</div>
+                <p class="principle-desc">Every stage is a contract. Implementation is secondary. If you implement the interface, NexRAG will wire it in.</p>
+              </div>
+              <div class="principle fade-up">
+                <div class="principle-name">Config-driven</div>
+                <p class="principle-desc">YAML configures the pipeline. Code defines the logic. Secrets never in config files — only environment variables.</p>
+              </div>
+              <div class="principle fade-up">
+                <div class="principle-name">Zero lock-in</div>
+                <p class="principle-desc">No framework dependency at core. Your application depends on NexRAG. NexRAG depends on nothing opinionated.</p>
+              </div>
+              <div class="principle fade-up">
+                <div class="principle-name">Explicit over implicit</div>
+                <p class="principle-desc">No hidden defaults. Every behavior is declared or documented. No magic — just interfaces, adapters, and YAML.</p>
+              </div>
+              <div class="principle fade-up">
+                <div class="principle-name">Extensible by design</div>
+                <p class="principle-desc">New components plug in without touching core. The extension point is YAML, not a pull request.</p>
+              </div>
+              <div class="principle fade-up">
+                <div class="principle-name">Async &amp; streaming</div>
+                <p class="principle-desc">Native async/await pipeline with parallel batch embedding. Token-by-token streaming via <code>stream_query()</code> and <code>astream_query()</code> — no extra setup.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="story-section" id="what-is-nexrag">
+            <div class="story-section-num">04 — What NexRAG is</div>
+            <h2 class="story-section-title">The infrastructure layer. Nothing more.</h2>
+            <p>
+              NexRAG is not a chatbot framework. It is not a research tool. It is not trying to be LangChain. It is the layer that sits between your documents and your LLM and handles everything in between — reliably, predictably, and without opinion about which model you use.
+            </p>
+            <p>
+              <strong>NexRAG owns the pipeline shape. You own the components.</strong> You point it at your data. You declare your providers in YAML. You call <code>pipeline.ingest()</code> and <code>pipeline.query()</code>. Everything else — deduplication, fingerprinting, batching, retries, observability — is handled.
+            </p>
+            <p>
+              When your requirements change, you change the YAML. When you outgrow a provider, you swap it. When you need a custom stage, you implement the interface and drop it in. The application code does not change.
+            </p>
+          </div>
+
+          <div class="story-section" id="roadmap">
+            <div class="story-section-num">05 — What's coming</div>
+            <h2 class="story-section-title">v0.3.0 expands retrieval. v1 is the platform.</h2>
+            <p>
+              v0.3.0 adds hybrid BM25+dense retrieval, an optional reranking stage, multi-collection routing, and per-run observability metrics on top of the complete async pipeline shipped in v0.2.0. Everything NexRAG promises is working. What comes next is breadth: more vector databases, more LLM providers, and the tooling to run NexRAG at production scale.
+            </p>
+            <div class="roadmap">
+              <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>Full ingestion + query pipeline.</strong> Loader → Sanitizer → Chunker → Embedder → VectorDB → Retriever → PromptBuilder → LLM → Result.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>OpenAI, Ollama, Anthropic, HuggingFace, ChromaDB.</strong> mypy strict, ruff clean.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>Async pipeline + streaming.</strong> <code>mode: async</code> enables native async/await with parallel batch embedding. <code>stream_query()</code> and <code>astream_query()</code> stream tokens live — plugs directly into FastAPI SSE.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>Reranking stage.</strong> Optional post-retrieval reranker between the retriever and LLM. <code>CohereReranker</code> and <code>CrossEncoderReranker</code> out of the box. Custom rerankers via <code>BaseReranker</code>.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>RunMetrics &amp; observability.</strong> Per-run latency breakdown by stage, token counts, and chunks written/retrieved. Access via <code>result.metrics</code>.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>Hybrid retrieval.</strong> Dense + BM25 (sparse) fusion with configurable <code>alpha</code>. Retrieve large candidate sets with BM25; rerank precisely with dense. Requires <code>nexrag[bm25]</code>.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag soon">v1</span>
+                <div class="roadmap-text"><strong>Remote vector databases.</strong> Pinecone, Weaviate — for teams running at scale. ChromaDB server mode is already available.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag soon">v1</span>
+                <div class="roadmap-text"><strong>More loaders.</strong> Word (.docx), HTML, Excel — so you can point NexRAG at any document source.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag soon">v1</span>
+                <div class="roadmap-text"><strong>OpenTelemetry observability.</strong> Traces and metrics exportable to any OTEL-compatible backend.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.3.0</div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="showcase.html">Showcase</a>
+        <a href="docs.html">Docs</a>
+        <a href="https://github.com/kevinrawal/nexrag" target="_blank">GitHub ↗</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Scroll fade-in
+    // Theme toggle
+    (function () {
+      var btn = document.getElementById('themeBtn');
+      var root = document.documentElement;
+      function update() {
+        var dark = root.dataset.theme === 'dark';
+        btn.textContent = dark ? '◑' : '◐';
+        btn.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+      }
+      update();
+      btn.addEventListener('click', function () {
+        var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        root.dataset.theme = next;
+        localStorage.setItem('nexrag-theme', next);
+        update();
+      });
+    })();
+
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('vis'); obs.unobserve(e.target); } });
+    }, { threshold: 0.08, rootMargin: '0px 0px -30px 0px' });
+    document.querySelectorAll('.fade-up').forEach(el => obs.observe(el));
+
+    // TOC active state
+    const sections = document.querySelectorAll('.story-section');
+    const tocLinks = document.querySelectorAll('.toc-links a');
+    const tocObs = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          tocLinks.forEach(l => l.classList.remove('toc-active'));
+          const link = document.querySelector(`.toc-links a[href="#${e.target.id}"]`);
+          if (link) link.classList.add('toc-active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -70% 0px' });
+    sections.forEach(s => tocObs.observe(s));
+  </script>
+
+</body>
+</html>

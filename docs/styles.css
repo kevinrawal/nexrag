@@ -1,0 +1,274 @@
+/* ================================================================
+   NexRAG — Shared Stylesheet
+   Space Grotesk (body/headings) + JetBrains Mono (code)
+   Accent: oklch(68% 0.19 270) — indigo-violet
+   ================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:             #0b0b0b;
+  --bg-2:           #111111;
+  --bg-3:           #181818;
+  --border:         #212121;
+  --border-2:       #2e2e2e;
+  --text:           #e8e8e8;
+  --text-2:         #888888;
+  --text-3:         #505050;
+  --accent:         oklch(68% 0.19 270);
+  --accent-dim:     oklch(68% 0.19 270 / 0.08);
+  --accent-border:  oklch(68% 0.19 270 / 0.28);
+  --green:          oklch(74% 0.16 145);
+  --amber:          oklch(80% 0.14 65);
+  --cyan:           oklch(76% 0.11 210);
+  --font:           'Space Grotesk', system-ui, sans-serif;
+  --mono:           'JetBrains Mono', ui-monospace, monospace;
+  --nav-h:          60px;
+  --max:            1100px;
+  --r:              4px;
+}
+
+html {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+}
+
+body { min-height: 100vh; display: flex; flex-direction: column; }
+a    { color: inherit; text-decoration: none; }
+
+/* ─── Navigation ──────────────────────────────────────────── */
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  height: var(--nav-h);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--bg) 85%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.nav-inner {
+  max-width: var(--max); margin: 0 auto; padding: 0 40px;
+  height: 100%; display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 600; font-size: 15px; letter-spacing: -0.01em;
+}
+.logo-dot { color: var(--accent); font-size: 10px; }
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-links a { font-size: 14px; color: var(--text-2); transition: color 0.15s; }
+.nav-links a:hover, .nav-links a.active { color: var(--text); }
+.nav-gh {
+  font-family: var(--mono); font-size: 12px !important;
+  padding: 6px 14px; border: 1px solid var(--border-2);
+  border-radius: var(--r); transition: border-color 0.15s !important;
+}
+.nav-gh:hover { border-color: var(--text-3) !important; color: var(--text) !important; }
+
+/* ─── Container ───────────────────────────────────────────── */
+.container { max-width: var(--max); margin: 0 auto; padding: 0 40px; }
+
+/* ─── Buttons ─────────────────────────────────────────────── */
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 22px; background: var(--accent); color: #fff;
+  border-radius: var(--r); font-size: 14px; font-weight: 500;
+  transition: opacity 0.15s, transform 0.15s; white-space: nowrap;
+}
+.btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+.btn-secondary {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 22px; border: 1px solid var(--border-2);
+  border-radius: var(--r); font-size: 14px; color: var(--text-2);
+  transition: border-color 0.15s, color 0.15s; white-space: nowrap;
+}
+.btn-secondary:hover { border-color: var(--text-3); color: var(--text); }
+
+/* ─── Section labels / titles ─────────────────────────────── */
+.label {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 14px;
+}
+.section-title {
+  font-size: clamp(26px, 3vw, 36px); font-weight: 600;
+  letter-spacing: -0.025em; line-height: 1.15; color: var(--text);
+}
+.section-sub {
+  font-size: 16px; color: var(--text-2); margin-top: 14px;
+  line-height: 1.7; max-width: 560px;
+}
+
+/* ─── Code blocks ─────────────────────────────────────────── */
+pre.code-block {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 24px 28px;
+  overflow-x: auto; font-family: var(--mono);
+  font-size: 13px; line-height: 1.8;
+}
+pre.code-block code { color: #c8c8c8; }
+
+/* syntax tokens */
+.kw      { color: var(--accent); }
+.str     { color: var(--green); }
+.cmt     { color: var(--text-3); font-style: italic; }
+.fn      { color: var(--cyan); }
+.num     { color: var(--amber); }
+.key     { color: var(--cyan); }
+.val     { color: var(--green); }
+.yml-cmt { color: var(--text-3); font-style: italic; }
+
+code:not(pre code) {
+  font-family: var(--mono); font-size: 0.875em;
+  background: var(--bg-3); padding: 2px 7px;
+  border-radius: var(--r); color: var(--text);
+  border: 1px solid var(--border);
+}
+
+/* code window chrome */
+.code-window {
+  border: 1px solid var(--border); border-radius: var(--r);
+  overflow: hidden; background: var(--bg-2);
+}
+.code-win-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  background: var(--bg-3);
+}
+.win-dots { display: flex; gap: 6px; }
+.win-dots span {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--border-2);
+}
+.win-name { font-family: var(--mono); font-size: 12px; color: var(--text-3); }
+.code-window pre.code-block { border: none; border-radius: 0; }
+
+/* ─── Install strip ───────────────────────────────────────── */
+.install-strip {
+  display: flex; align-items: center;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--r); overflow: hidden; width: fit-content; max-width: 100%;
+}
+.install-strip code {
+  font-family: var(--mono); font-size: 13px;
+  padding: 10px 18px; color: var(--text);
+  background: none; border: none; border-radius: 0;
+}
+.copy-btn {
+  padding: 10px 14px; border: 0; border-left: 1px solid var(--border);
+  background: transparent; color: var(--text-3);
+  font-family: var(--mono); font-size: 11px;
+  cursor: pointer; transition: color 0.15s, background 0.15s;
+  letter-spacing: 0.05em;
+}
+.copy-btn:hover { color: var(--text); background: var(--bg-3); }
+.copy-btn.copied { color: var(--green); }
+
+/* ─── Badge ───────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 12px; color: var(--accent);
+  background: var(--accent-dim); border: 1px solid var(--accent-border);
+  padding: 4px 12px; border-radius: 999px;
+}
+.badge-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); flex-shrink: 0;
+  animation: bdot 2s ease-in-out infinite;
+}
+@keyframes bdot { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+/* ─── Card ────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 28px 32px;
+  transition: border-color 0.2s;
+}
+.card:hover { border-color: var(--border-2); }
+
+/* ─── Fade-in on scroll ───────────────────────────────────── */
+.fade-up {
+  opacity: 0; transform: translateY(18px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.fade-up.vis { opacity: 1; transform: translateY(0); }
+
+/* ─── Focus ───────────────────────────────────────────────── */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ─── Footer ──────────────────────────────────────────────── */
+.footer { border-top: 1px solid var(--border); padding: 40px; margin-top: auto; }
+.footer-inner {
+  max-width: var(--max); margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+}
+.footer-logo { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-3); }
+.footer-links { display: flex; gap: 24px; }
+.footer-links a { font-size: 13px; color: var(--text-3); transition: color 0.15s; }
+.footer-links a:hover { color: var(--text-2); }
+
+/* ─── Responsive ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .container, .nav-inner { padding-left: 20px; padding-right: 20px; }
+  .footer { padding: 32px 20px; }
+}
+@media (max-width: 540px) {
+  .nav-links a:not(.nav-gh):not(.active) { display: none; }
+}
+
+/* ─── Light theme ─────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg:            #f6f6f6;
+  --bg-2:          #efefef;
+  --bg-3:          #e5e5e5;
+  --border:        #d2d2d2;
+  --border-2:      #b8b8b8;
+  --text:          #111111;
+  --text-2:        #545454;
+  --text-3:        #909090;
+  --accent:        oklch(50% 0.22 270);
+  --accent-dim:    oklch(50% 0.22 270 / 0.08);
+  --accent-border: oklch(50% 0.22 270 / 0.25);
+  --green:         oklch(43% 0.18 145);
+  --amber:         oklch(50% 0.16 65);
+  --cyan:          oklch(44% 0.15 210);
+}
+
+/* code text — light mode */
+[data-theme="light"] pre.code-block code,
+[data-theme="light"] pre.doc-code code { color: #2a2a2a; }
+
+/* syntax token overrides — light mode */
+[data-theme="light"] .kw      { color: oklch(47% 0.22 270); }
+[data-theme="light"] .str     { color: oklch(40% 0.18 145); }
+[data-theme="light"] .cmt     { color: #999; }
+[data-theme="light"] .fn      { color: oklch(42% 0.16 210); }
+[data-theme="light"] .key     { color: oklch(42% 0.16 210); }
+[data-theme="light"] .val     { color: oklch(40% 0.18 145); }
+[data-theme="light"] .yml-cmt { color: #999; }
+[data-theme="light"] .num     { color: oklch(50% 0.16 65); }
+
+/* ─── Theme toggle button ─────────────────────────────────── */
+.theme-btn {
+  width: 32px; height: 32px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.theme-btn:hover { color: var(--text); border-color: var(--text-3); }
+
+/* ─── Smooth theme transitions ────────────────────────────── */
+html, body { transition: background 0.2s, color 0.15s; }
+pre.code-block, pre.doc-code, .card, .install-strip,
+.code-window, .docs-sidebar, .badge { transition: background 0.2s, border-color 0.15s; }
