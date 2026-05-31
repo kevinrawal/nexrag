@@ -1711,6 +1711,7 @@ dev = [
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "rank-bm25" },
     { name = "ruff" },
     { name = "types-pyyaml" },
 ]
@@ -1770,6 +1771,7 @@ requires-dist = [
     { name = "python-docx", marker = "extra == 'word'", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rank-bm25", marker = "extra == 'bm25'", specifier = ">=0.2" },
+    { name = "rank-bm25", marker = "extra == 'dev'", specifier = ">=0.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
     { name = "sentence-transformers", marker = "extra == 'cross-encoder'", specifier = ">=2.7" },
     { name = "types-pyyaml", marker = "extra == 'dev'" },

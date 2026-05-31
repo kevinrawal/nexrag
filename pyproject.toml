@@ -111,6 +111,7 @@ dev = [
     "mypy>=1.10",       # type checker
     "pre-commit>=3.7",
     "types-pyyaml",
+    "rank-bm25>=0.2",   # BM25Retriever tests run the real algorithm, not a mock
 ]
 
 [project.urls]
