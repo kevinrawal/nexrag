@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "nexrag"
-version = "0.2.0"
+version = "0.3.0"
 description = "Framework-agnostic RAG pipeline SDK. Plug in any component, swap any stage, configure everything in YAML"
 readme = "README.md"
 license = { text = "MIT" }

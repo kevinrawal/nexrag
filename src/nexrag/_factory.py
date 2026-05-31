@@ -299,8 +299,11 @@ def _build_sparse_retriever(config: SparseConfig, vector_db: BaseVectorDB) -> Ba
                 stage="config",
                 component="sparse_retriever",
             )
-        return resolve_class(  # type: ignore[type-abstract]
-            config.class_path, BaseSparseRetriever, config.params, stage="sparse_retriever"
+        return resolve_class(
+            config.class_path,
+            BaseSparseRetriever,
+            config.params,
+            stage="sparse_retriever",  # type: ignore[type-abstract]
         )
 
     if config.provider == "bm25":
