@@ -71,7 +71,7 @@ class BM25Retriever(BaseRetriever):
             RetrieverError: If rank_bm25 is not installed or corpus fetch fails.
         """
         try:
-            from rank_bm25 import BM25Okapi  # type: ignore[import-untyped]
+            from rank_bm25 import BM25Okapi
         except ImportError as e:
             raise RetrieverError(
                 "rank_bm25 package is required for BM25Retriever. "

@@ -48,7 +48,7 @@ class RawTextLoader(BaseLoader):
         """
         from pathlib import Path
 
-        if isinstance(data, (bytes, Path)):
+        if isinstance(data, bytes | Path):
             raise LoaderError(
                 f"RawTextLoader expects str. "
                 f"Read the file first: text = Path('file.txt').read_text(). "
