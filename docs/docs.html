@@ -48,6 +48,30 @@
     .sidebar-link:hover { color: var(--text); background: var(--bg-2); }
     .sidebar-link.active { color: var(--text); border-left-color: var(--accent); background: var(--bg-2); }
 
+    /* accordion sub-nav */
+    .sidebar-item { position: relative; }
+    .sidebar-sub {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.22s ease;
+    }
+    .sidebar-item.open .sidebar-sub { max-height: 800px; }
+    .sidebar-sub-link {
+      display: block;
+      font-size: 11.5px;
+      color: var(--text-3);
+      padding: 3px 8px 3px 32px;
+      border-radius: 3px;
+      text-decoration: none;
+      transition: color 0.15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.9;
+    }
+    .sidebar-sub-link:hover { color: var(--text); }
+    .sidebar-sub-link.active { color: var(--accent); font-weight: 500; }
+
     /* main content */
     .docs-main { padding: 48px 64px 80px; max-width: 800px; }
 
@@ -290,9 +314,10 @@
         <span class="logo-dot">●</span>NexRAG
       </a>
       <div class="nav-links">
+        <!-- architecture.html exists but is not ready — link hidden until v1 -->
+        <a href="docs.html" class="active">Docs</a>
         <a href="story.html">Story</a>
         <a href="showcase.html">Showcase</a>
-        <a href="docs.html" class="active">Docs</a>
         <a href="https://github.com/kevinrawal/nexrag" target="_blank" class="nav-gh">GitHub ↗</a>
         <button class="theme-btn" id="themeBtn" title="Toggle theme">◑</button>
       </div>
@@ -302,16 +327,32 @@
   <!-- mobile nav -->
   <div class="docs-mobile-nav">
     <select class="docs-mobile-select" onchange="location.hash=this.value">
-      <option value="#installation">Installation</option>
-      <option value="#configuration">Configuration</option>
-      <option value="#quickstart">Quickstart</option>
-      <option value="#ingestion">Ingestion guide</option>
-      <option value="#querying">Querying</option>
-      <option value="#custom">Custom components</option>
-      <option value="#async">Async &amp; streaming</option>
-      <option value="#testing">Testing</option>
-      <option value="#api">API reference</option>
-      <option value="#changelog">Changelog</option>
+      <optgroup label="Getting started">
+        <option value="#installation">Installation</option>
+        <option value="#configuration">Configuration</option>
+        <option value="#quickstart">Quickstart</option>
+      </optgroup>
+      <optgroup label="Guides">
+        <option value="#ingestion">Ingestion</option>
+        <option value="#querying">Querying</option>
+        <option value="#async">Async &amp; streaming</option>
+        <option value="#secrets">Secrets</option>
+        <option value="#custom">Custom components</option>
+        <option value="#testing">Testing</option>
+      </optgroup>
+      <optgroup label="Components">
+        <option value="#loaders">Loaders</option>
+        <option value="#chunkers">Chunkers</option>
+        <option value="#embedders">Embedders</option>
+        <option value="#vector-dbs">Vector DB</option>
+        <option value="#retrievers">Retrievers</option>
+        <option value="#rerankers">Rerankers</option>
+        <option value="#llms">LLMs</option>
+      </optgroup>
+      <optgroup label="Reference">
+        <option value="#api">API reference</option>
+        <option value="#changelog">Changelog</option>
+      </optgroup>
     </select>
   </div>
 
@@ -321,22 +362,136 @@
     <aside class="docs-sidebar">
       <div class="sidebar-group">
         <div class="sidebar-group-label">Getting started</div>
-        <a href="#installation" class="sidebar-link active">Installation</a>
-        <a href="#configuration" class="sidebar-link">Configuration</a>
+        <div class="sidebar-item" data-section="installation">
+          <a href="#installation" class="sidebar-link active">Installation</a>
+          <div class="sidebar-sub">
+            <a href="#install-extras" class="sidebar-sub-link">Available extras</a>
+          </div>
+        </div>
+        <div class="sidebar-item" data-section="configuration">
+          <a href="#configuration" class="sidebar-link">Configuration</a>
+          <div class="sidebar-sub">
+            <a href="#config-reference" class="sidebar-sub-link">Config reference YAML</a>
+          </div>
+        </div>
         <a href="#quickstart" class="sidebar-link">Quickstart</a>
       </div>
       <div class="sidebar-group">
         <div class="sidebar-group-label">Guides</div>
-        <a href="#ingestion" class="sidebar-link">Ingestion</a>
-        <a href="#querying" class="sidebar-link">Querying</a>
-        <a href="#async" class="sidebar-link">Async &amp; streaming</a>
+        <div class="sidebar-item" data-section="ingestion">
+          <a href="#ingestion" class="sidebar-link">Ingestion</a>
+          <div class="sidebar-sub">
+            <a href="#ingest-file"        class="sidebar-sub-link">From a file / bytes / string</a>
+            <a href="#ingest-documents"   class="sidebar-sub-link">Pre-built Documents</a>
+            <a href="#ingest-batch"       class="sidebar-sub-link">Batch ingestion</a>
+            <a href="#ingest-conflict"    class="sidebar-sub-link">Conflict strategies</a>
+            <a href="#ingest-collections" class="sidebar-sub-link">Multi-collection routing</a>
+          </div>
+        </div>
+        <div class="sidebar-item" data-section="querying">
+          <a href="#querying" class="sidebar-link">Querying</a>
+          <div class="sidebar-sub">
+            <a href="#query-hybrid"   class="sidebar-sub-link">Hybrid retrieval</a>
+            <a href="#query-reranking" class="sidebar-sub-link">Reranking</a>
+          </div>
+        </div>
+        <div class="sidebar-item" data-section="async">
+          <a href="#async" class="sidebar-link">Async &amp; streaming</a>
+          <div class="sidebar-sub">
+            <a href="#async-enable"      class="sidebar-sub-link">Enabling async mode</a>
+            <a href="#async-sync-stream" class="sidebar-sub-link">Sync streaming</a>
+            <a href="#async-astream"     class="sidebar-sub-link">Async streaming</a>
+            <a href="#async-fastapi"     class="sidebar-sub-link">FastAPI integration</a>
+          </div>
+        </div>
         <a href="#secrets" class="sidebar-link">Secrets</a>
-        <a href="#custom" class="sidebar-link">Custom components</a>
-        <a href="#testing" class="sidebar-link">Testing</a>
+        <div class="sidebar-item" data-section="custom">
+          <a href="#custom" class="sidebar-link">Custom components</a>
+          <div class="sidebar-sub">
+            <a href="#custom-embedder"   class="sidebar-sub-link">Custom embedder example</a>
+            <a href="#custom-interfaces" class="sidebar-sub-link">Available interfaces</a>
+          </div>
+        </div>
+        <div class="sidebar-item" data-section="testing">
+          <a href="#testing" class="sidebar-link">Testing</a>
+          <div class="sidebar-sub">
+            <a href="#testing-memory" class="sidebar-sub-link">Memory mode (ChromaDB)</a>
+            <a href="#testing-mocks"  class="sidebar-sub-link">Mock embedder &amp; LLM</a>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Components</div>
+        <div class="sidebar-item" data-section="loaders">
+          <a href="#loaders" class="sidebar-link">Loaders</a>
+          <div class="sidebar-sub">
+            <a href="#loader-auto"   class="sidebar-sub-link">Auto-detect</a>
+            <a href="#loader-pdf"    class="sidebar-sub-link">PDF</a>
+            <a href="#loader-text"   class="sidebar-sub-link">Plain text</a>
+            <a href="#loader-custom" class="sidebar-sub-link">Custom loader</a>
+          </div>
+        </div>
+        <div class="sidebar-item" data-section="chunkers">
+          <a href="#chunkers" class="sidebar-link">Chunkers</a>
+          <div class="sidebar-sub">
+            <a href="#chunker-recursive" class="sidebar-sub-link">Recursive</a>
+            <a href="#chunker-custom"    class="sidebar-sub-link">Custom chunker</a>
+          </div>
+        </div>
+        <div class="sidebar-item" data-section="embedders">
+          <a href="#embedders" class="sidebar-link">Embedders</a>
+          <div class="sidebar-sub">
+            <a href="#embedder-openai"       class="sidebar-sub-link">OpenAI</a>
+            <a href="#embedder-huggingface"  class="sidebar-sub-link">HuggingFace</a>
+            <a href="#embedder-ollama"       class="sidebar-sub-link">Ollama</a>
+            <a href="#embedder-custom"       class="sidebar-sub-link">Custom embedder</a>
+          </div>
+        </div>
+        <div class="sidebar-item" data-section="vector-dbs">
+          <a href="#vector-dbs" class="sidebar-link">Vector DB</a>
+          <div class="sidebar-sub">
+            <a href="#vdb-chroma" class="sidebar-sub-link">ChromaDB</a>
+            <a href="#vdb-custom" class="sidebar-sub-link">Custom vector DB</a>
+          </div>
+        </div>
+        <div class="sidebar-item" data-section="retrievers">
+          <a href="#retrievers" class="sidebar-link">Retrievers</a>
+          <div class="sidebar-sub">
+            <a href="#retriever-dense"   class="sidebar-sub-link">Dense</a>
+            <a href="#retriever-sparse"  class="sidebar-sub-link">Sparse (BM25)</a>
+            <a href="#retriever-hybrid"  class="sidebar-sub-link">Hybrid</a>
+            <a href="#retriever-custom"  class="sidebar-sub-link">Custom retriever</a>
+          </div>
+        </div>
+        <div class="sidebar-item" data-section="rerankers">
+          <a href="#rerankers" class="sidebar-link">Rerankers</a>
+          <div class="sidebar-sub">
+            <a href="#reranker-cohere" class="sidebar-sub-link">Cohere</a>
+            <a href="#reranker-cross"  class="sidebar-sub-link">CrossEncoder</a>
+            <a href="#reranker-custom" class="sidebar-sub-link">Custom reranker</a>
+          </div>
+        </div>
+        <div class="sidebar-item" data-section="llms">
+          <a href="#llms" class="sidebar-link">LLMs</a>
+          <div class="sidebar-sub">
+            <a href="#llm-openai"    class="sidebar-sub-link">OpenAI</a>
+            <a href="#llm-anthropic" class="sidebar-sub-link">Anthropic</a>
+            <a href="#llm-ollama"    class="sidebar-sub-link">Ollama</a>
+            <a href="#llm-custom"    class="sidebar-sub-link">Custom LLM</a>
+          </div>
+        </div>
       </div>
       <div class="sidebar-group">
         <div class="sidebar-group-label">Reference</div>
-        <a href="#api" class="sidebar-link">API reference</a>
+        <div class="sidebar-item" data-section="api">
+          <a href="#api" class="sidebar-link">API reference</a>
+          <div class="sidebar-sub">
+            <a href="#api-ingestion" class="sidebar-sub-link">IngestionResult</a>
+            <a href="#api-pipeline"  class="sidebar-sub-link">PipelineResult</a>
+            <a href="#api-metrics"   class="sidebar-sub-link">RunMetrics</a>
+            <a href="#api-source"    class="sidebar-sub-link">Source</a>
+          </div>
+        </div>
         <a href="#changelog" class="sidebar-link">Changelog</a>
       </div>
     </aside>
@@ -359,14 +514,20 @@ pip install nexrag
 <span class="cmt"># Everything</span>
 pip install <span class="str">"nexrag[all]"</span></code></pre>
 
-        <div class="doc-h3">Available extras</div>
+        <div id="install-extras" data-sub-anchor="install-extras" class="doc-h3">Available extras</div>
         <div class="extras-grid">
           <div class="extra-cell"><div class="extra-name">openai</div><div class="extra-desc">OpenAI embeddings &amp; LLM</div></div>
-          <div class="extra-cell"><div class="extra-name">pdf</div><div class="extra-desc">PDF ingestion via pypdf</div></div>
-          <div class="extra-cell"><div class="extra-name">ollama</div><div class="extra-desc">Local Ollama LLM &amp; embeddings</div></div>
-          <div class="extra-cell"><div class="extra-name">chromadb</div><div class="extra-desc">Default vector store</div></div>
           <div class="extra-cell"><div class="extra-name">anthropic</div><div class="extra-desc">Claude models via Anthropic API</div></div>
-          <div class="extra-cell"><div class="extra-name">all</div><div class="extra-desc">All of the above</div></div>
+          <div class="extra-cell"><div class="extra-name">ollama</div><div class="extra-desc">Local Ollama LLM &amp; embeddings</div></div>
+          <div class="extra-cell"><div class="extra-name">huggingface</div><div class="extra-desc">HuggingFace Inference API embeddings</div></div>
+          <div class="extra-cell"><div class="extra-name">chromadb</div><div class="extra-desc">Default vector store</div></div>
+          <div class="extra-cell"><div class="extra-name">pdf</div><div class="extra-desc">PDF ingestion via pypdf</div></div>
+          <div class="extra-cell"><div class="extra-name">bm25</div><div class="extra-desc">BM25 keyword retrieval (rank-bm25)</div></div>
+          <div class="extra-cell"><div class="extra-name">cohere</div><div class="extra-desc">Cohere Rerank API</div></div>
+          <div class="extra-cell"><div class="extra-name">cross-encoder</div><div class="extra-desc">CrossEncoder reranker (sentence-transformers)</div></div>
+          <div class="extra-cell"><div class="extra-name">all-providers</div><div class="extra-desc">All embedder &amp; LLM providers</div></div>
+          <div class="extra-cell"><div class="extra-name">all-loaders</div><div class="extra-desc">All document loaders (PDF, Word, HTML, Excel)</div></div>
+          <div class="extra-cell"><div class="extra-name">all</div><div class="extra-desc">all-providers + all-loaders (bm25/cohere/cross-encoder are separate — see <a href="https://github.com/kevinrawal/nexrag/issues/21">#21</a>)</div></div>
         </div>
 
         <div class="callout">
@@ -381,50 +542,76 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
         <h1 class="doc-h1">Configuration</h1>
         <p class="doc-lead">NexRAG is configured entirely through a YAML file — by default <code>nexrag.yaml</code> in your working directory.</p>
 
-        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — minimal config</span>
+        <div id="config-reference" data-sub-anchor="config-reference" style="scroll-margin-top:80px"></div>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — full config reference (v0.3.0)</span>
 
 <span class="key">mode:</span> <span class="val">sync</span>             <span class="yml-cmt"># sync (default) | async — enables native async pipeline</span>
 
 <span class="key">ingestion:</span>
   <span class="key">loader:</span>
-    <span class="key">type:</span> <span class="val">pdf</span>
+    <span class="key">type:</span> <span class="val">pdf</span>             <span class="yml-cmt"># auto | pdf | txt | custom</span>
+    <span class="key">include_metadata:</span> <span class="val">true</span>      <span class="yml-cmt"># extract PDF metadata fields (default: true)</span>
+    <span class="yml-cmt"># metadata_fields: [title, author, creation_date]  # whitelist — omit for all 8</span>
 
   <span class="key">chunker:</span>
-    <span class="key">strategy:</span> <span class="val">recursive</span>
+    <span class="key">strategy:</span> <span class="val">recursive</span>   <span class="yml-cmt"># recursive | custom</span>
     <span class="key">chunk_size:</span> <span class="val">512</span>
     <span class="key">chunk_overlap:</span> <span class="val">64</span>
     <span class="key">min_chunk_size:</span> <span class="val">50</span>
+    <span class="yml-cmt"># separator: "\n\n"  # top-level split character (default: double newline)</span>
 
   <span class="key">embedder:</span>
     <span class="key">provider:</span> <span class="val">openai</span>
     <span class="key">model:</span> <span class="val">text-embedding-3-small</span>
     <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
+    <span class="yml-cmt"># base_url: https://...  # override API base URL (OpenAI-compatible endpoints)</span>
+    <span class="yml-cmt"># max_retries: 2         # embedding API retry attempts (default: 2)</span>
 
   <span class="key">vector_db:</span>
     <span class="key">provider:</span> <span class="val">chroma</span>
     <span class="key">default_collection:</span> <span class="val">documents</span>
-    <span class="key">on_conflict:</span> <span class="val">overwrite</span>   <span class="yml-cmt"># overwrite | skip | append</span>
+    <span class="key">on_conflict:</span> <span class="val">overwrite</span>       <span class="yml-cmt"># overwrite | skip | append</span>
+    <span class="key">upsert_batch_size:</span> <span class="val">500</span>        <span class="yml-cmt"># max chunks per ChromaDB upsert call</span>
+    <span class="key">max_retries:</span> <span class="val">3</span>               <span class="yml-cmt"># connection retry attempts</span>
+    <span class="key">retry_delay:</span> <span class="val">1.0</span>             <span class="yml-cmt"># initial backoff in seconds (exponential)</span>
     <span class="key">collections:</span>
       <span class="key">documents:</span>
-        <span class="key">mode:</span> <span class="val">persistent</span>        <span class="yml-cmt"># persistent | memory | server</span>
+        <span class="key">mode:</span> <span class="val">persistent</span>          <span class="yml-cmt"># persistent | memory | server</span>
         <span class="key">path:</span> <span class="val">./.nexrag/chroma</span>
+        <span class="yml-cmt"># host: localhost   # server mode only</span>
+        <span class="yml-cmt"># port: 8000        # server mode only</span>
 
 <span class="key">query:</span>
   <span class="key">embedder:</span> <span class="val">inherit</span>             <span class="yml-cmt"># reuse ingestion embedder</span>
   <span class="key">retriever:</span>
-    <span class="key">provider:</span> <span class="val">dense</span>
+    <span class="key">provider:</span> <span class="val">dense</span>             <span class="yml-cmt"># dense | bm25 | hybrid</span>
     <span class="key">top_k:</span> <span class="val">5</span>
     <span class="key">score_threshold:</span> <span class="val">0.0</span>
+    <span class="yml-cmt"># hybrid-only options:</span>
+    <span class="yml-cmt"># alpha: 0.7          # 0=pure BM25, 1=pure dense (default 0.7)</span>
+    <span class="yml-cmt"># sparse_top_k: 50    # BM25 candidates before fusion</span>
+    <span class="yml-cmt"># sparse:</span>
+    <span class="yml-cmt">#   provider: bm25    # bm25 | custom</span>
+  <span class="yml-cmt"># reranker:                       # optional — omit to skip reranking</span>
+  <span class="yml-cmt">#   provider: cohere               # cohere | cross_encoder | custom</span>
+  <span class="yml-cmt">#   model: rerank-english-v3.0</span>
+  <span class="yml-cmt">#   api_key: ${COHERE_API_KEY}</span>
+  <span class="yml-cmt">#   top_n: 5                       # chunks passed to LLM after reranking</span>
   <span class="key">llm:</span>
     <span class="key">provider:</span> <span class="val">openai</span>
     <span class="key">model:</span> <span class="val">gpt-4o</span>
     <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
+    <span class="yml-cmt"># base_url: https://...  # override API base URL</span>
     <span class="key">temperature:</span> <span class="val">0.2</span>
     <span class="key">max_tokens:</span> <span class="val">1024</span>
+    <span class="yml-cmt"># timeout: 30            # request timeout in seconds (default: 30)</span>
+    <span class="yml-cmt"># max_retries: 2         # LLM API retry attempts (default: 2)</span>
   <span class="key">prompt:</span>
     <span class="key">system:</span> <span class="val">|</span>
       <span class="val">You are a helpful assistant. Answer using only</span>
       <span class="val">the provided context. If unknown, say so.</span>
+    <span class="yml-cmt"># context_format: numbered  # numbered | labeled | plain (how chunks are presented)</span>
+    <span class="yml-cmt"># template: default          # default | qa | summarize | custom</span>
 
 <span class="key">observability:</span>
   <span class="key">enabled:</span> <span class="val">true</span>
@@ -451,8 +638,10 @@ os.environ[<span class="str">"OPENAI_API_KEY"</span>] = <span class="str">"sk-..
 
 pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
 
-<span class="cmt"># Ingest</span>
-result = pipeline.ingest(<span class="str">"contracts/agreement.pdf"</span>)
+<span class="kw">from</span> pathlib <span class="kw">import</span> Path
+
+<span class="cmt"># Ingest — loaders expect bytes or str, not a file path</span>
+result = pipeline.ingest(Path(<span class="str">"contracts/agreement.pdf"</span>).read_bytes())
 <span class="fn">print</span>(<span class="str">f"Ingested {result.documents_loaded} doc"</span>)
 <span class="fn">print</span>(<span class="str">f"Wrote {result.chunks_written} chunks in {result.latency_ms:.1f}ms"</span>)
 
@@ -468,28 +657,41 @@ result = pipeline.query(<span class="str">"What are the termination clauses?"</s
       <div class="doc-section" id="ingestion">
         <div class="doc-label">Guides</div>
         <h1 class="doc-h1">Ingestion</h1>
-        <p class="doc-lead"><code>pipeline.ingest()</code> accepts file paths, raw bytes, or plain strings. <code>pipeline.ingest_documents()</code> accepts pre-built <code>Document</code> objects.</p>
+        <p class="doc-lead"><code>pipeline.ingest()</code> accepts raw <strong>bytes</strong> (for binary formats like PDF) or a plain <strong>string</strong> (for text content). Loaders are converter-only since v0.3.0 — they never open files themselves. Read the file first, then pass the content. <code>pipeline.ingest_documents()</code> accepts pre-built <code>Document</code> objects.</p>
 
-        <div class="doc-h2">From a file path</div>
-        <pre class="doc-code"><code>result = pipeline.ingest(<span class="str">"contracts/agreement.pdf"</span>)
-<span class="cmt"># also works with pathlib.Path</span>
-result = pipeline.ingest(Path(<span class="str">"contracts/agreement.pdf"</span>))</code></pre>
+        <div id="ingest-file" data-sub-anchor="ingest-file" class="doc-h2">Reading from disk</div>
+        <p class="doc-p">Read the file to bytes or text first, then pass the content to <code>ingest()</code>. Use the <code>metadata</code> argument to attach a source name so the result is traceable.</p>
+        <pre class="doc-code"><code><span class="kw">from</span> pathlib <span class="kw">import</span> Path
 
-        <div class="doc-h2">From raw bytes (e.g. S3)</div>
+<span class="cmt"># PDF — pass bytes</span>
+result = pipeline.ingest(
+    Path(<span class="str">"contracts/agreement.pdf"</span>).read_bytes(),
+    metadata={<span class="str">"source"</span>: <span class="str">"agreement.pdf"</span>},
+)
+
+<span class="cmt"># Text file — pass string</span>
+result = pipeline.ingest(
+    Path(<span class="str">"notes/onboarding.txt"</span>).read_text(),
+    metadata={<span class="str">"source"</span>: <span class="str">"onboarding.txt"</span>},
+)</code></pre>
+
+        <div class="doc-h2">From remote bytes (e.g. S3)</div>
         <pre class="doc-code"><code><span class="kw">import</span> boto3
 
 s3 = boto3.client(<span class="str">"s3"</span>)
 pdf_bytes = s3.get_object(Bucket=<span class="str">"bucket"</span>, Key=<span class="str">"report.pdf"</span>)[<span class="str">"Body"</span>].read()
 
-result = pipeline.ingest(pdf_bytes)
-<span class="cmt"># metadata["source"] defaults to "pdf_bytes"</span></code></pre>
+result = pipeline.ingest(pdf_bytes, metadata={<span class="str">"source"</span>: <span class="str">"report.pdf"</span>})</code></pre>
 
         <div class="doc-h2">From a plain string</div>
         <pre class="doc-code"><code>text = <span class="str">"Alice joined Acme Corp in 2019..."</span>
+<span class="cmt"># pass a (text, source_name) tuple — second element becomes metadata["source"]</span>
 result = pipeline.ingest((text, <span class="str">"alice_bio"</span>))
-<span class="cmt"># second element becomes metadata["source"]</span></code></pre>
 
-        <div class="doc-h2">From pre-built Document objects</div>
+<span class="cmt"># or use the metadata argument explicitly</span>
+result = pipeline.ingest(text, metadata={<span class="str">"source"</span>: <span class="str">"alice_bio"</span>})</code></pre>
+
+        <div id="ingest-documents" data-sub-anchor="ingest-documents" class="doc-h2">From pre-built Document objects</div>
         <p class="doc-p">Use <code>ingest_documents()</code> when your data comes from a database or API — anywhere a file path doesn't make sense.</p>
         <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.models.document <span class="kw">import</span> Document
 
@@ -501,17 +703,20 @@ docs = [
 ]
 result = pipeline.ingest_documents(docs)</code></pre>
 
-        <div class="doc-h2">Batch ingestion</div>
-        <p class="doc-p">Use <code>ingest_batch()</code> to ingest multiple files in sequence. One <code>IngestionResult</code> is returned per source, in the same order.</p>
-        <pre class="doc-code"><code>results = pipeline.ingest_batch([
-    <span class="str">"contracts/q1.pdf"</span>,
-    <span class="str">"contracts/q2.pdf"</span>,
-    <span class="str">"contracts/q3.pdf"</span>,
-])
+        <div id="ingest-batch" data-sub-anchor="ingest-batch" class="doc-h2">Batch ingestion</div>
+        <p class="doc-p">Use <code>ingest_batch()</code> to ingest multiple sources in sequence. One <code>IngestionResult</code> is returned per source, in the same order. Each element in the list is passed to the loader — read bytes/text before passing.</p>
+        <pre class="doc-code"><code><span class="kw">from</span> pathlib <span class="kw">import</span> Path
+
+files = [<span class="str">"contracts/q1.pdf"</span>, <span class="str">"contracts/q2.pdf"</span>, <span class="str">"contracts/q3.pdf"</span>]
+results = pipeline.ingest_batch([Path(f).read_bytes() <span class="kw">for</span> f <span class="kw">in</span> files])
 <span class="kw">for</span> r <span class="kw">in</span> results:
     <span class="fn">print</span>(<span class="str">f"{r.chunks_written} chunks from pipeline_id={r.pipeline_id}"</span>)</code></pre>
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p><code>ingest_batch()</code> applies a single <code>metadata</code> dict to all sources. To attach different metadata per file (e.g. different <code>source</code> names), call <code>pipeline.ingest()</code> in a loop with per-call metadata instead.</p>
+        </div>
 
-        <div class="doc-h2">Conflict strategies</div>
+        <div id="ingest-conflict" data-sub-anchor="ingest-conflict" class="doc-h2">Conflict strategies</div>
         <p class="doc-p">Ingestion is idempotent by default. Each chunk is fingerprinted with SHA-256. The <code>on_conflict</code> setting controls what happens when a chunk already exists.</p>
         <table class="doc-table">
           <thead><tr><th>Strategy</th><th>Behavior</th></tr></thead>
@@ -521,6 +726,35 @@ result = pipeline.ingest_documents(docs)</code></pre>
             <tr><td>append</td><td>Always write, even if the chunk exists</td></tr>
           </tbody>
         </table>
+
+        <div id="ingest-collections" data-sub-anchor="ingest-collections" class="doc-h2">Multi-collection routing</div>
+        <p class="doc-p">Route ingestions and queries to named collections declared in YAML. Each collection is an independent namespace in ChromaDB.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">vector_db:</span>
+  <span class="key">default_collection:</span> <span class="val">documents</span>
+  <span class="key">collections:</span>
+    <span class="key">documents:</span>
+      <span class="key">mode:</span> <span class="val">persistent</span>
+      <span class="key">path:</span> <span class="val">./.nexrag/documents</span>
+    <span class="key">resumes:</span>
+      <span class="key">mode:</span> <span class="val">persistent</span>
+      <span class="key">path:</span> <span class="val">./.nexrag/resumes</span></code></pre>
+        <pre class="doc-code"><code><span class="kw">from</span> pathlib <span class="kw">import</span> Path
+
+<span class="cmt"># ingest into a named collection</span>
+results = pipeline.ingest_batch([
+    Path(<span class="str">"resumes/alice.pdf"</span>).read_bytes(),
+    Path(<span class="str">"resumes/bob.pdf"</span>).read_bytes(),
+], collection=<span class="str">"resumes"</span>)
+
+<span class="cmt"># query a named collection</span>
+result = pipeline.query(<span class="str">"Candidate with Python experience"</span>, collection=<span class="str">"resumes"</span>)
+<span class="fn">print</span>(result.collection_used)   <span class="cmt"># → "resumes"</span></code></pre>
+
+        <div class="callout warn">
+          <div class="callout-icon">!</div>
+          <p><strong>v0.3.0 limitation:</strong> all collections share a single ChromaDB client instance. Per-collection <code>path</code> and <code>mode</code> configuration is parsed but not yet applied — tracked in <a href="https://github.com/kevinrawal/nexrag/issues/24">#24</a>.</p>
+        </div>
       </div>
 
       <!-- ── Querying ───────────────────────── -->
@@ -543,6 +777,48 @@ result = pipeline.query(
     <span class="str">"What changed in 2024?"</span>,
     metadata_filter={<span class="str">"year"</span>: <span class="num">2024</span>},
 )</code></pre>
+
+        <div id="query-hybrid" data-sub-anchor="query-hybrid" class="doc-h2">Hybrid retrieval (BM25 + dense)</div>
+        <p class="doc-p">Use <code>provider: hybrid</code> to fuse keyword-based (BM25) and vector-based (dense) search. <code>alpha</code> controls the balance — <code>1.0</code> is pure dense, <code>0.0</code> is pure BM25. Requires <code>pip install "nexrag[bm25]"</code>.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">retriever:</span>
+    <span class="key">provider:</span> <span class="val">hybrid</span>
+    <span class="key">top_k:</span> <span class="val">10</span>
+    <span class="key">alpha:</span> <span class="val">0.7</span>          <span class="yml-cmt"># 0=pure BM25, 1=pure dense (default 0.7)</span>
+    <span class="key">sparse_top_k:</span> <span class="val">50</span>   <span class="yml-cmt"># BM25 candidate pool before fusion</span>
+    <span class="key">sparse:</span>
+      <span class="key">provider:</span> <span class="val">bm25</span></code></pre>
+
+        <div class="callout warn">
+          <div class="callout-icon">!</div>
+          <p><strong>BM25 v0.3.0 limitations:</strong> the BM25 index is rebuilt from the full corpus on every query call (no caching — tracked in <a href="https://github.com/kevinrawal/nexrag/issues/23">#23</a>), and <code>metadata_filter</code> is silently ignored by BM25 (tracked in <a href="https://github.com/kevinrawal/nexrag/issues/22">#22</a>).</p>
+        </div>
+
+        <div id="query-reranking" data-sub-anchor="query-reranking" class="doc-h2">Reranking</div>
+        <p class="doc-p">Add an optional reranker stage between the retriever and the LLM. The typical pattern is to retrieve a large candidate set with <code>top_k</code> and rerank down to a small <code>top_n</code> for the LLM — combining recall from retrieval with precision from reranking.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">retriever:</span>
+    <span class="key">provider:</span> <span class="val">dense</span>
+    <span class="key">top_k:</span> <span class="val">50</span>            <span class="yml-cmt"># retrieve many candidates</span>
+  <span class="key">reranker:</span>
+    <span class="key">provider:</span> <span class="val">cohere</span>      <span class="yml-cmt"># cohere | cross_encoder | custom</span>
+    <span class="key">model:</span> <span class="val">rerank-english-v3.0</span>
+    <span class="key">api_key:</span> <span class="val">${COHERE_API_KEY}</span>
+    <span class="key">top_n:</span> <span class="val">5</span>              <span class="yml-cmt"># only 5 chunks reach the LLM</span></code></pre>
+
+        <p class="doc-p">For a local, offline reranker use <code>provider: cross_encoder</code> with a sentence-transformers model. Requires <code>pip install "nexrag[cross-encoder]"</code>.</p>
+        <pre class="doc-code"><code><span class="key">reranker:</span>
+  <span class="key">provider:</span> <span class="val">cross_encoder</span>
+  <span class="key">model:</span> <span class="val">cross-encoder/ms-marco-MiniLM-L-6-v2</span>
+  <span class="key">top_n:</span> <span class="val">5</span>
+  <span class="yml-cmt"># device: cuda   # optional — CPU by default</span></code></pre>
+
+        <div class="callout warn">
+          <div class="callout-icon">!</div>
+          <p><strong><code>stream_query()</code> and <code>astream_query()</code> do not attach <code>RunMetrics</code>.</strong> Use <code>pipeline.query()</code> or <code>pipeline.async_query()</code> when you need latency breakdowns or token counts.</p>
+        </div>
       </div>
 
       <!-- ── Async & Streaming ─────────────────── -->
@@ -551,7 +827,7 @@ result = pipeline.query(
         <h1 class="doc-h1">Async &amp; streaming</h1>
         <p class="doc-lead">NexRAG ships two pipeline modes. <strong>Sync</strong> (default) — straightforward, thread-safe, works everywhere. <strong>Async</strong> — native async/await with parallel batch embedding and live token streaming.</p>
 
-        <div class="doc-h2">Enabling async mode</div>
+        <div id="async-enable" data-sub-anchor="async-enable" class="doc-h2">Enabling async mode</div>
         <p class="doc-p">Add one line to your YAML. No application code changes required.</p>
         <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
 <span class="key">mode:</span> <span class="val">async</span>   <span class="yml-cmt"># async | sync (default)</span>
@@ -568,7 +844,7 @@ result = pipeline.query(
           <p>In async mode, embedding batches run as <strong>concurrent API calls</strong>. For large documents this is the biggest performance win — N batches in parallel instead of N sequential requests.</p>
         </div>
 
-        <div class="doc-h2">Sync streaming</div>
+        <div id="async-sync-stream" data-sub-anchor="async-sync-stream" class="doc-h2">Sync streaming</div>
         <p class="doc-p"><code>stream_query()</code> works with any sync caller — no event loop required. Tokens are yielded as they arrive from the LLM.</p>
         <pre class="doc-code"><code>pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
 
@@ -584,7 +860,7 @@ result = pipeline.query(
 ):
     <span class="fn">print</span>(token, end=<span class="str">""</span>, flush=<span class="kw">True</span>)</code></pre>
 
-        <div class="doc-h2">Async streaming</div>
+        <div id="async-astream" data-sub-anchor="async-astream" class="doc-h2">Async streaming</div>
         <p class="doc-p"><code>astream_query()</code> is the async variant. With <code>mode: async</code> configured, pre-LLM stages use native async clients and tokens stream live. With <code>mode: sync</code>, the sync stream runs in a thread pool — non-blocking for the event loop, but tokens buffer until the stream completes in the thread.</p>
         <pre class="doc-code"><code><span class="kw">import</span> asyncio
 <span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
@@ -600,7 +876,7 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
 
 asyncio.run(<span class="fn">main</span>())</code></pre>
 
-        <div class="doc-h2">FastAPI integration</div>
+        <div id="async-fastapi" data-sub-anchor="async-fastapi" class="doc-h2">FastAPI integration</div>
         <p class="doc-p">Use <code>async_query()</code> for non-blocking queries, or <code>astream_query()</code> for SSE / streaming responses. Configure <code>mode: async</code> for true async parallelism at every stage.</p>
         <pre class="doc-code"><code><span class="kw">from</span> fastapi <span class="kw">import</span> FastAPI
 <span class="kw">from</span> fastapi.responses <span class="kw">import</span> StreamingResponse
@@ -624,6 +900,11 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)  <span cla
         <div class="callout warn">
           <div class="callout-icon">!</div>
           <p><strong>Do not call <code>pipeline.query()</code> or <code>pipeline.ingest()</code> from inside a running event loop.</strong> Use <code>async_query()</code> and <code>async_ingest()</code> inside async contexts. NexRAG raises a clear <code>NexRAGError</code> if you mix sync and async entry points.</p>
+        </div>
+
+        <div class="callout warn">
+          <div class="callout-icon">!</div>
+          <p><strong>Streaming calls do not return <code>RunMetrics</code>.</strong> <code>stream_query()</code> and <code>astream_query()</code> yield tokens only — there is no single result object. Access <code>result.metrics</code> via <code>pipeline.query()</code> or <code>pipeline.async_query()</code> instead. Tracked in <a href="https://github.com/kevinrawal/nexrag/issues/25">#25</a>.</p>
         </div>
 
         <div class="doc-h2">All async methods</div>
@@ -665,7 +946,7 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
         <h1 class="doc-h1">Custom components</h1>
         <p class="doc-lead">Any pipeline stage can be replaced. Implement the interface from <code>nexrag.core.interfaces</code>, then declare it in YAML with <code>provider: custom</code> and a dotted <code>class:</code> path.</p>
 
-        <div class="doc-h2">Example: custom embedder</div>
+        <div id="custom-embedder" data-sub-anchor="custom-embedder" class="doc-h2">Example: custom embedder</div>
         <pre class="doc-code"><code><span class="cmt"># myapp/embedders.py</span>
 <span class="kw">from</span> nexrag.core.interfaces.embedder <span class="kw">import</span> BaseEmbedder
 
@@ -696,9 +977,9 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
     <span class="key">params:</span>
       <span class="key">model:</span>  <span class="val">all-MiniLM-L6-v2</span></code></pre>
 
-        <p class="doc-p">The same pattern works for every stage: <code>loader</code>, <code>chunker</code>, <code>sanitizer</code>, <code>vector_db</code>, <code>retriever</code>, <code>prompt_builder</code>, <code>llm</code>, and <code>observer</code>.</p>
+        <p class="doc-p">The same pattern works for every stage: <code>loader</code>, <code>chunker</code>, <code>sanitizer</code>, <code>vector_db</code>, <code>retriever</code>, <code>reranker</code>, <code>prompt_builder</code>, <code>llm</code>, and <code>observer</code>.</p>
 
-        <div class="doc-h2">Available interfaces</div>
+        <div id="custom-interfaces" data-sub-anchor="custom-interfaces" class="doc-h2">Available interfaces</div>
         <table class="doc-table">
           <thead><tr><th>Interface</th><th>Import path</th></tr></thead>
           <tbody>
@@ -708,6 +989,8 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
             <tr><td>BaseEmbedder</td><td>nexrag.core.interfaces.embedder</td></tr>
             <tr><td>BaseVectorDB</td><td>nexrag.core.interfaces.vector_db</td></tr>
             <tr><td>BaseRetriever</td><td>nexrag.core.interfaces.retriever</td></tr>
+            <tr><td>BaseSparseRetriever</td><td>nexrag.core.interfaces.sparse_retriever</td></tr>
+            <tr><td>BaseReranker</td><td>nexrag.core.interfaces.reranker</td></tr>
             <tr><td>BasePromptBuilder</td><td>nexrag.core.interfaces.prompt_builder</td></tr>
             <tr><td>BaseLLM</td><td>nexrag.core.interfaces.llm</td></tr>
             <tr><td>BaseObserver</td><td>nexrag.core.interfaces.observer</td></tr>
@@ -721,7 +1004,7 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
         <h1 class="doc-h1">Testing</h1>
         <p class="doc-lead">Use in-memory ChromaDB and mock embedders/LLMs to test without any API calls.</p>
 
-        <div class="doc-h2">Memory mode for ChromaDB</div>
+        <div id="testing-memory" data-sub-anchor="testing-memory" class="doc-h2">Memory mode for ChromaDB</div>
         <pre class="doc-code"><code><span class="yml-cmt"># nexrag.test.yaml</span>
 <span class="key">vector_db:</span>
   <span class="key">provider:</span> <span class="val">chroma</span>
@@ -730,7 +1013,7 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
     <span class="key">test:</span>
       <span class="key">mode:</span> <span class="val">memory</span>   <span class="yml-cmt"># ephemeral, no disk I/O</span></code></pre>
 
-        <div class="doc-h2">Mock embedder and LLM</div>
+        <div id="testing-mocks" data-sub-anchor="testing-mocks" class="doc-h2">Mock embedder and LLM</div>
         <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.interfaces.embedder <span class="kw">import</span> BaseEmbedder
 <span class="kw">from</span> nexrag.core.interfaces.llm <span class="kw">import</span> BaseLLM
 
@@ -761,8 +1044,8 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
         <h1 class="doc-h1">API reference</h1>
         <p class="doc-lead">Return types for the two main pipeline methods.</p>
 
-        <div class="doc-h2">IngestionResult</div>
-        <p class="doc-p">Returned by <code>pipeline.ingest()</code> and <code>pipeline.ingest_documents()</code>.</p>
+        <div id="api-ingestion" data-sub-anchor="api-ingestion" class="doc-h2">IngestionResult</div>
+        <p class="doc-p">Returned by <code>pipeline.ingest()</code>, <code>pipeline.ingest_documents()</code>, and each element of <code>pipeline.ingest_batch()</code>.</p>
         <table class="field-table">
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
@@ -771,11 +1054,13 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
             <tr><td>chunks_produced</td><td>int</td><td>Total chunks produced by the chunker</td></tr>
             <tr><td>chunks_written</td><td>int</td><td>Chunks actually written (skips duplicates on <code>skip</code>)</td></tr>
             <tr><td>latency_ms</td><td>float</td><td>Wall-clock time for the full ingestion pipeline</td></tr>
+            <tr><td>collection_used</td><td>str</td><td>Which vector DB collection was used (empty string if default)</td></tr>
+            <tr><td>metrics</td><td>RunMetrics | None</td><td>Per-stage latency breakdown and observability data</td></tr>
           </tbody>
         </table>
 
-        <div class="doc-h2">PipelineResult</div>
-        <p class="doc-p">Returned by <code>pipeline.query()</code>.</p>
+        <div id="api-pipeline" data-sub-anchor="api-pipeline" class="doc-h2">PipelineResult</div>
+        <p class="doc-p">Returned by <code>pipeline.query()</code> and <code>pipeline.async_query()</code>. Not returned by streaming calls.</p>
         <table class="field-table">
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
@@ -787,10 +1072,32 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
             <tr><td>collection_used</td><td>str</td><td>Which vector DB collection was queried</td></tr>
             <tr><td>latency_ms</td><td>float</td><td>Wall-clock time for the full query pipeline</td></tr>
             <tr><td>token_usage</td><td>TokenUsage | None</td><td>Token counts from the LLM (None if not exposed)</td></tr>
+            <tr><td>metrics</td><td>RunMetrics | None</td><td>Per-stage latency breakdown and token usage</td></tr>
+            <tr><td>metadata</td><td>dict[str, Any]</td><td>Arbitrary metadata attached during the run (empty dict by default)</td></tr>
           </tbody>
         </table>
 
-        <div class="doc-h2">Source</div>
+        <div id="api-metrics" data-sub-anchor="api-metrics" class="doc-h2">RunMetrics</div>
+        <p class="doc-p">Attached to <code>PipelineResult.metrics</code> and <code>IngestionResult.metrics</code>. Not attached to streaming calls (<a href="https://github.com/kevinrawal/nexrag/issues/25">#25</a>).</p>
+        <table class="field-table">
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>pipeline_id</td><td>str</td><td>Same UUID as the parent result object</td></tr>
+            <tr><td>total_latency_ms</td><td>float</td><td>Wall-clock time for the full pipeline run</td></tr>
+            <tr><td>stage_latencies</td><td>dict[str, float]</td><td>Per-stage breakdown, e.g. <code>{"embedder": 120.3, "llm": 890.1}</code></td></tr>
+            <tr><td>token_usage</td><td>TokenUsage | None</td><td>Token counts (None if the LLM does not expose them)</td></tr>
+            <tr><td>model</td><td>str | None</td><td>LLM model name from the completed event</td></tr>
+            <tr><td>chunks_retrieved</td><td>int | None</td><td>Chunks returned by the retriever (query pipeline only)</td></tr>
+            <tr><td>chunks_written</td><td>int | None</td><td>Chunks written to vector DB (ingestion pipeline only)</td></tr>
+          </tbody>
+        </table>
+        <pre class="doc-code"><code>result = pipeline.query(<span class="str">"What are the termination clauses?"</span>)
+m = result.metrics
+<span class="fn">print</span>(<span class="str">f"Total: {m.total_latency_ms:.0f}ms"</span>)
+<span class="fn">print</span>(<span class="str">f"Stages: {m.stage_latencies}"</span>)
+<span class="fn">print</span>(<span class="str">f"Tokens: {m.token_usage.total_tokens if m.token_usage else 'n/a'}"</span>)</code></pre>
+
+        <div id="api-source" data-sub-anchor="api-source" class="doc-h2">Source</div>
         <p class="doc-p">Each element in <code>result.sources</code>.</p>
         <table class="field-table">
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
@@ -804,6 +1111,455 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
         </table>
       </div>
 
+      <!-- ══════════════════════════════════════ -->
+      <!-- ── COMPONENTS REFERENCE ─────────────── -->
+      <!-- ══════════════════════════════════════ -->
+
+      <!-- ── Loaders ───────────────────────── -->
+      <div class="doc-section" id="loaders">
+        <div class="doc-label">Components</div>
+        <h1 class="doc-h1">Loaders</h1>
+        <p class="doc-lead">A loader converts raw data into a list of <code>Document</code> objects. Since v0.3.0, loaders are <strong>converter-only</strong> — they accept <code>bytes</code> or <code>str</code> only. File I/O is the caller's responsibility: read the file to bytes or text first, then pass it to <code>pipeline.ingest()</code>.</p>
+
+        <div id="loader-auto" data-sub-anchor="loader-auto" class="doc-h2">Auto-detect</div>
+        <p class="doc-p">The default loader. Inspects the MIME type or file extension of the source and dispatches to the appropriate loader automatically. Use when you want to ingest mixed file types without changing YAML.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">loader:</span>
+    <span class="key">type:</span> <span class="val">auto</span>   <span class="yml-cmt"># default — detects pdf, txt, and more</span></code></pre>
+
+        <div id="loader-pdf" data-sub-anchor="loader-pdf" class="doc-h2">PDF</div>
+        <p class="doc-p">Extracts text content and up to 8 document metadata fields from PDF files using <code>pypdf</code>. Requires <code>pip install "nexrag[pdf]"</code>.</p>
+        <p class="doc-p">Extracted metadata fields: <code>title</code>, <code>author</code>, <code>subject</code>, <code>keywords</code>, <code>creator</code>, <code>producer</code>, <code>creation_date</code>, <code>modification_date</code>.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">loader:</span>
+    <span class="key">type:</span> <span class="val">pdf</span>
+    <span class="key">include_metadata:</span> <span class="val">true</span>          <span class="yml-cmt"># attach metadata to each chunk (default: true)</span>
+    <span class="yml-cmt"># metadata_fields: [title, author]  # whitelist specific fields; omit for all 8</span></code></pre>
+
+        <div id="loader-text" data-sub-anchor="loader-text" class="doc-h2">Plain text</div>
+        <p class="doc-p">Wraps a plain string into a single <code>Document</code>. Use for ingesting strings from a database, API, or in-memory content.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">loader:</span>
+    <span class="key">type:</span> <span class="val">txt</span></code></pre>
+        <pre class="doc-code"><code><span class="cmt"># runtime: pass a (text, source_name) tuple</span>
+result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</span>, <span class="str">"intro"</span>))</code></pre>
+
+        <div id="loader-custom" data-sub-anchor="loader-custom" class="doc-h2">Custom loader</div>
+        <p class="doc-p">Implement <code>BaseLoader</code> to load any format not covered by the built-in loaders (DOCX, HTML, Excel, database rows, etc.).</p>
+        <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.interfaces.loader <span class="kw">import</span> BaseLoader
+<span class="kw">from</span> nexrag.core.models.document <span class="kw">import</span> Document
+
+<span class="kw">class</span> <span class="fn">MarkdownLoader</span>(BaseLoader):
+    <span class="kw">def</span> <span class="fn">load</span>(self, source: str) -> list[Document]:
+        <span class="cmt"># source is a markdown string</span>
+        <span class="kw">return</span> [Document(content=source, metadata={<span class="str">"source"</span>: <span class="str">"markdown"</span>})]</code></pre>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">loader:</span>
+    <span class="key">type:</span> <span class="val">custom</span>
+    <span class="key">class:</span> <span class="val">myapp.loaders.MarkdownLoader</span></code></pre>
+      </div>
+
+      <!-- ── Chunkers ───────────────────────── -->
+      <div class="doc-section" id="chunkers">
+        <div class="doc-label">Components</div>
+        <h1 class="doc-h1">Chunkers</h1>
+        <p class="doc-lead">A chunker splits <code>Document</code> objects into smaller <code>Chunk</code> objects suitable for embedding. Chunk boundaries significantly affect retrieval quality — smaller chunks give precise matches, larger chunks provide more context.</p>
+
+        <div id="chunker-recursive" data-sub-anchor="chunker-recursive" class="doc-h2">Recursive</div>
+        <p class="doc-p">The default chunker. Splits text recursively on a priority list of separators (<code>\n\n</code>, <code>\n</code>, <code>. </code>, <code> </code>) until each chunk is under <code>chunk_size</code>. Preserves natural paragraph and sentence boundaries where possible.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">chunker:</span>
+    <span class="key">strategy:</span> <span class="val">recursive</span>   <span class="yml-cmt"># only valid built-in strategy</span>
+    <span class="key">chunk_size:</span> <span class="val">512</span>       <span class="yml-cmt"># max characters per chunk</span>
+    <span class="key">chunk_overlap:</span> <span class="val">64</span>    <span class="yml-cmt"># overlap between consecutive chunks</span>
+    <span class="key">min_chunk_size:</span> <span class="val">50</span>   <span class="yml-cmt"># discard chunks shorter than this</span></code></pre>
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p>A chunk overlap of 10–15% of <code>chunk_size</code> typically improves retrieval — context at chunk boundaries is duplicated so a query landing near an edge still retrieves the relevant passage.</p>
+        </div>
+
+        <div id="chunker-custom" data-sub-anchor="chunker-custom" class="doc-h2">Custom chunker</div>
+        <p class="doc-p">Implement <code>BaseChunker</code> for semantic chunking, fixed-size chunking, or any domain-specific splitting strategy (e.g. split legal contracts by clause, code files by function).</p>
+        <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.interfaces.chunker <span class="kw">import</span> BaseChunker
+<span class="kw">from</span> nexrag.core.models.document <span class="kw">import</span> Document
+<span class="kw">from</span> nexrag.core.models.chunk <span class="kw">import</span> Chunk
+
+<span class="kw">class</span> <span class="fn">ParagraphChunker</span>(BaseChunker):
+    <span class="kw">def</span> <span class="fn">chunk</span>(self, document: Document) -> list[Chunk]:
+        paragraphs = [p.strip() <span class="kw">for</span> p <span class="kw">in</span> document.content.split(<span class="str">"\n\n"</span>) <span class="kw">if</span> p.strip()]
+        <span class="kw">return</span> [
+            Chunk(
+                text=p,
+                chunk_index=i,
+                total_chunks=<span class="fn">len</span>(paragraphs),
+                parent_doc_id=document.doc_id,
+                metadata={**document.metadata, <span class="str">"paragraph_index"</span>: i},
+            )
+            <span class="kw">for</span> i, p <span class="kw">in</span> <span class="fn">enumerate</span>(paragraphs)
+        ]</code></pre>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">chunker:</span>
+    <span class="key">strategy:</span> <span class="val">custom</span>
+    <span class="key">class:</span> <span class="val">myapp.chunkers.ParagraphChunker</span></code></pre>
+      </div>
+
+      <!-- ── Embedders ──────────────────────── -->
+      <div class="doc-section" id="embedders">
+        <div class="doc-label">Components</div>
+        <h1 class="doc-h1">Embedders</h1>
+        <p class="doc-lead">An embedder converts text into dense vector representations. NexRAG uses the <strong>same embedder instance</strong> for both ingestion and query by default — ensuring the query vector lives in the same space as the indexed chunks.</p>
+
+        <div id="embedder-openai" data-sub-anchor="embedder-openai" class="doc-h2">OpenAI</div>
+        <p class="doc-p">Uses OpenAI's embedding API. Requires <code>pip install "nexrag[openai]"</code>.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">embedder:</span>
+    <span class="key">provider:</span> <span class="val">openai</span>
+    <span class="key">model:</span> <span class="val">text-embedding-3-small</span>   <span class="yml-cmt"># or text-embedding-3-large, text-embedding-ada-002</span>
+    <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
+    <span class="key">batch_size:</span> <span class="val">100</span>                <span class="yml-cmt"># texts per API call (default 100)</span></code></pre>
+
+        <div id="embedder-huggingface" data-sub-anchor="embedder-huggingface" class="doc-h2">HuggingFace</div>
+        <p class="doc-p">Calls the HuggingFace Inference API. Works with both the free Inference API and dedicated endpoints. Requires <code>pip install "nexrag[huggingface]"</code>.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — HuggingFace Inference API</span>
+<span class="key">ingestion:</span>
+  <span class="key">embedder:</span>
+    <span class="key">provider:</span> <span class="val">huggingface</span>
+    <span class="key">model:</span> <span class="val">sentence-transformers/all-MiniLM-L6-v2</span>
+    <span class="key">api_key:</span> <span class="val">${HF_API_KEY}</span>
+    <span class="yml-cmt"># base_url: https://your-dedicated-endpoint.hf.space  # dedicated endpoint override</span></code></pre>
+
+        <div id="embedder-ollama" data-sub-anchor="embedder-ollama" class="doc-h2">Ollama</div>
+        <p class="doc-p">Calls a locally-running Ollama server. No API key required. Requires <code>pip install "nexrag[ollama]"</code> and Ollama running locally.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">embedder:</span>
+    <span class="key">provider:</span> <span class="val">ollama</span>
+    <span class="key">model:</span> <span class="val">nomic-embed-text</span>   <span class="yml-cmt"># or mxbai-embed-large, all-minilm, etc.</span>
+    <span class="yml-cmt"># base_url: http://localhost:11434  # default Ollama address</span></code></pre>
+
+        <div id="embedder-custom" data-sub-anchor="embedder-custom" class="doc-h2">Custom embedder</div>
+        <p class="doc-p">Implement <code>BaseEmbedder</code> for any model not covered above — local sentence-transformers, Cohere embed, Voyage AI, etc.</p>
+        <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.interfaces.embedder <span class="kw">import</span> BaseEmbedder
+
+<span class="kw">class</span> <span class="fn">CohereEmbedder</span>(BaseEmbedder):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, api_key: str, model: str = <span class="str">"embed-english-v3.0"</span>) -> <span class="kw">None</span>:
+        <span class="kw">import</span> cohere
+        self._client = cohere.Client(api_key)
+        self._model = model
+
+    <span class="kw">@property</span>
+    <span class="kw">def</span> <span class="fn">model_name</span>(self) -> str: <span class="kw">return</span> self._model
+
+    <span class="kw">@property</span>
+    <span class="kw">def</span> <span class="fn">dimensions</span>(self) -> int: <span class="kw">return</span> <span class="num">1024</span>
+
+    <span class="kw">def</span> <span class="fn">embed</span>(self, texts: list[str]) -> list[list[float]]:
+        resp = self._client.embed(texts=texts, model=self._model, input_type=<span class="str">"search_document"</span>)
+        <span class="kw">return</span> resp.embeddings
+
+    <span class="kw">def</span> <span class="fn">embed_query</span>(self, text: str) -> list[float]:
+        resp = self._client.embed(texts=[text], model=self._model, input_type=<span class="str">"search_query"</span>)
+        <span class="kw">return</span> resp.embeddings[<span class="num">0</span>]</code></pre>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">embedder:</span>
+    <span class="key">provider:</span> <span class="val">custom</span>
+    <span class="key">class:</span> <span class="val">myapp.embedders.CohereEmbedder</span>
+    <span class="key">params:</span>
+      <span class="key">api_key:</span> <span class="val">${COHERE_API_KEY}</span>
+      <span class="key">model:</span>   <span class="val">embed-english-v3.0</span></code></pre>
+      </div>
+
+      <!-- ── Vector DB ──────────────────────── -->
+      <div class="doc-section" id="vector-dbs">
+        <div class="doc-label">Components</div>
+        <h1 class="doc-h1">Vector DB</h1>
+        <p class="doc-lead">The vector DB stores embedded chunks during ingestion and retrieves similar chunks at query time. NexRAG abstracts it behind <code>BaseVectorDB</code> — the ingestion and query pipelines never call a database directly.</p>
+
+        <div id="vdb-chroma" data-sub-anchor="vdb-chroma" class="doc-h2">ChromaDB</div>
+        <p class="doc-p">The default and only built-in vector DB. Supports three modes: <strong>persistent</strong> (data saved to disk), <strong>memory</strong> (ephemeral, no disk I/O), and <strong>server</strong> (remote ChromaDB instance). Requires <code>pip install "nexrag[chromadb]"</code>.</p>
+
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — persistent (recommended for production)</span>
+<span class="key">vector_db:</span>
+  <span class="key">provider:</span> <span class="val">chroma</span>
+  <span class="key">default_collection:</span> <span class="val">documents</span>
+  <span class="key">on_conflict:</span> <span class="val">overwrite</span>
+  <span class="key">upsert_batch_size:</span> <span class="val">500</span>
+  <span class="key">max_retries:</span> <span class="val">3</span>
+  <span class="key">retry_delay:</span> <span class="val">1.0</span>
+  <span class="key">collections:</span>
+    <span class="key">documents:</span>
+      <span class="key">mode:</span> <span class="val">persistent</span>
+      <span class="key">path:</span> <span class="val">./.nexrag/chroma</span></code></pre>
+
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — memory (testing / CI)</span>
+<span class="key">vector_db:</span>
+  <span class="key">provider:</span> <span class="val">chroma</span>
+  <span class="key">default_collection:</span> <span class="val">test</span>
+  <span class="key">collections:</span>
+    <span class="key">test:</span>
+      <span class="key">mode:</span> <span class="val">memory</span></code></pre>
+
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — server (remote ChromaDB)</span>
+<span class="key">vector_db:</span>
+  <span class="key">provider:</span> <span class="val">chroma</span>
+  <span class="key">default_collection:</span> <span class="val">documents</span>
+  <span class="key">collections:</span>
+    <span class="key">documents:</span>
+      <span class="key">mode:</span> <span class="val">server</span>
+      <span class="yml-cmt"># host: localhost   # ChromaDB server host</span>
+      <span class="yml-cmt"># port: 8000        # ChromaDB server port</span></code></pre>
+
+        <div class="callout warn">
+          <div class="callout-icon">!</div>
+          <p><strong>v0.3.0 limitation:</strong> all collections share a single ChromaDB client. Per-collection <code>mode</code> and <code>path</code> config is parsed but not yet applied — tracked in <a href="https://github.com/kevinrawal/nexrag/issues/24">#24</a>. Pinecone and Weaviate support are planned for v1.</p>
+        </div>
+
+        <div id="vdb-custom" data-sub-anchor="vdb-custom" class="doc-h2">Custom vector DB</div>
+        <p class="doc-p">Implement <code>BaseVectorDB</code> to connect to any vector store — Pinecone, Weaviate, Qdrant, pgvector, etc. The interface has four methods: <code>upsert()</code>, <code>query()</code>, <code>delete()</code>, <code>list_collections()</code>.</p>
+        <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.interfaces.vector_db <span class="kw">import</span> BaseVectorDB
+
+<span class="kw">class</span> <span class="fn">PineconeDB</span>(BaseVectorDB):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, api_key: str, index_name: str) -> <span class="kw">None</span>: ...
+    <span class="kw">def</span> <span class="fn">upsert</span>(self, chunks, collection): ...
+    <span class="kw">def</span> <span class="fn">query</span>(self, vector, top_k, collection, metadata_filter): ...
+    <span class="kw">def</span> <span class="fn">delete</span>(self, ids, collection): ...
+    <span class="kw">def</span> <span class="fn">list_collections</span>(self): ...</code></pre>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">vector_db:</span>
+  <span class="key">provider:</span> <span class="val">custom</span>
+  <span class="key">class:</span> <span class="val">myapp.db.PineconeDB</span>
+  <span class="key">params:</span>
+    <span class="key">api_key:</span>    <span class="val">${PINECONE_API_KEY}</span>
+    <span class="key">index_name:</span> <span class="val">nexrag-prod</span></code></pre>
+      </div>
+
+      <!-- ── Retrievers ─────────────────────── -->
+      <div class="doc-section" id="retrievers">
+        <div class="doc-label">Components</div>
+        <h1 class="doc-h1">Retrievers</h1>
+        <p class="doc-lead">A retriever selects the most relevant chunks for a given query. NexRAG ships three retrieval strategies: <strong>dense</strong> (vector similarity), <strong>sparse</strong> (keyword overlap), and <strong>hybrid</strong> (fusion of both). The sparse retriever interface is open — BM25 is the built-in implementation, but any sparse algorithm can be plugged in.</p>
+
+        <div id="retriever-dense" data-sub-anchor="retriever-dense" class="doc-h2">Dense retrieval</div>
+        <p class="doc-p">Uses cosine similarity between the query vector and stored chunk vectors. Fast and accurate for semantic queries — finds conceptually similar text even if the exact words differ. No additional dependencies required.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">retriever:</span>
+    <span class="key">provider:</span> <span class="val">dense</span>         <span class="yml-cmt"># default</span>
+    <span class="key">top_k:</span> <span class="val">5</span>               <span class="yml-cmt"># chunks returned to the LLM</span>
+    <span class="key">score_threshold:</span> <span class="val">0.0</span>   <span class="yml-cmt"># drop chunks below this similarity score</span></code></pre>
+        <table class="doc-table">
+          <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>top_k</td><td>5</td><td>Number of chunks to return</td></tr>
+            <tr><td>score_threshold</td><td>0.0</td><td>Minimum cosine similarity (0–1) to include a chunk</td></tr>
+          </tbody>
+        </table>
+
+        <div id="retriever-sparse" data-sub-anchor="retriever-sparse" class="doc-h2">Sparse retrieval</div>
+        <p class="doc-p">Sparse retrieval ranks chunks by keyword overlap rather than semantic similarity. It excels at exact-term queries, product codes, proper nouns, and cases where dense retrieval misses literal matches.</p>
+        <p class="doc-p"><strong>Sparse is a category, not a single algorithm.</strong> NexRAG ships BM25 as the built-in sparse implementation, but the <code>BaseRetriever</code> interface supports any sparse method — TF-IDF, BM25+, SPLADE, or any custom scoring function. See <a href="#retriever-custom">Custom retriever</a> to plug in a different sparse algorithm.</p>
+
+        <div class="doc-h3">BM25 (built-in)</div>
+        <p class="doc-p">Okapi BM25 keyword scoring. Tokenizes the corpus at query time and ranks by term frequency adjusted for document length. Requires <code>pip install "nexrag[bm25]"</code>.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">retriever:</span>
+    <span class="key">provider:</span> <span class="val">bm25</span>
+    <span class="key">top_k:</span> <span class="val">5</span></code></pre>
+        <div class="callout warn">
+          <div class="callout-icon">!</div>
+          <p><strong>v0.3.0 limitations:</strong> BM25 fetches the full collection corpus on every query call (no index caching — <a href="https://github.com/kevinrawal/nexrag/issues/23">#23</a>) and silently ignores <code>metadata_filter</code> (<a href="https://github.com/kevinrawal/nexrag/issues/22">#22</a>). Both are tracked for the next release.</p>
+        </div>
+
+        <div id="retriever-hybrid" data-sub-anchor="retriever-hybrid" class="doc-h2">Hybrid retrieval</div>
+        <p class="doc-p">Fuses dense and sparse retrieval scores using a weighted sum. The <code>alpha</code> parameter controls the balance: <code>alpha=1.0</code> is pure dense, <code>alpha=0.0</code> is pure sparse. The default <code>alpha=0.7</code> gives 70% weight to dense and 30% to sparse.</p>
+        <p class="doc-p">Hybrid is not tied to BM25 — the <code>sparse.provider</code> key accepts <code>bm25</code> or <code>custom</code>, so you can plug in any sparse implementation via <code>class:</code>.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — hybrid with BM25 sparse</span>
+<span class="key">query:</span>
+  <span class="key">retriever:</span>
+    <span class="key">provider:</span> <span class="val">hybrid</span>
+    <span class="key">top_k:</span> <span class="val">10</span>
+    <span class="key">alpha:</span> <span class="val">0.7</span>          <span class="yml-cmt"># 0=pure sparse, 1=pure dense</span>
+    <span class="key">sparse_top_k:</span> <span class="val">50</span>   <span class="yml-cmt"># sparse candidate pool (use a larger set than top_k)</span>
+    <span class="key">sparse:</span>
+      <span class="key">provider:</span> <span class="val">bm25</span>    <span class="yml-cmt"># bm25 | custom</span></code></pre>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — hybrid with a custom sparse retriever</span>
+<span class="key">query:</span>
+  <span class="key">retriever:</span>
+    <span class="key">provider:</span> <span class="val">hybrid</span>
+    <span class="key">top_k:</span> <span class="val">10</span>
+    <span class="key">alpha:</span> <span class="val">0.6</span>
+    <span class="key">sparse:</span>
+      <span class="key">provider:</span> <span class="val">custom</span>
+      <span class="key">class:</span> <span class="val">myapp.retrievers.TFIDFRetriever</span></code></pre>
+        <table class="doc-table">
+          <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>alpha</td><td>0.7</td><td>Dense weight (1 − alpha is the sparse weight)</td></tr>
+            <tr><td>sparse_top_k</td><td>None (= top_k)</td><td>Candidate pool fetched from sparse retriever before fusion</td></tr>
+            <tr><td>sparse.provider</td><td>bm25</td><td><code>bm25</code> or <code>custom</code></td></tr>
+          </tbody>
+        </table>
+
+        <div id="retriever-custom" data-sub-anchor="retriever-custom" class="doc-h2">Custom retriever</div>
+        <p class="doc-p">Implement <code>BaseRetriever</code> to replace the entire retrieval strategy — or to supply a custom sparse retriever used by the hybrid fusion.</p>
+        <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.interfaces.retriever <span class="kw">import</span> BaseRetriever
+<span class="kw">from</span> nexrag.core.models.chunk <span class="kw">import</span> ScoredChunk
+
+<span class="kw">class</span> <span class="fn">TFIDFRetriever</span>(BaseRetriever):
+    <span class="kw">def</span> <span class="fn">retrieve</span>(self, query: str, top_k: int, collection: str,
+                  metadata_filter: dict | <span class="kw">None</span> = <span class="kw">None</span>) -> list[ScoredChunk]:
+        <span class="cmt"># your TF-IDF implementation here</span>
+        ...</code></pre>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — custom retriever as the primary strategy</span>
+<span class="key">query:</span>
+  <span class="key">retriever:</span>
+    <span class="key">provider:</span> <span class="val">custom</span>
+    <span class="key">class:</span> <span class="val">myapp.retrievers.TFIDFRetriever</span></code></pre>
+      </div>
+
+      <!-- ── Rerankers ──────────────────────── -->
+      <div class="doc-section" id="rerankers">
+        <div class="doc-label">Components</div>
+        <h1 class="doc-h1">Rerankers</h1>
+        <p class="doc-lead">An optional post-retrieval stage that re-scores a larger candidate set and returns the top-N most relevant chunks. The pattern: retrieve a wide set (<code>top_k=50</code>) for high recall, then rerank to a narrow set (<code>top_n=5</code>) for high precision — only the top-N reach the LLM.</p>
+
+        <div class="callout warn">
+          <div class="callout-icon">!</div>
+          <p><strong>Streaming does not return <code>RunMetrics</code>.</strong> <code>stream_query()</code> and <code>astream_query()</code> yield tokens only. Use <code>query()</code> or <code>async_query()</code> when you need latency breakdowns.</p>
+        </div>
+
+        <div id="reranker-cohere" data-sub-anchor="reranker-cohere" class="doc-h2">Cohere</div>
+        <p class="doc-p">Uses the Cohere Rerank API. State-of-the-art re-ranking quality with minimal latency overhead. Requires <code>pip install "nexrag[cohere]"</code> and a Cohere API key.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">retriever:</span>
+    <span class="key">provider:</span> <span class="val">dense</span>
+    <span class="key">top_k:</span> <span class="val">50</span>
+  <span class="key">reranker:</span>
+    <span class="key">provider:</span> <span class="val">cohere</span>
+    <span class="key">model:</span> <span class="val">rerank-english-v3.0</span>   <span class="yml-cmt"># or rerank-multilingual-v3.0</span>
+    <span class="key">api_key:</span> <span class="val">${COHERE_API_KEY}</span>
+    <span class="key">top_n:</span> <span class="val">5</span></code></pre>
+
+        <div id="reranker-cross" data-sub-anchor="reranker-cross" class="doc-h2">CrossEncoder</div>
+        <p class="doc-p">Local, offline reranker using a cross-encoder model from <code>sentence-transformers</code>. No API key or network call — runs on CPU or GPU. Slower than Cohere for large candidate sets but fully private. Requires <code>pip install "nexrag[cross-encoder]"</code>.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">retriever:</span>
+    <span class="key">provider:</span> <span class="val">dense</span>
+    <span class="key">top_k:</span> <span class="val">20</span>
+  <span class="key">reranker:</span>
+    <span class="key">provider:</span> <span class="val">cross_encoder</span>
+    <span class="key">model:</span> <span class="val">cross-encoder/ms-marco-MiniLM-L-6-v2</span>
+    <span class="key">top_n:</span> <span class="val">5</span>
+    <span class="yml-cmt"># device: cuda   # cpu (default) | cuda | mps</span></code></pre>
+
+        <div id="reranker-custom" data-sub-anchor="reranker-custom" class="doc-h2">Custom reranker</div>
+        <p class="doc-p">Implement <code>BaseReranker</code> to use any reranking model — Voyage Rerank, Jina Reranker, a fine-tuned cross-encoder, etc.</p>
+        <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.interfaces.reranker <span class="kw">import</span> BaseReranker
+<span class="kw">from</span> nexrag.core.models.chunk <span class="kw">import</span> ScoredChunk
+
+<span class="kw">class</span> <span class="fn">VoyageReranker</span>(BaseReranker):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, api_key: str) -> <span class="kw">None</span>:
+        <span class="kw">import</span> voyageai
+        self._client = voyageai.Client(api_key=api_key)
+
+    <span class="kw">def</span> <span class="fn">rerank</span>(self, query: str, chunks: list[ScoredChunk], top_n: int) -> list[ScoredChunk]:
+        texts = [c.content <span class="kw">for</span> c <span class="kw">in</span> chunks]
+        result = self._client.rerank(query, texts, model=<span class="str">"rerank-2"</span>, top_k=top_n)
+        <span class="kw">return</span> [chunks[r.index] <span class="kw">for</span> r <span class="kw">in</span> result.results]</code></pre>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">reranker:</span>
+    <span class="key">provider:</span> <span class="val">custom</span>
+    <span class="key">class:</span> <span class="val">myapp.rerankers.VoyageReranker</span>
+    <span class="key">params:</span>
+      <span class="key">api_key:</span> <span class="val">${VOYAGE_API_KEY}</span></code></pre>
+      </div>
+
+      <!-- ── LLMs ───────────────────────────── -->
+      <div class="doc-section" id="llms">
+        <div class="doc-label">Components</div>
+        <h1 class="doc-h1">LLMs</h1>
+        <p class="doc-lead">The LLM receives the formatted prompt (query + retrieved context) and generates the final answer. NexRAG calls the LLM as the last stage of the query pipeline and wraps the response in <code>PipelineResult</code>.</p>
+
+        <div id="llm-openai" data-sub-anchor="llm-openai" class="doc-h2">OpenAI</div>
+        <p class="doc-p">Uses the OpenAI Chat Completions API. Supports streaming natively. Requires <code>pip install "nexrag[openai]"</code>.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">llm:</span>
+    <span class="key">provider:</span> <span class="val">openai</span>
+    <span class="key">model:</span> <span class="val">gpt-4o</span>          <span class="yml-cmt"># gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, ...</span>
+    <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
+    <span class="key">temperature:</span> <span class="val">0.2</span>
+    <span class="key">max_tokens:</span> <span class="val">1024</span>
+    <span class="key">timeout:</span> <span class="val">30</span>           <span class="yml-cmt"># seconds before request is aborted</span>
+    <span class="key">max_retries:</span> <span class="val">2</span>        <span class="yml-cmt"># automatic retries on transient errors</span></code></pre>
+
+        <div id="llm-anthropic" data-sub-anchor="llm-anthropic" class="doc-h2">Anthropic</div>
+        <p class="doc-p">Uses the Anthropic Messages API (Claude models). Supports streaming natively. Requires <code>pip install "nexrag[anthropic]"</code>.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">llm:</span>
+    <span class="key">provider:</span> <span class="val">anthropic</span>
+    <span class="key">model:</span> <span class="val">claude-opus-4-8</span>   <span class="yml-cmt"># claude-sonnet-4-6, claude-haiku-4-5-20251001, ...</span>
+    <span class="key">api_key:</span> <span class="val">${ANTHROPIC_API_KEY}</span>
+    <span class="key">temperature:</span> <span class="val">0.2</span>
+    <span class="key">max_tokens:</span> <span class="val">1024</span>
+    <span class="key">timeout:</span> <span class="val">30</span>
+    <span class="key">max_retries:</span> <span class="val">2</span></code></pre>
+
+        <div id="llm-ollama" data-sub-anchor="llm-ollama" class="doc-h2">Ollama</div>
+        <p class="doc-p">Calls a locally-running Ollama server. No API key required — data stays on your machine. Requires <code>pip install "nexrag[ollama]"</code> and Ollama running locally.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">llm:</span>
+    <span class="key">provider:</span> <span class="val">ollama</span>
+    <span class="key">model:</span> <span class="val">llama3.1</span>        <span class="yml-cmt"># any model pulled via `ollama pull`</span>
+    <span class="yml-cmt"># base_url: http://localhost:11434  # default Ollama address</span>
+    <span class="key">temperature:</span> <span class="val">0.2</span>
+    <span class="key">max_tokens:</span> <span class="val">1024</span></code></pre>
+
+        <div id="llm-custom" data-sub-anchor="llm-custom" class="doc-h2">Custom LLM</div>
+        <p class="doc-p">Implement <code>BaseLLM</code> to call any model API not covered above — Gemini, Mistral, Groq, a local vLLM server, etc. Implement <code>stream()</code> for <code>stream_query()</code> support.</p>
+        <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.interfaces.llm <span class="kw">import</span> BaseLLM
+<span class="kw">from</span> collections.abc <span class="kw">import</span> Iterator
+
+<span class="kw">class</span> <span class="fn">GeminiLLM</span>(BaseLLM):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, api_key: str, model: str = <span class="str">"gemini-1.5-flash"</span>) -> <span class="kw">None</span>:
+        <span class="kw">import</span> google.generativeai <span class="kw">as</span> genai
+        genai.configure(api_key=api_key)
+        self._model = genai.GenerativeModel(model)
+        self._model_name = model
+
+    <span class="kw">@property</span>
+    <span class="kw">def</span> <span class="fn">model_name</span>(self) -> str: <span class="kw">return</span> self._model_name
+
+    <span class="kw">def</span> <span class="fn">generate</span>(self, prompt: str) -> str:
+        <span class="kw">return</span> self._model.generate_content(prompt).text
+
+    <span class="kw">def</span> <span class="fn">stream</span>(self, prompt: str) -> Iterator[str]:
+        <span class="kw">for</span> chunk <span class="kw">in</span> self._model.generate_content(prompt, stream=<span class="kw">True</span>):
+            <span class="kw">yield</span> chunk.text</code></pre>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">llm:</span>
+    <span class="key">provider:</span> <span class="val">custom</span>
+    <span class="key">class:</span> <span class="val">myapp.llms.GeminiLLM</span>
+    <span class="key">params:</span>
+      <span class="key">api_key:</span> <span class="val">${GEMINI_API_KEY}</span>
+      <span class="key">model:</span>   <span class="val">gemini-1.5-flash</span></code></pre>
+      </div>
+
       <!-- ── Changelog ──────────────────────── -->
       <div class="doc-section" id="changelog">
         <div class="doc-label">Reference</div>
@@ -811,14 +1567,38 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
 
         <!-- version switcher -->
         <div class="cl-ver-bar">
-          <button class="cl-vtab active" data-cl="v020">
-            v0.2.0 <span class="cl-vtab-latest">latest</span>
+          <button class="cl-vtab active" data-cl="v030">
+            v0.3.0 <span class="cl-vtab-latest">latest</span>
           </button>
+          <button class="cl-vtab" data-cl="v020">v0.2.0</button>
           <button class="cl-vtab" data-cl="v010">v0.1.0</button>
         </div>
 
+        <!-- v0.3.0 -->
+        <div class="cl-panel active" id="cl-v030">
+          <div class="cl-meta">
+            <span class="cl-ver-name">v0.3.0</span>
+            <span class="cl-date">2026-05-31</span>
+          </div>
+          <p class="cl-summary">Retrieval expansion: hybrid BM25+dense retrieval, optional reranking stage, multi-collection routing, RunMetrics observability, and PDF metadata extraction.</p>
+          <table class="cl-table">
+            <tbody>
+              <tr><td><span class="cl-cat">retrieval</span></td><td><code>BM25Retriever</code> — corpus-level keyword retrieval. Requires <code>nexrag[bm25]</code>. See known limitations: <a href="https://github.com/kevinrawal/nexrag/issues/22">#22</a>, <a href="https://github.com/kevinrawal/nexrag/issues/23">#23</a>.</td></tr>
+              <tr><td><span class="cl-cat">retrieval</span></td><td><code>HybridRetriever</code> — fused dense+BM25 with configurable <code>alpha</code>. Typical pattern: retrieve <code>top_k=50</code>, rerank to <code>top_n=5</code>.</td></tr>
+              <tr><td><span class="cl-cat">reranking</span></td><td>Optional reranker stage between retriever and prompt builder. <code>CohereReranker</code> (<code>nexrag[cohere]</code>) and <code>CrossEncoderReranker</code> (<code>nexrag[cross-encoder]</code>).</td></tr>
+              <tr><td><span class="cl-cat">observability</span></td><td><code>RunMetrics</code> — per-stage latency, token usage, chunks written/retrieved. Attached to <code>PipelineResult.metrics</code> and <code>IngestionResult.metrics</code>. Not on streaming calls (<a href="https://github.com/kevinrawal/nexrag/issues/25">#25</a>).</td></tr>
+              <tr><td><span class="cl-cat">routing</span></td><td>Multi-collection routing — pass <code>collection="name"</code> to any <code>ingest*()</code> or <code>query()</code> call. <code>IngestionResult.collection_used</code> tracks which was used. Per-collection paths pending (<a href="https://github.com/kevinrawal/nexrag/issues/24">#24</a>).</td></tr>
+              <tr><td><span class="cl-cat">loaders</span></td><td><code>PDFLoader</code> extracts up to 8 metadata fields (<code>title</code>, <code>author</code>, <code>subject</code>, <code>keywords</code>, <code>creator</code>, <code>producer</code>, <code>creation_date</code>, <code>modification_date</code>). Configurable via <code>loader.include_metadata</code> and <code>loader.metadata_fields</code>.</td></tr>
+              <tr><td><span class="cl-cat">config</span></td><td><code>VectorDBConfig</code> gains <code>upsert_batch_size</code>, <code>query_batch_size</code>, <code>max_retries</code>, <code>retry_delay</code> for ChromaDB connection and batch tuning.</td></tr>
+              <tr><td><span class="cl-cat">config</span></td><td>Chunker <code>strategy</code> reduced to <code>recursive | custom</code>. Values <code>fixed</code>, <code>sentence</code>, <code>paragraph</code> removed — they were never implemented.</td></tr>
+              <tr><td><span class="cl-cat">breaking</span></td><td>Loaders are now converter-only: <code>PDFLoader.load()</code> accepts <code>bytes</code>; <code>RawTextLoader.load()</code> accepts <code>str</code>. Passing a file path directly to a loader now raises <code>LoaderError</code> — use <code>pipeline.ingest(path)</code> instead.</td></tr>
+              <tr><td><span class="cl-cat">fixed</span></td><td>Six <code>ChromaDBAdapter</code> bugs resolved: <code>None</code> metadata crash, missing struct fields on round-trip, filter operator always <code>$eq</code>, missing batch upsert, no connection retry, unimplemented <code>list_collections()</code>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <!-- v0.2.0 -->
-        <div class="cl-panel active" id="cl-v020">
+        <div class="cl-panel" id="cl-v020">
           <div class="cl-meta">
             <span class="cl-ver-name">v0.2.0</span>
             <span class="cl-date">2026-05-28</span>
@@ -860,7 +1640,7 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
 
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.2.0</div>
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.3.0</div>
       <div class="footer-links">
         <a href="index.html">Home</a>
         <a href="story.html">Story</a>
@@ -899,24 +1679,40 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
       });
     });
 
-    // Sidebar active link on scroll
-    const sections = document.querySelectorAll('.doc-section');
-    const sideLinks = document.querySelectorAll('.sidebar-link');
+    // Accordion scrollspy
+    const sections   = document.querySelectorAll('.doc-section');
+    const sideLinks  = document.querySelectorAll('.sidebar-link');
+    const subLinks   = document.querySelectorAll('.sidebar-sub-link');
+    const sideItems  = document.querySelectorAll('.sidebar-item[data-section]');
+    const subAnchors = document.querySelectorAll('[data-sub-anchor]');
 
-    const obs = new IntersectionObserver(entries => {
+    const sectionObs = new IntersectionObserver(entries => {
       entries.forEach(e => {
-        if (e.isIntersecting) {
-          sideLinks.forEach(l => l.classList.remove('active'));
-          const link = document.querySelector(`.sidebar-link[href="#${e.target.id}"]`);
-          if (link) link.classList.add('active');
-        }
+        if (!e.isIntersecting) return;
+        const id = e.target.id;
+        sideLinks.forEach(l => l.classList.remove('active'));
+        const link = document.querySelector(`.sidebar-link[href="#${id}"]`);
+        if (link) link.classList.add('active');
+        sideItems.forEach(item => {
+          item.classList.toggle('open', item.dataset.section === id);
+        });
       });
-    }, { rootMargin: '-15% 0px -75% 0px' });
+    }, { rootMargin: '-10% 0px -70% 0px' });
+    sections.forEach(s => sectionObs.observe(s));
 
-    sections.forEach(s => obs.observe(s));
+    const subObs = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        const anchor = e.target.dataset.subAnchor;
+        subLinks.forEach(l => l.classList.remove('active'));
+        const subLink = document.querySelector(`.sidebar-sub-link[href="#${anchor}"]`);
+        if (subLink) subLink.classList.add('active');
+      });
+    }, { rootMargin: '-10% 0px -80% 0px' });
+    subAnchors.forEach(a => subObs.observe(a));
 
-    // Sidebar link click smooth scroll
-    sideLinks.forEach(link => {
+    // Smooth scroll for sidebar and sub-links
+    document.querySelectorAll('.sidebar-link, .sidebar-sub-link').forEach(link => {
       link.addEventListener('click', e => {
         e.preventDefault();
         const target = document.querySelector(link.getAttribute('href'));

@@ -211,9 +211,10 @@
         <span class="logo-dot">●</span>NexRAG
       </a>
       <div class="nav-links">
+        <!-- architecture.html exists but is not ready — link hidden until v1 -->
+        <a href="docs.html">Docs</a>
         <a href="story.html">Story</a>
         <a href="showcase.html">Showcase</a>
-        <a href="docs.html">Docs</a>
         <a href="https://github.com/kevinrawal/nexrag" target="_blank" class="nav-gh">GitHub ↗</a>
         <button class="theme-btn" id="themeBtn" title="Toggle theme">◑</button>
       </div>
@@ -228,7 +229,7 @@
         <div class="hero-content">
           <div class="hero-badge">
             <span class="badge">
-              <span class="badge-dot"></span>v0.2.0 — now on PyPI
+              <span class="badge-dot"></span>v0.3.0 — now on PyPI
             </span>
           </div>
           <h1 class="hero-name">NexRAG</h1>
@@ -285,10 +286,10 @@ result = pipeline.query(
     <div class="container">
       <div class="label">Architecture</div>
       <h2 class="section-title">The full RAG pipeline.</h2>
-      <p class="section-sub">Two pipelines. One shared <code>Embedder</code>. One shared <code>VectorDB</code>. Nine swappable stages. One YAML file to wire it all.</p>
+      <p class="section-sub">Two pipelines. One shared <code>Embedder</code>. One shared <code>VectorDB</code>. Ten swappable stages. One YAML file to wire it all.</p>
 
       <div class="arch-wrap fade-up">
-<svg viewBox="0 0 860 308" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;min-width:720px">
+<svg viewBox="0 0 980 308" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;min-width:720px">
 <style>
 .b   { fill: var(--bg-3); stroke: var(--border-2); stroke-width: 1; }
 .b-a { fill: var(--accent-dim); stroke: var(--accent-border); stroke-width: 1.5; }
@@ -382,25 +383,31 @@ result = pipeline.query(
 <line x1="359" y1="229" x2="377" y2="229" class="ln"/>
 <polyline points="373,225.5 377,229 373,232.5" class="ch"/>
 
-<!-- PromptBuilder [col 4, x=381] -->
+<!-- Reranker [col 4, x=381 — optional] -->
 <rect x="381" y="208" width="100" height="42" rx="3" class="b"/>
-<text x="431" y="232" class="t">PromptBuilder</text>
+<text x="431" y="232" class="t">Reranker</text>
 <line x1="482" y1="229" x2="500" y2="229" class="ln"/>
 <polyline points="496,225.5 500,229 496,232.5" class="ch"/>
 
-<!-- LLM [col 5, x=504] -->
+<!-- PromptBuilder [col 5, x=504] -->
 <rect x="504" y="208" width="100" height="42" rx="3" class="b"/>
-<text x="554" y="232" class="t">LLM</text>
+<text x="554" y="232" class="t">PromptBuilder</text>
 <line x1="605" y1="229" x2="623" y2="229" class="ln"/>
 <polyline points="619,225.5 623,229 619,232.5" class="ch"/>
 
-<!-- PipelineResult [col 6, x=627] -->
+<!-- LLM [col 6, x=627] -->
 <rect x="627" y="208" width="100" height="42" rx="3" class="b"/>
-<text x="677" y="232" class="t">PipelineResult</text>
+<text x="677" y="232" class="t">LLM</text>
+<line x1="728" y1="229" x2="746" y2="229" class="ln"/>
+<polyline points="742,225.5 746,229 742,232.5" class="ch"/>
+
+<!-- PipelineResult [col 7, x=750] -->
+<rect x="750" y="208" width="100" height="42" rx="3" class="b"/>
+<text x="800" y="232" class="t">PipelineResult</text>
 
 <!-- ── OBSERVER ── -->
-<rect x="12" y="270" width="715" height="22" rx="2" class="ob"/>
-<text x="369" y="284" class="ot">OBSERVER — emits structured PipelineEvent at every stage · ConsoleObserver | NoOpObserver | custom</text>
+<rect x="12" y="270" width="838" height="22" rx="2" class="ob"/>
+<text x="431" y="284" class="ot">OBSERVER — emits structured PipelineEvent at every stage · ConsoleObserver | NoOpObserver | custom</text>
 </svg>
       </div>
 
@@ -417,12 +424,12 @@ result = pipeline.query(
   <section class="features-section">
     <div class="container">
       <div class="label fade-up">Design</div>
-      <h2 class="section-title fade-up">Built on five principles.</h2>
+      <h2 class="section-title fade-up">Built on six principles.</h2>
       <div class="features-grid">
         <div class="feat fade-up">
           <div class="feat-num">01.</div>
           <div class="feat-title">Interface-first</div>
-          <p class="feat-desc">Every stage is a contract. All 9 pipeline stages are clean abstract interfaces. Swap anything by extending the base class.</p>
+          <p class="feat-desc">Every stage is a contract. All 10 pipeline stages are clean abstract interfaces. Swap anything by extending the base class.</p>
         </div>
         <div class="feat fade-up">
           <div class="feat-num">02.</div>
@@ -605,7 +612,7 @@ app = FastAPI()
     <div class="container">
       <div class="label fade-up">Integrations</div>
       <h2 class="section-title fade-up">Supported providers.</h2>
-      <p class="section-sub fade-up">OpenAI, Ollama, Anthropic, HuggingFace, and ChromaDB available now. More in v1.</p>
+      <p class="section-sub fade-up">OpenAI, Ollama, Anthropic, HuggingFace, ChromaDB, BM25, Cohere, and CrossEncoder available now. More in v1.</p>
       <div class="providers-grid fade-up">
         <div>
           <div class="pcol-title">Available now</div>
@@ -617,7 +624,8 @@ app = FastAPI()
               <tr><td>Vector DBs</td><td>ChromaDB (local, memory, server)</td></tr>
               <tr><td>Loaders</td><td>PDF, plain text, auto-detect</td></tr>
               <tr><td>Chunkers</td><td>Recursive (separator-aware)</td></tr>
-              <tr><td>Retrievers</td><td>Dense (cosine similarity)</td></tr>
+              <tr><td>Retrievers</td><td>Dense (cosine similarity), BM25 (keyword), Hybrid (dense + BM25)</td></tr>
+              <tr><td>Rerankers</td><td>Cohere, CrossEncoder (sentence-transformers)</td></tr>
             </tbody>
           </table>
         </div>
@@ -626,11 +634,9 @@ app = FastAPI()
           <table class="ptable">
             <thead><tr><th>Category</th><th>Providers</th></tr></thead>
             <tbody>
-              <tr><td>Vector DBs</td><td>ChromaDB remote, Pinecone, Weaviate</td></tr>
+              <tr><td>Vector DBs</td><td>Pinecone, Weaviate</td></tr>
               <tr><td>LLMs</td><td>Gemini, Mistral</td></tr>
-              <tr><td>Loaders</td><td>Word (.docx), HTML, Markdown</td></tr>
-              <tr><td>Chunkers</td><td>Semantic, fixed-size</td></tr>
-              <tr><td>Retrievers</td><td>Hybrid (dense + BM25)</td></tr>
+              <tr><td>Loaders</td><td>Word (.docx), HTML, Excel</td></tr>
               <tr><td>Observability</td><td>OpenTelemetry, Prometheus</td></tr>
             </tbody>
           </table>
@@ -658,7 +664,7 @@ app = FastAPI()
   <!-- ── Footer ────────────────────────────────── -->
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.2.0</div>
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.3.0</div>
       <div class="footer-links">
         <a href="story.html">Story</a>
         <a href="showcase.html">Showcase</a>
@@ -689,7 +695,7 @@ app = FastAPI()
 
     // Copy install command
     document.getElementById('copyBtn').addEventListener('click', function () {
-      navigator.clipboard.writeText('pip install "nexrag[openai,pdf]"');
+      navigator.clipboard.writeText('pip install "nexrag[all]"');
       this.textContent = 'copied!';
       this.classList.add('copied');
       setTimeout(() => { this.textContent = 'copy'; this.classList.remove('copied'); }, 2000);

@@ -207,9 +207,10 @@
         <span class="logo-dot">●</span>NexRAG
       </a>
       <div class="nav-links">
+        <!-- architecture.html exists but is not ready — link hidden until v1 -->
+        <a href="docs.html">Docs</a>
         <a href="story.html" class="active">Story</a>
         <a href="showcase.html">Showcase</a>
-        <a href="docs.html">Docs</a>
         <a href="https://github.com/kevinrawal/nexrag" target="_blank" class="nav-gh">GitHub ↗</a>
         <button class="theme-btn" id="themeBtn" title="Toggle theme">◑</button>
       </div>
@@ -275,7 +276,7 @@
               NexRAG starts from a single constraint: <strong>the core must have zero dependency on any AI SDK or framework</strong>. Not LangChain. Not LlamaIndex. Not OpenAI's SDK. The core is interfaces all the way down.
             </p>
             <p>
-              Each pipeline stage — loader, sanitizer, chunker, embedder, vector DB, retriever, prompt builder, LLM, observer — is a clean abstract base class. NexRAG ships default implementations for every one of them. You can swap any by implementing the interface and declaring a dotted class path in YAML.
+              Each pipeline stage — loader, sanitizer, chunker, embedder, vector DB, retriever, reranker (optional), prompt builder, LLM, observer — is a clean abstract base class. NexRAG ships default implementations for every one of them. You can swap any by implementing the interface and declaring a dotted class path in YAML.
             </p>
             <p>
               The YAML file is not configuration <em>for</em> NexRAG. It <em>is</em> the pipeline. Every behavior that varies between deployments — providers, models, chunk sizes, retrieval thresholds, secrets — lives there. None of it lives in your application code.
@@ -284,7 +285,7 @@
 
           <div class="story-section" id="principles">
             <div class="story-section-num">03 — Principles</div>
-            <h2 class="story-section-title">The five rules everything is built on.</h2>
+            <h2 class="story-section-title">The six rules everything is built on.</h2>
             <div class="principles">
               <div class="principle fade-up">
                 <div class="principle-name">Interface-first</div>
@@ -306,6 +307,10 @@
                 <div class="principle-name">Extensible by design</div>
                 <p class="principle-desc">New components plug in without touching core. The extension point is YAML, not a pull request.</p>
               </div>
+              <div class="principle fade-up">
+                <div class="principle-name">Async &amp; streaming</div>
+                <p class="principle-desc">Native async/await pipeline with parallel batch embedding. Token-by-token streaming via <code>stream_query()</code> and <code>astream_query()</code> — no extra setup.</p>
+              </div>
             </div>
           </div>
 
@@ -325,9 +330,9 @@
 
           <div class="story-section" id="roadmap">
             <div class="story-section-num">05 — What's coming</div>
-            <h2 class="story-section-title">v0.2.0 ships the full pipeline. v1 is the platform.</h2>
+            <h2 class="story-section-title">v0.3.0 expands retrieval. v1 is the platform.</h2>
             <p>
-              The current release is a complete naive RAG pipeline — ingest, index, retrieve, generate — with full async support and token-by-token streaming. Everything that NexRAG promises is working. What comes next is breadth: more providers, more retrieval strategies, and the tooling to run NexRAG at production scale.
+              v0.3.0 adds hybrid BM25+dense retrieval, an optional reranking stage, multi-collection routing, and per-run observability metrics on top of the complete async pipeline shipped in v0.2.0. Everything NexRAG promises is working. What comes next is breadth: more vector databases, more LLM providers, and the tooling to run NexRAG at production scale.
             </p>
             <div class="roadmap">
               <div class="roadmap-item">
@@ -343,16 +348,24 @@
                 <div class="roadmap-text"><strong>Async pipeline + streaming.</strong> <code>mode: async</code> enables native async/await with parallel batch embedding. <code>stream_query()</code> and <code>astream_query()</code> stream tokens live — plugs directly into FastAPI SSE.</div>
               </div>
               <div class="roadmap-item">
-                <span class="roadmap-tag soon">v1</span>
-                <div class="roadmap-text"><strong>Hybrid retrieval.</strong> Dense + BM25 (sparse) search for better recall on keyword-heavy queries.</div>
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>Reranking stage.</strong> Optional post-retrieval reranker between the retriever and LLM. <code>CohereReranker</code> and <code>CrossEncoderReranker</code> out of the box. Custom rerankers via <code>BaseReranker</code>.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>RunMetrics &amp; observability.</strong> Per-run latency breakdown by stage, token counts, and chunks written/retrieved. Access via <code>result.metrics</code>.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>Hybrid retrieval.</strong> Dense + BM25 (sparse) fusion with configurable <code>alpha</code>. Retrieve large candidate sets with BM25; rerank precisely with dense. Requires <code>nexrag[bm25]</code>.</div>
               </div>
               <div class="roadmap-item">
                 <span class="roadmap-tag soon">v1</span>
-                <div class="roadmap-text"><strong>Remote vector databases.</strong> ChromaDB server, Pinecone, Weaviate — for teams running at scale.</div>
+                <div class="roadmap-text"><strong>Remote vector databases.</strong> Pinecone, Weaviate — for teams running at scale. ChromaDB server mode is already available.</div>
               </div>
               <div class="roadmap-item">
                 <span class="roadmap-tag soon">v1</span>
-                <div class="roadmap-text"><strong>More loaders.</strong> Word (.docx), HTML, Markdown — so you can point NexRAG at any document source.</div>
+                <div class="roadmap-text"><strong>More loaders.</strong> Word (.docx), HTML, Excel — so you can point NexRAG at any document source.</div>
               </div>
               <div class="roadmap-item">
                 <span class="roadmap-tag soon">v1</span>
@@ -368,7 +381,7 @@
 
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.2.0</div>
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.3.0</div>
       <div class="footer-links">
         <a href="index.html">Home</a>
         <a href="showcase.html">Showcase</a>
