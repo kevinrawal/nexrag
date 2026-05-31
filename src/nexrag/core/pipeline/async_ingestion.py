@@ -33,9 +33,11 @@ from nexrag.core.interfaces.vector_db import BaseVectorDB
 from nexrag.core.models.chunk import Chunk
 from nexrag.core.models.document import Document
 from nexrag.core.models.event import PipelineEvent
-from nexrag.core.pipeline.ingestion import IngestionResult, _compute_fingerprint
+from nexrag.core.models.metrics import RunMetrics
+from nexrag.core.pipeline.ingestion import IngestionResult, _compute_fingerprint, _stabilise_doc_ids
 from nexrag.exceptions import (
     ChunkError,
+    ConfigError,
     EmbedderError,
     EmbedderMismatchError,
     LoaderError,
@@ -75,6 +77,7 @@ class AsyncIngestionPipeline:
         on_conflict: str = "overwrite",
         observer: BaseObserver | None = None,
         embed_batch_size: int = _DEFAULT_EMBED_BATCH_SIZE,
+        valid_collections: frozenset[str] | None = None,
     ) -> None:
         self._loader = loader
         self._sanitizer = sanitizer or PassthroughSanitizer()
@@ -85,6 +88,7 @@ class AsyncIngestionPipeline:
         self._on_conflict = on_conflict
         self._observer = observer or NoOpObserver()
         self._embed_batch_size = embed_batch_size
+        self._valid_collections: frozenset[str] = valid_collections or frozenset([collection])
         # Per-collection locks: serializes only the DB read-check + write sequence.
         self._collection_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
@@ -92,6 +96,8 @@ class AsyncIngestionPipeline:
         self,
         data: Any,
         loader: BaseLoader | None = None,
+        metadata: dict[str, Any] | None = None,
+        collection: str | None = None,
     ) -> IngestionResult:
         """
         Sync entry point — wraps aingest() in asyncio.run() for non-async callers.
@@ -100,30 +106,38 @@ class AsyncIngestionPipeline:
         async_ingest() / aingest() there instead.
         """
         self._assert_no_running_loop()
-        return asyncio.run(self.aingest(data, loader))
+        return asyncio.run(self.aingest(data, loader, metadata, collection))
 
-    def ingest_documents(self, documents: list[Document]) -> IngestionResult:
+    def ingest_documents(
+        self, documents: list[Document], collection: str | None = None
+    ) -> IngestionResult:
         """Sync entry point for pre-built Documents — wraps aingest_documents()."""
         self._assert_no_running_loop()
-        return asyncio.run(self.aingest_documents(documents))
+        return asyncio.run(self.aingest_documents(documents, collection))
 
     async def aingest(
         self,
         data: Any,
         loader: BaseLoader | None = None,
+        metadata: dict[str, Any] | None = None,
+        collection: str | None = None,
     ) -> IngestionResult:
         """
         Async ingest: parse data through a loader, then run the pipeline.
 
         Args:
-            data:   Anything the loader accepts.
-            loader: Optional loader override for this call.
+            data:     Anything the loader accepts.
+            loader:   Optional loader override for this call.
+            metadata: Optional metadata merged into every Document after loading.
+                      Keys here overwrite loader-set defaults.
+                      Example: {"source": "contract-456", "tenant": "acme"}
 
         Returns:
             IngestionResult with counts and pipeline_id.
         """
         pipeline_id = str(uuid.uuid4())
         started_at = time.monotonic()
+        active_collection = self._resolve_collection(collection, pipeline_id)
 
         active_loader = loader or self._loader
         if active_loader is None:
@@ -137,7 +151,11 @@ class AsyncIngestionPipeline:
 
         try:
             documents = await self._run_loader(active_loader, data, pipeline_id)
-            return await self._run_from_documents(documents, pipeline_id, started_at)
+            if metadata:
+                documents = [doc.with_metadata(metadata) for doc in documents]
+            return await self._run_from_documents(
+                documents, pipeline_id, started_at, active_collection
+            )
         except PipelineError:
             raise
         except Exception as e:
@@ -152,6 +170,7 @@ class AsyncIngestionPipeline:
     async def aingest_documents(
         self,
         documents: list[Document],
+        collection: str | None = None,
     ) -> IngestionResult:
         """
         Async ingest pre-built Documents, skipping the loader stage.
@@ -164,6 +183,7 @@ class AsyncIngestionPipeline:
         """
         pipeline_id = str(uuid.uuid4())
         started_at = time.monotonic()
+        active_collection = self._resolve_collection(collection, pipeline_id)
 
         if not documents:
             raise PipelineError(
@@ -174,7 +194,9 @@ class AsyncIngestionPipeline:
             )
 
         try:
-            return await self._run_from_documents(documents, pipeline_id, started_at)
+            return await self._run_from_documents(
+                documents, pipeline_id, started_at, active_collection
+            )
         except PipelineError:
             raise
         except Exception as e:
@@ -193,28 +215,64 @@ class AsyncIngestionPipeline:
         documents: list[Document],
         pipeline_id: str,
         started_at: float,
+        collection: str,
     ) -> IngestionResult:
+        stage_latencies: dict[str, float] = {}
+        documents = _stabilise_doc_ids(documents)
+
         # Stages before DB: run WITHOUT the lock (safe, pure compute or read-only).
+        t = time.monotonic()
         chunks = await self._run_sanitizer_and_chunker(documents, pipeline_id)
+        stage_latencies["chunker"] = (time.monotonic() - t) * 1000
+
+        t = time.monotonic()
         embeddings = await self._run_embedder(chunks, pipeline_id)
+        stage_latencies["embedder"] = (time.monotonic() - t) * 1000
 
         # Narrow lock: only the DB read-check + write sequence is serialized per collection.
-        async with self._collection_locks[self._collection]:
-            await self._run_fingerprint_check(pipeline_id)
+        async with self._collection_locks[collection]:
+            t = time.monotonic()
+            await self._run_fingerprint_check(collection, pipeline_id)
+            stage_latencies["fingerprint_check"] = (time.monotonic() - t) * 1000
+
+            t = time.monotonic()
             chunks_to_write, embeddings_to_write = await self._run_idempotency_check(
-                chunks, embeddings, documents, pipeline_id
+                chunks, embeddings, documents, collection, pipeline_id
             )
+            stage_latencies["idempotency_check"] = (time.monotonic() - t) * 1000
+
+            t = time.monotonic()
             written = await self._run_vector_db_write(
-                chunks_to_write, embeddings_to_write, pipeline_id
+                chunks_to_write, embeddings_to_write, collection, pipeline_id
             )
+            stage_latencies["index_writer"] = (time.monotonic() - t) * 1000
 
         latency_ms = (time.monotonic() - started_at) * 1000
+
+        metrics = RunMetrics(
+            pipeline_id=pipeline_id,
+            total_latency_ms=latency_ms,
+            stage_latencies=stage_latencies,
+            chunks_written=written,
+        )
+        await self._emit(
+            pipeline_id,
+            "pipeline",
+            "completed",
+            metadata={
+                "total_latency_ms": round(latency_ms, 2),
+                "stage_latencies": {k: round(v, 2) for k, v in stage_latencies.items()},
+                "chunks_written": written,
+            },
+        )
         return IngestionResult(
             pipeline_id=pipeline_id,
             documents_loaded=len(documents),
             chunks_produced=len(chunks),
             chunks_written=written,
             latency_ms=latency_ms,
+            collection_used=collection,
+            metrics=metrics,
         )
 
     # Stage runners
@@ -341,18 +399,20 @@ class AsyncIngestionPipeline:
             "embedder",
             "completed",
             t,
-            {"chunk_count": len(chunks), "dimensions": len(embeddings[0]) if embeddings else 0},
+            {
+                "model": self._embedder.model_name,
+                "chunk_count": len(chunks),
+                "dimensions": len(embeddings[0]) if embeddings else 0,
+            },
         )
         return embeddings
 
-    async def _run_fingerprint_check(self, pipeline_id: str) -> None:
+    async def _run_fingerprint_check(self, collection: str, pipeline_id: str) -> None:
         await self._emit(pipeline_id, "fingerprint_check", "started")
         t = time.monotonic()
 
         try:
-            stored = await asyncio.to_thread(
-                self._vector_db.get_collection_metadata, self._collection
-            )
+            stored = await asyncio.to_thread(self._vector_db.get_collection_metadata, collection)
         except VectorDBError:
             raise
 
@@ -363,7 +423,7 @@ class AsyncIngestionPipeline:
         if not stored:
             await asyncio.to_thread(
                 self._vector_db.set_collection_metadata,
-                self._collection,
+                collection,
                 {
                     "embedding_model": self._embedder.model_name,
                     "embedding_dimensions": self._embedder.dimensions,
@@ -376,7 +436,7 @@ class AsyncIngestionPipeline:
                 raise EmbedderMismatchError(
                     stored_model=stored.get("embedding_model", "unknown"),
                     configured_model=self._embedder.model_name,
-                    collection=self._collection,
+                    collection=collection,
                     stage="fingerprint_check",
                     pipeline_id=pipeline_id,
                 )
@@ -388,6 +448,7 @@ class AsyncIngestionPipeline:
         chunks: list[Chunk],
         embeddings: list[list[float]],
         documents: list[Document],
+        collection: str,
         pipeline_id: str,
     ) -> tuple[list[Chunk], list[list[float]]]:
         await self._emit(pipeline_id, "idempotency_check", "started")
@@ -425,7 +486,7 @@ class AsyncIngestionPipeline:
                 existing = await self._vector_db.async_query(
                     embedding=embeddings[0],
                     top_k=10_000,
-                    collection_name=self._collection,
+                    collection_name=collection,
                     filters={"source": source},
                 )
                 existing_hashes.update(sc.chunk.content_hash for sc in existing)
@@ -466,9 +527,7 @@ class AsyncIngestionPipeline:
 
         if existing_hashes:
             try:
-                await asyncio.to_thread(
-                    self._vector_db.delete, list(existing_hashes), self._collection
-                )
+                await asyncio.to_thread(self._vector_db.delete, list(existing_hashes), collection)
             except VectorDBError:
                 raise
 
@@ -485,6 +544,7 @@ class AsyncIngestionPipeline:
         self,
         chunks: list[Chunk],
         embeddings: list[list[float]],
+        collection: str,
         pipeline_id: str,
     ) -> int:
         if not chunks:
@@ -493,7 +553,7 @@ class AsyncIngestionPipeline:
         await self._emit(pipeline_id, "index_writer", "started")
         t = time.monotonic()
         try:
-            await self._vector_db.async_upsert(chunks, embeddings, self._collection)
+            await self._vector_db.async_upsert(chunks, embeddings, collection)
         except VectorDBError:
             raise
         except Exception as e:
@@ -510,6 +570,19 @@ class AsyncIngestionPipeline:
         return len(chunks)
 
     # Helpers
+
+    def _resolve_collection(self, collection: str | None, pipeline_id: str) -> str:
+        if collection is None:
+            return self._collection
+        if collection not in self._valid_collections:
+            raise ConfigError(
+                f"Collection '{collection}' is not configured. "
+                f"Available: {sorted(self._valid_collections)}. "
+                "Add it to vector_db.collections in nexrag.yaml.",
+                stage="config",
+                component="async_ingestion",
+            )
+        return collection
 
     async def _emit(
         self,

@@ -34,7 +34,7 @@ def _mock_embedder(dims: int = 4):
 
 def _mock_llm(answer: str = "The answer is 42."):
     llm = MagicMock()
-    llm.generate.return_value = answer
+    llm.generate.return_value = (answer, None)
     return llm
 
 

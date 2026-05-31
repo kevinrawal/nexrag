@@ -31,6 +31,7 @@ def _make_scored_chunk(text: str = "chunk text", score: float = 0.9) -> MagicMoc
 def _make_async_query_pipeline(answer: str = "The answer.") -> AsyncQueryPipeline:
     embedder = MagicMock()
     embedder.async_embed_query = AsyncMock(return_value=[0.1, 0.2, 0.3])
+    embedder.model_name = "test-embedding-model"
 
     retriever = MagicMock()
     retriever.async_retrieve = AsyncMock(return_value=[_make_scored_chunk()])
@@ -39,7 +40,8 @@ def _make_async_query_pipeline(answer: str = "The answer.") -> AsyncQueryPipelin
     prompt_builder.build.return_value = "assembled prompt"
 
     llm = MagicMock()
-    llm.async_generate = AsyncMock(return_value=answer)
+    llm.async_generate = AsyncMock(return_value=(answer, None))
+    llm._model = "test-model"
 
     async def _async_stream(_prompt):
         for t in answer.split():

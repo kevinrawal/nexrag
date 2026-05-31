@@ -4,10 +4,11 @@ IngestionPipeline orchestrates the full ingestion flow.
 Two entry points:
 
     ingest(data, loader?)
-        For any data — file path, bytes, dict, list, raw text.
-        If loader is provided, uses it to parse data into Documents.
-        If loader is None, data must be a file path string and the
-        pipeline uses the loader configured in nexrag.yaml.
+        For any data — bytes, dict, list, raw text, or any structure
+        your loader accepts.
+        A loader must be available: either passed here or set at
+        construction. The loader converts data into Documents.
+        Raises PipelineError if no loader is configured.
 
     ingest_documents(documents)
         User has already produced Documents (fetched + parsed externally).
@@ -26,7 +27,7 @@ from __future__ import annotations
 import hashlib
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from nexrag.core.interfaces.chunker import BaseChunker
@@ -38,8 +39,10 @@ from nexrag.core.interfaces.vector_db import BaseVectorDB
 from nexrag.core.models.chunk import Chunk
 from nexrag.core.models.document import Document
 from nexrag.core.models.event import PipelineEvent
+from nexrag.core.models.metrics import RunMetrics
 from nexrag.exceptions import (
     ChunkError,
+    ConfigError,
     EmbedderError,
     EmbedderMismatchError,
     LoaderError,
@@ -74,6 +77,7 @@ class IngestionPipeline:
         sanitizer: BaseSanitizer | None = None,
         on_conflict: str = "overwrite",
         observer: BaseObserver | None = None,
+        valid_collections: frozenset[str] | None = None,
     ) -> None:
         self._loader = loader
         self._sanitizer = sanitizer or PassthroughSanitizer()
@@ -83,6 +87,7 @@ class IngestionPipeline:
         self._collection = collection
         self._on_conflict = on_conflict
         self._observer = observer or NoOpObserver()
+        self._valid_collections: frozenset[str] = valid_collections or frozenset([collection])
 
     # Public API
 
@@ -90,20 +95,24 @@ class IngestionPipeline:
         self,
         data: Any,
         loader: BaseLoader | None = None,
+        metadata: dict[str, Any] | None = None,
+        collection: str | None = None,
     ) -> IngestionResult:
         """
         Ingest any data by parsing it through a Loader first.
 
-        The loader receives data as-is — file path, bytes, dict, list,
-        raw text, or any other type the loader accepts.
-        The loader's job is to parse it into Documents.
-        NexRAG takes over from Documents onward.
+        The loader receives data as-is. NexRAG takes over from Documents onward.
 
         Args:
-            data:   Anything the loader accepts.
-            loader: Optional loader override for this call.
-                    Falls back to the loader passed at pipeline construction.
-                    If neither is set, raises PipelineError.
+            data:     Anything the loader accepts (bytes, str, tuple, etc.).
+            loader:   Optional loader override for this call. Falls back to the
+                      loader passed at pipeline construction. If neither is set,
+                      raises PipelineError.
+            metadata: Optional metadata merged into every Document produced by
+                      the loader. Keys in this dict overwrite loader-set defaults,
+                      so passing metadata={"source": "contract-456"} correctly
+                      sets the idempotency key regardless of loader defaults.
+                      Example: {"source": "s3://bucket/file.pdf", "tenant": "acme"}
 
         Returns:
             IngestionResult with counts and pipeline_id.
@@ -113,6 +122,7 @@ class IngestionPipeline:
         """
         pipeline_id = str(uuid.uuid4())
         started_at = time.monotonic()
+        active_collection = self._resolve_collection(collection, pipeline_id)
 
         active_loader = loader or self._loader
         if active_loader is None:
@@ -127,7 +137,9 @@ class IngestionPipeline:
 
         try:
             documents = self._run_loader(active_loader, data, pipeline_id)
-            return self._run_from_documents(documents, pipeline_id, started_at)
+            if metadata:
+                documents = [doc.with_metadata(metadata) for doc in documents]
+            return self._run_from_documents(documents, pipeline_id, started_at, active_collection)
         except PipelineError:
             raise
         except Exception as e:
@@ -139,11 +151,10 @@ class IngestionPipeline:
                 cause=e,
             ) from e
 
-    # TODO: can we combine this with the above ingest() method and just detect if the first argument is Documents or raw data?
-    # Maybe cleaner to keep separate for now, since they have different requirements and error cases.
     def ingest_documents(
         self,
         documents: list[Document],
+        collection: str | None = None,
     ) -> IngestionResult:
         """
         Ingest pre-built Documents, skipping the loader stage entirely.
@@ -166,17 +177,18 @@ class IngestionPipeline:
         """
         pipeline_id = str(uuid.uuid4())
         started_at = time.monotonic()
+        active_collection = self._resolve_collection(collection, pipeline_id)
 
         if not documents:
             raise PipelineError(
-                "ingest_documents() received an empty list. " "Provide at least one Document.",
+                "ingest_documents() received an empty list. Provide at least one Document.",
                 stage="pipeline",
                 component="ingestion",
                 pipeline_id=pipeline_id,
             )
 
         try:
-            return self._run_from_documents(documents, pipeline_id, started_at)
+            return self._run_from_documents(documents, pipeline_id, started_at, active_collection)
         except PipelineError:
             raise
         except Exception as e:
@@ -195,26 +207,65 @@ class IngestionPipeline:
         documents: list[Document],
         pipeline_id: str,
         started_at: float,
+        collection: str,
     ) -> IngestionResult:
         """
         Common path for both ingest() and ingest_documents().
         Receives Documents and runs all remaining stages.
         """
+        stage_latencies: dict[str, float] = {}
+        documents = _stabilise_doc_ids(documents)
+
+        t = time.monotonic()
         chunks = self._run_sanitizer_and_chunker(documents, pipeline_id)
+        stage_latencies["chunker"] = (time.monotonic() - t) * 1000
+
+        t = time.monotonic()
         embeddings = self._run_embedder(chunks, pipeline_id)
-        self._run_fingerprint_check(pipeline_id)
+        stage_latencies["embedder"] = (time.monotonic() - t) * 1000
+
+        t = time.monotonic()
+        self._run_fingerprint_check(collection, pipeline_id)
+        stage_latencies["fingerprint_check"] = (time.monotonic() - t) * 1000
+
+        t = time.monotonic()
         chunks_to_write, embeddings_to_write = self._run_idempotency_check(
-            chunks, embeddings, documents, pipeline_id
+            chunks, embeddings, documents, collection, pipeline_id
         )
-        written = self._run_vector_db_write(chunks_to_write, embeddings_to_write, pipeline_id)
+        stage_latencies["idempotency_check"] = (time.monotonic() - t) * 1000
+
+        t = time.monotonic()
+        written = self._run_vector_db_write(
+            chunks_to_write, embeddings_to_write, collection, pipeline_id
+        )
+        stage_latencies["index_writer"] = (time.monotonic() - t) * 1000
 
         latency_ms = (time.monotonic() - started_at) * 1000
+
+        metrics = RunMetrics(
+            pipeline_id=pipeline_id,
+            total_latency_ms=latency_ms,
+            stage_latencies=stage_latencies,
+            chunks_written=written,
+        )
+        self._emit(
+            pipeline_id,
+            "pipeline",
+            "completed",
+            metadata={
+                "total_latency_ms": round(latency_ms, 2),
+                "stage_latencies": {k: round(v, 2) for k, v in stage_latencies.items()},
+                "chunks_written": written,
+            },
+        )
         return IngestionResult(
             pipeline_id=pipeline_id,
             documents_loaded=len(documents),
             chunks_produced=len(chunks),
             chunks_written=written,
             latency_ms=latency_ms,
+            collection_used=collection,
+            metrics=metrics,
         )
 
     # Stage runners
@@ -342,18 +393,22 @@ class IngestionPipeline:
             "completed",
             t,
             {
+                "model": self._embedder.model_name,
                 "chunk_count": len(chunks),
                 "dimensions": len(embeddings[0]) if embeddings else 0,
             },
         )
         return embeddings
 
-    def _run_fingerprint_check(self, pipeline_id: str) -> None:
+    # TODO: can we optimize this part?
+    # instead of collecting all metadata["source"] and then querying the DB for each,
+    # can we do a single query with a $in filter on source?
+    def _run_fingerprint_check(self, collection: str, pipeline_id: str) -> None:
         self._emit(pipeline_id, "fingerprint_check", "started")
         t = time.monotonic()
 
         try:
-            stored = self._vector_db.get_collection_metadata(self._collection)
+            stored = self._vector_db.get_collection_metadata(collection)
         except VectorDBError:
             raise
 
@@ -363,7 +418,7 @@ class IngestionPipeline:
 
         if not stored:
             self._vector_db.set_collection_metadata(
-                self._collection,
+                collection,
                 {
                     "embedding_model": self._embedder.model_name,
                     "embedding_dimensions": self._embedder.dimensions,
@@ -376,7 +431,7 @@ class IngestionPipeline:
                 raise EmbedderMismatchError(
                     stored_model=stored.get("embedding_model", "unknown"),
                     configured_model=self._embedder.model_name,
-                    collection=self._collection,
+                    collection=collection,
                     stage="fingerprint_check",
                     pipeline_id=pipeline_id,
                 )
@@ -388,6 +443,7 @@ class IngestionPipeline:
         chunks: list[Chunk],
         embeddings: list[list[float]],
         documents: list[Document],
+        collection: str,
         pipeline_id: str,
     ) -> tuple[list[Chunk], list[list[float]]]:
         """
@@ -434,7 +490,7 @@ class IngestionPipeline:
                 existing = self._vector_db.query(
                     embedding=embeddings[0],
                     top_k=10_000,
-                    collection_name=self._collection,
+                    collection_name=collection,
                     filters={"source": source},
                 )
                 existing_hashes.update(sc.chunk.content_hash for sc in existing)
@@ -475,7 +531,7 @@ class IngestionPipeline:
 
         if existing_hashes:
             try:
-                self._vector_db.delete(list(existing_hashes), self._collection)
+                self._vector_db.delete(list(existing_hashes), collection)
             except VectorDBError:
                 raise
 
@@ -492,6 +548,7 @@ class IngestionPipeline:
         self,
         chunks: list[Chunk],
         embeddings: list[list[float]],
+        collection: str,
         pipeline_id: str,
     ) -> int:
         if not chunks:
@@ -500,7 +557,7 @@ class IngestionPipeline:
         self._emit(pipeline_id, "index_writer", "started")
         t = time.monotonic()
         try:
-            self._vector_db.upsert(chunks, embeddings, self._collection)
+            self._vector_db.upsert(chunks, embeddings, collection)
         except VectorDBError:
             raise
         except Exception as e:
@@ -521,6 +578,19 @@ class IngestionPipeline:
         return len(chunks)
 
     # Helpers
+
+    def _resolve_collection(self, collection: str | None, pipeline_id: str) -> str:
+        if collection is None:
+            return self._collection
+        if collection not in self._valid_collections:
+            raise ConfigError(
+                f"Collection '{collection}' is not configured. "
+                f"Available: {sorted(self._valid_collections)}. "
+                "Add it to vector_db.collections in nexrag.yaml.",
+                stage="config",
+                component="ingestion",
+            )
+        return collection
 
     def _emit(
         self,
@@ -555,6 +625,7 @@ class IngestionResult:
         chunks_produced:  Total chunks after chunking all documents.
         chunks_written:   Chunks actually written (0 if skipped by idempotency).
         latency_ms:       Total wall-clock time for the full pipeline.
+        collection_used:  Which vector collection was written to.
     """
 
     pipeline_id: str
@@ -562,12 +633,15 @@ class IngestionResult:
     chunks_produced: int
     chunks_written: int
     latency_ms: float
+    collection_used: str = ""
+    metrics: RunMetrics | None = field(default=None)
 
     def __repr__(self) -> str:
         return (
             f"IngestionResult(pipeline_id={self.pipeline_id!r}, "
             f"docs={self.documents_loaded}, chunks={self.chunks_produced}, "
-            f"written={self.chunks_written}, latency_ms={self.latency_ms:.1f})"
+            f"written={self.chunks_written}, latency_ms={self.latency_ms:.1f}, "
+            f"collection={self.collection_used!r})"
         )
 
 
@@ -577,3 +651,26 @@ class IngestionResult:
 def _compute_fingerprint(model_name: str, dimensions: int) -> str:
     """Stable hash of model identity. Detects embedding model changes."""
     return hashlib.sha256(f"{model_name}:{dimensions}".encode()).hexdigest()
+
+
+def _stabilise_doc_ids(documents: list[Document]) -> list[Document]:
+    """
+    Derive a deterministic doc_id from metadata["source"] when available.
+
+    Without this, Document generates a fresh UUID on every instantiation, so
+    parent_doc_id stored in chunks changes on every re-ingest of the same file.
+    A stable doc_id means parent_doc_id in ChromaDB is consistent across ingestions,
+    which makes per-document chunk queries and citation attribution reliable.
+
+    Documents without a source keep their random UUID — they are ephemeral by
+    design (no source = no idempotency, always written fresh).
+    """
+    out: list[Document] = []
+    for doc in documents:
+        source = doc.metadata.get("source")
+        if source:
+            stable_id = hashlib.sha256(str(source).encode()).hexdigest()[:32]
+            if doc.doc_id != stable_id:
+                doc = Document(content=doc.content, metadata=doc.metadata, doc_id=stable_id)
+        out.append(doc)
+    return out

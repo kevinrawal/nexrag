@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,8 +23,6 @@ def _make_mock_reader(
 
     if metadata is not None:
         meta = MagicMock()
-        # Explicitly default all known PDF metadata attributes to None so that
-        # MagicMock doesn't auto-create truthy objects for unset fields.
         for field in [
             "author",
             "title",
@@ -45,30 +44,20 @@ def _make_mock_reader(
 
 
 class TestPDFLoader:
-    def test_load_path_returns_one_document(self, tmp_path):
-        pdf_file = tmp_path / "test.pdf"
-        pdf_file.write_bytes(b"%PDF-1.4 fake")
-
+    def test_load_bytes_returns_one_document(self):
         mock_reader = _make_mock_reader(["Page one text.", "Page two text."])
-
-        with patch("nexrag.loaders.pdf.PDFLoader._open", return_value=(mock_reader, str(pdf_file))):
-            loader = PDFLoader()
-            docs = loader._extract(mock_reader, str(pdf_file))
-
+        loader = PDFLoader(source_override="test.pdf")
+        # Test via _extract directly — _open is tested separately
+        docs = loader._extract(mock_reader, "test.pdf")
         assert len(docs) == 1
         assert "Page one text." in docs[0].content
         assert "Page two text." in docs[0].content
 
-    def test_metadata_source_is_path(self, tmp_path):
-        pdf_file = tmp_path / "resume.pdf"
-        pdf_file.write_bytes(b"%PDF fake")
+    def test_metadata_source_is_set(self):
         mock_reader = _make_mock_reader(["Resume content."])
-
-        loader = PDFLoader()
-        source = str(pdf_file.resolve())
-        docs = loader._extract(mock_reader, source)
-
-        assert docs[0].metadata["source"] == source
+        loader = PDFLoader(source_override="s3://bucket/resume.pdf")
+        docs = loader._extract(mock_reader, "s3://bucket/resume.pdf")
+        assert docs[0].metadata["source"] == "s3://bucket/resume.pdf"
 
     def test_metadata_page_count(self):
         mock_reader = _make_mock_reader(["p1", "p2", "p3"])
@@ -76,32 +65,33 @@ class TestPDFLoader:
         docs = loader._extract(mock_reader, "test.pdf")
         assert docs[0].metadata["page_count"] == 3
 
+    def test_path_input_raises_loader_error(self):
+        loader = PDFLoader()
+        with pytest.raises(LoaderError, match="expects bytes"):
+            loader.load(Path("/any/path.pdf"))
+
+    def test_string_path_raises_loader_error(self):
+        loader = PDFLoader()
+        with pytest.raises(LoaderError, match="expects bytes"):
+            loader.load("file.pdf")
+
+    def test_wrong_type_raises_loader_error(self):
+        loader = PDFLoader()
+        with pytest.raises(LoaderError):
+            loader.load(12345)  # type: ignore
+
     def test_empty_pdf_raises_loader_error(self):
         mock_reader = _make_mock_reader(["", "   "])
         loader = PDFLoader()
         with pytest.raises(LoaderError, match="no extractable text"):
             loader._extract(mock_reader, "empty.pdf")
 
-    def test_encrypted_pdf_raises_loader_error(self, tmp_path):
-        pdf_file = tmp_path / "enc.pdf"
-        pdf_file.write_bytes(b"%PDF fake encrypted")
-
+    def test_encrypted_pdf_raises_loader_error(self):
         mock_reader = _make_mock_reader([])
         mock_reader.is_encrypted = True
-
         loader = PDFLoader()
         with pytest.raises(LoaderError, match="encrypted"):
-            loader._open(str(pdf_file), lambda _: mock_reader)
-
-    def test_nonexistent_file_raises_loader_error(self):
-        loader = PDFLoader()
-        with pytest.raises(LoaderError, match="not found"):
-            loader._open("/does/not/exist.pdf", MagicMock())
-
-    def test_wrong_type_raises_loader_error(self):
-        loader = PDFLoader()
-        with pytest.raises(LoaderError):
-            loader._open(12345, MagicMock())  # type: ignore
+            loader._open(b"%PDF fake encrypted", lambda _: mock_reader)
 
     def test_source_override(self):
         mock_reader = _make_mock_reader(["content"])
@@ -120,6 +110,21 @@ class TestPDFLoader:
         with patch.dict("sys.modules", {"pypdf": None}):
             with pytest.raises((LoaderError, ImportError)):
                 loader.load(b"fake bytes")
+
+    def test_no_source_when_source_override_not_set(self):
+        # Without source_override, source is None — idempotency disabled, always writes
+        mock_reader = _make_mock_reader(["content"])
+        mock_reader.is_encrypted = False
+        loader = PDFLoader()
+        _, source = loader._open(b"%PDF fake", lambda _: mock_reader)
+        assert source is None
+
+    def test_source_override_is_used_when_set(self):
+        mock_reader = _make_mock_reader(["content"])
+        mock_reader.is_encrypted = False
+        loader = PDFLoader(source_override="s3://bucket/doc.pdf")
+        _, source = loader._open(b"%PDF fake", lambda _: mock_reader)
+        assert source == "s3://bucket/doc.pdf"
 
 
 class TestParsePdfDate:

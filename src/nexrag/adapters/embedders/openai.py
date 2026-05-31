@@ -46,7 +46,7 @@ class OpenAIEmbedder(BaseEmbedder):
         self._client: Any = self._build_client(api_key, base_url)
         self._dimensions: int | None = None
 
-    # ── BaseEmbedder properties ───────────────────────────────────────────────
+    # BaseEmbedder properties
 
     @property
     def model_name(self) -> str:

@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from nexrag.core.interfaces.llm import BaseLLM
+from nexrag.core.models.metrics import TokenUsage
 from nexrag.exceptions import LLMError, LLMTimeoutError
 
 
@@ -43,12 +44,16 @@ class OllamaLLM(BaseLLM):
         self._max_tokens = max_tokens
         self._timeout = timeout
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str) -> tuple[str, TokenUsage | None]:
         """
-        Send the prompt to Ollama and return the complete response.
+        Send the prompt to Ollama and return (response_text, None).
+
+        Ollama does not reliably expose token counts across all models, so
+        token_usage is always None. Use OpenAILLM or AnthropicLLM when you
+        need token tracking.
 
         Returns:
-            The model response text.
+            (response_text, None)
 
         Raises:
             LLMTimeoutError: On timeout.
@@ -65,7 +70,7 @@ class OllamaLLM(BaseLLM):
                     "num_predict": self._max_tokens,
                 },
             )
-            return str(response["message"]["content"])
+            return str(response["message"]["content"]), None
         except Exception as e:
             self._map_exception(e)
             raise  # unreachable
