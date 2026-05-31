@@ -31,11 +31,12 @@ from nexrag.core.models.chunk import ScoredChunk
 class BaseReranker(ABC):
     """Abstract base class for all NexRAG reranker adapters."""
 
-    _top_n: int  # must be set by every concrete subclass __init__
+    def __init__(self, top_n: int) -> None:
+        self._top_n = top_n
 
     @property
     def top_n(self) -> int:
-        """Number of chunks to return after reranking. Subclasses set this at init."""
+        """Number of chunks to return after reranking."""
         return self._top_n
 
     @abstractmethod

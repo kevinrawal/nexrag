@@ -20,13 +20,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from nexrag.core.interfaces.retriever import BaseRetriever
+from nexrag.core.interfaces.sparse_retriever import BaseSparseRetriever
 from nexrag.core.interfaces.vector_db import BaseVectorDB
 from nexrag.core.models.chunk import ScoredChunk
 from nexrag.exceptions import RetrieverError
 
 
-class BM25Retriever(BaseRetriever):
+class BM25Retriever(BaseSparseRetriever):
     """
     Retrieves chunks using BM25 keyword scoring over the full collection corpus.
 

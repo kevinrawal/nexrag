@@ -4,10 +4,11 @@ IngestionPipeline orchestrates the full ingestion flow.
 Two entry points:
 
     ingest(data, loader?)
-        For any data — file path, bytes, dict, list, raw text.
-        If loader is provided, uses it to parse data into Documents.
-        If loader is None, data must be a file path string and the
-        pipeline uses the loader configured in nexrag.yaml.
+        For any data — bytes, dict, list, raw text, or any structure
+        your loader accepts.
+        A loader must be available: either passed here or set at
+        construction. The loader converts data into Documents.
+        Raises PipelineError if no loader is configured.
 
     ingest_documents(documents)
         User has already produced Documents (fetched + parsed externally).
@@ -399,6 +400,9 @@ class IngestionPipeline:
         )
         return embeddings
 
+    # TODO: can we optimize this part?
+    # instead of collecting all metadata["source"] and then querying the DB for each,
+    # can we do a single query with a $in filter on source?
     def _run_fingerprint_check(self, collection: str, pipeline_id: str) -> None:
         self._emit(pipeline_id, "fingerprint_check", "started")
         t = time.monotonic()

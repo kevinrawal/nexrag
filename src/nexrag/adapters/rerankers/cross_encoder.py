@@ -39,8 +39,8 @@ class CrossEncoderReranker(BaseReranker):
         top_n: int = 5,
         device: str | None = None,
     ) -> None:
+        super().__init__(top_n)
         self._model_name = model
-        self._top_n = top_n
         self._device = device
         self._encoder: Any = self._build_encoder()
 

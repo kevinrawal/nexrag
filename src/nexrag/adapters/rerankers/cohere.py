@@ -33,9 +33,9 @@ class CohereReranker(BaseReranker):
         api_key: str | None = None,
         top_n: int = 5,
     ) -> None:
+        super().__init__(top_n)
         self._model = model
         self._api_key = api_key
-        self._top_n = top_n
         self._client: Any = self._build_client()
 
     def rerank(

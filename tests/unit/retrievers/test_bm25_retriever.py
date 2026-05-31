@@ -7,7 +7,7 @@ import pytest
 
 from nexrag.adapters.vector_dbs.chroma import ChromaDBAdapter
 from nexrag.core.models.chunk import Chunk
-from nexrag.retrievers.bm25 import BM25Retriever, _normalize_scores
+from nexrag.retrievers.sparse.bm25 import BM25Retriever, _normalize_scores
 
 
 def _make_chunk(text: str, source: str = "test.pdf") -> Chunk:

@@ -18,6 +18,7 @@ from nexrag.core.config.schema import (
     RerankerConfig,
     RetrieverConfig,
     SanitizerConfig,
+    SparseConfig,
     VectorDBConfig,
 )
 from nexrag.core.interfaces.chunker import BaseChunker
@@ -29,10 +30,11 @@ from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
 from nexrag.core.interfaces.reranker import BaseReranker
 from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.interfaces.sanitizer import BaseSanitizer
+from nexrag.core.interfaces.sparse_retriever import BaseSparseRetriever
 from nexrag.core.interfaces.vector_db import BaseVectorDB
 from nexrag.core.pipeline.async_ingestion import AsyncIngestionPipeline
 from nexrag.core.pipeline.async_query import AsyncQueryPipeline
-from nexrag.core.pipeline.ingestion import IngestionPipeline, IngestionResult  # noqa: F401
+from nexrag.core.pipeline.ingestion import IngestionPipeline
 from nexrag.core.pipeline.query import QueryPipeline
 from nexrag.exceptions import ConfigError
 from nexrag.loaders.auto import AutoLoader
@@ -42,7 +44,7 @@ def wire(
     config: NexRAGConfig,
 ) -> tuple[IngestionPipeline | AsyncIngestionPipeline, QueryPipeline | AsyncQueryPipeline]:
     """
-    Instantiate all components from config and wire them into both pipelines.
+    Instantiate all components from config and wire them into pipelines.
 
     When config.mode is "async", returns AsyncIngestionPipeline + AsyncQueryPipeline.
     When config.mode is "sync" (default), returns the standard sync pipelines.
@@ -289,6 +291,30 @@ def _build_vector_db(config: VectorDBConfig) -> BaseVectorDB:
     )
 
 
+def _build_sparse_retriever(config: SparseConfig, vector_db: BaseVectorDB) -> BaseSparseRetriever:
+    if config.provider == "custom":
+        if not config.class_path:
+            raise ConfigError(
+                "retriever.sparse.class is required when retriever.sparse.provider is 'custom'.",
+                stage="config",
+                component="sparse_retriever",
+            )
+        return resolve_class(  # type: ignore[type-abstract]
+            config.class_path, BaseSparseRetriever, config.params, stage="sparse_retriever"
+        )
+
+    if config.provider == "bm25":
+        from nexrag.retrievers.sparse.bm25 import BM25Retriever
+
+        return BM25Retriever(vector_db=vector_db)
+
+    raise ConfigError(
+        f"Unknown sparse retriever provider: {config.provider!r}. Supported: bm25, custom",
+        stage="config",
+        component="sparse_retriever",
+    )
+
+
 def _build_retriever(config: RetrieverConfig, vector_db: BaseVectorDB) -> BaseRetriever:
     if config.provider == "custom":
         if not config.class_path:
@@ -304,17 +330,24 @@ def _build_retriever(config: RetrieverConfig, vector_db: BaseVectorDB) -> BaseRe
 
         return DenseRetriever(vector_db=vector_db)
 
+    if config.provider == "bm25":
+        from nexrag.retrievers.sparse.bm25 import BM25Retriever
+
+        return BM25Retriever(vector_db=vector_db)
+
     if config.provider == "hybrid":
         from nexrag.retrievers.hybrid import HybridRetriever
 
+        sparse = _build_sparse_retriever(config.sparse, vector_db)
         return HybridRetriever(
             vector_db=vector_db,
             alpha=config.alpha,
-            bm25_top_k=config.bm25_top_k,
+            sparse_top_k=config.sparse_top_k,
+            sparse=sparse,
         )
 
     raise ConfigError(
-        f"Unknown retriever provider: {config.provider!r}. Supported: dense, hybrid, custom",
+        f"Unknown retriever provider: {config.provider!r}. Supported: dense, hybrid, bm25, custom",
         stage="config",
         component="retriever",
     )

@@ -140,14 +140,34 @@ class IngestionConfig(BaseModel):
 # Query sub-configs
 
 
+class SparseConfig(BaseModel):
+    """Sparse retriever component config — used inside RetrieverConfig for hybrid mode."""
+
+    provider: Literal["bm25", "custom"] = "bm25"
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def class_required_for_custom(self) -> SparseConfig:
+        if self.provider == "custom" and not self.class_path:
+            raise ValueError(
+                "retriever.sparse.class is required when retriever.sparse.provider is 'custom'. "
+                "Provide a dotted class path: myproject.retrievers.MySparseRetriever"
+            )
+        return self
+
+
 class RetrieverConfig(BaseModel):
-    provider: Literal["dense", "hybrid", "custom"] = "dense"
+    provider: Literal["dense", "hybrid", "bm25", "custom"] = "dense"
     top_k: int = 5
     score_threshold: float = 0.0
     metadata_filter: dict[str, Any] | None = None
     # hybrid-specific — ignored when provider != "hybrid"
     alpha: float = 0.7
-    bm25_top_k: int | None = None
+    sparse_top_k: int | None = None
+    sparse: SparseConfig = Field(default_factory=SparseConfig)
     class_path: str | None = Field(default=None, alias="class")
     params: dict[str, Any] = Field(default_factory=dict)
 

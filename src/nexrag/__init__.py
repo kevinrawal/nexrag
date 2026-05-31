@@ -56,7 +56,7 @@ class NexRAG:
     @classmethod
     def from_config(cls, path: str | Path = "nexrag.yaml") -> NexRAG:
         """
-        Load nexrag.yaml, resolve all components, wire both pipelines.
+        Load a yaml, resolve all components, wire pipelines.
 
         Args:
             path: Path to the YAML config file. Resolved relative to CWD.

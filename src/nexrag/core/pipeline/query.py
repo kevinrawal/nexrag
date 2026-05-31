@@ -1,7 +1,7 @@
 """
 QueryPipeline orchestrates the full query flow:
 
-    User Query → Embedder → Retriever → PromptBuilder → LLM → ResponseBuilder
+    User Query → Embedder → Retriever → Reranker → PromptBuilder → LLM → ResponseBuilder
 """
 
 from __future__ import annotations
@@ -37,9 +37,10 @@ class QueryPipeline:
     Stages (in order):
         1. Embedder       — embeds the user query string → vector
         2. Retriever      — semantic search → list[ScoredChunk]
-        3. PromptBuilder  — assembles prompt from query + chunks
-        4. LLM            — generates response from prompt
-        5. ResponseBuilder— wraps everything into a PipelineResult
+        3. Reranker        — optional, re-scores and re-ranks retrieved chunks
+        4. PromptBuilder  — assembles prompt from query + chunks
+        5. LLM            — generates response from prompt
+        6. ResponseBuilder— wraps everything into a PipelineResult
 
     Args:
         embedder:        Embeds the user query. Must be the same model used
@@ -52,6 +53,7 @@ class QueryPipeline:
         top_k:           Maximum chunks to retrieve. Default: 5.
         score_threshold: Minimum similarity score for retrieved chunks. Default: 0.0.
         observer:        Optional. Defaults to NoOpObserver.
+        reranker:        Optional. Re-scores and re-ranks retrieved chunks.
     """
 
     def __init__(
