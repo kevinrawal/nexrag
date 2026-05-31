@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "nexrag"
-version = "0.2.0"
+version = "0.3.0"
 description = "Framework-agnostic RAG pipeline SDK. Plug in any component, swap any stage, configure everything in YAML"
 readme = "README.md"
 license = { text = "MIT" }
@@ -74,6 +74,15 @@ html = [
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
 ]
+bm25 = [
+    "rank-bm25>=0.2",
+]
+cohere = [
+    "cohere>=5.0",
+]
+cross-encoder = [
+    "sentence-transformers>=2.7",
+]
 
 # Convenience bundles
 all-providers = [
@@ -102,6 +111,7 @@ dev = [
     "mypy>=1.10",       # type checker
     "pre-commit>=3.7",
     "types-pyyaml",
+    "rank-bm25>=0.2",   # BM25Retriever tests run the real algorithm, not a mock
 ]
 
 [project.urls]
@@ -139,6 +149,11 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 mypy_path = "src"
+
+# Optional deps without type stubs — suppress regardless of install state
+[[tool.mypy.overrides]]
+module = ["rank_bm25", "rank_bm25.*"]
+ignore_missing_imports = true
 
 # Pytest
 

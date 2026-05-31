@@ -37,10 +37,10 @@ def _make_fake_anthropic():
 
 
 class TestAnthropicLLM:
-    def test_generate_returns_string(self):
+    def test_generate_returns_tuple(self):
         llm = _make_llm("This is the answer.")
-        result = llm.generate("What is NexRAG?")
-        assert result == "This is the answer."
+        text, usage = llm.generate("What is NexRAG?")
+        assert text == "This is the answer."
 
     def test_generate_prompt_with_separator_passes_system(self):
         llm = _make_llm("ok")
@@ -105,8 +105,8 @@ class TestAnthropicLLM:
             llm = AnthropicLLM(api_key="sk-ant-test")
             llm._client = mock_client
             with patch("time.sleep"):
-                result = llm.generate("hello")
-        assert result == "Answer."
+                text, _ = llm.generate("hello")
+        assert text == "Answer."
 
     def test_retries_exhausted_raises_llm_rate_limit_error(self):
         fake_anthropic = _make_fake_anthropic()

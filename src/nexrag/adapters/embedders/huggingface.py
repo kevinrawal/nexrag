@@ -40,7 +40,7 @@ class HuggingFaceEmbedder(BaseEmbedder):
         self._client: Any = self._build_client()
         self._dimensions: int | None = None
 
-    # ── BaseEmbedder properties ───────────────────────────────────────────────
+    # BaseEmbedder properties
 
     @property
     def model_name(self) -> str:
@@ -52,7 +52,7 @@ class HuggingFaceEmbedder(BaseEmbedder):
             self._dimensions = len(self.embed_query(" "))
         return self._dimensions
 
-    # ── Public methods ────────────────────────────────────────────────────────
+    # Public methods
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """
@@ -89,7 +89,7 @@ class HuggingFaceEmbedder(BaseEmbedder):
             self._dimensions = len(vec)
         return vec
 
-    # ── Private helpers ───────────────────────────────────────────────────────
+    # Private helpers
 
     def _build_client(self) -> Any:
         try:

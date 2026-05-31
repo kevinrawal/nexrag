@@ -68,6 +68,9 @@ class ConsoleObserver(BaseObserver):
     def _should_emit(self, event: PipelineEvent) -> bool:
         if event.status == "failed":
             return self._level_rank <= _FAILED_LEVEL
+        if event.stage == "pipeline" and event.status == "completed":
+            # Pipeline summary always shown at INFO+
+            return self._level_rank <= _LEVEL_RANK["INFO"]
         if event.status == "completed":
             return self._level_rank <= _LEVEL_RANK["INFO"]
         # "started" events are DEBUG only
@@ -94,6 +97,24 @@ class ConsoleObserver(BaseObserver):
     @staticmethod
     def _to_text(event: PipelineEvent) -> str:
         ts = datetime.now(tz=UTC).strftime("%H:%M:%S")
+
+        # Pipeline summary line — one-liner per run at run end
+        if event.stage == "pipeline" and event.status == "completed":
+            parts = [
+                f"[{ts}]",
+                f"[{'SUMMARY':9s}]",
+                f"{'pipeline':<20s}",
+                f"pid={event.pipeline_id[:8]}",
+                f"total={event.metadata.get('total_latency_ms', 0):.1f}ms",
+            ]
+            if tu := event.metadata.get("token_usage"):
+                parts.append(f"tokens={tu['total_tokens']}")
+            if cw := event.metadata.get("chunks_written"):
+                parts.append(f"written={cw}")
+            if cr := event.metadata.get("chunks_retrieved"):
+                parts.append(f"retrieved={cr}")
+            return "  ".join(parts)
+
         parts = [
             f"[{ts}]",
             f"[{event.status.upper():9s}]",
@@ -103,6 +124,13 @@ class ConsoleObserver(BaseObserver):
         if event.duration_ms > 0:
             parts.append(f"{event.duration_ms:.1f}ms")
         if event.metadata:
-            meta_str = "  ".join(f"{k}={v}" for k, v in event.metadata.items())
-            parts.append(meta_str)
+            # For LLM completed events, show token stats prominently
+            if event.stage == "llm" and event.status == "completed":
+                if tu := event.metadata.get("token_usage"):
+                    parts.append(f"tokens={tu['total_tokens']}")
+                if model := event.metadata.get("model"):
+                    parts.append(f"model={model}")
+            else:
+                meta_str = "  ".join(f"{k}={v}" for k, v in event.metadata.items())
+                parts.append(meta_str)
         return "  ".join(parts)

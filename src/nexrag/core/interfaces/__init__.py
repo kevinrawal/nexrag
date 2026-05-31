@@ -8,6 +8,7 @@ from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
 from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
 from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.interfaces.sanitizer import BaseSanitizer, PassthroughSanitizer
+from nexrag.core.interfaces.sparse_retriever import BaseSparseRetriever
 from nexrag.core.interfaces.vector_db import BaseVectorDB
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "BaseObserver",
     "BasePromptBuilder",
     "BaseRetriever",
+    "BaseSparseRetriever",
     "BaseSanitizer",
     "BaseVectorDB",
     "NoOpObserver",

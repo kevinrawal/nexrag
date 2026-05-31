@@ -1,7 +1,7 @@
 """
 QueryPipeline orchestrates the full query flow:
 
-    User Query → Embedder → Retriever → PromptBuilder → LLM → ResponseBuilder
+    User Query → Embedder → Retriever → Reranker → PromptBuilder → LLM → ResponseBuilder
 """
 
 from __future__ import annotations
@@ -15,9 +15,11 @@ from nexrag.core.interfaces.embedder import BaseEmbedder
 from nexrag.core.interfaces.llm import BaseLLM
 from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
 from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
+from nexrag.core.interfaces.reranker import BaseReranker
 from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.models.chunk import ScoredChunk
 from nexrag.core.models.event import PipelineEvent
+from nexrag.core.models.metrics import RunMetrics, TokenUsage
 from nexrag.core.models.result import PipelineResult, Source
 from nexrag.exceptions import (
     EmbedderError,
@@ -35,9 +37,10 @@ class QueryPipeline:
     Stages (in order):
         1. Embedder       — embeds the user query string → vector
         2. Retriever      — semantic search → list[ScoredChunk]
-        3. PromptBuilder  — assembles prompt from query + chunks
-        4. LLM            — generates response from prompt
-        5. ResponseBuilder— wraps everything into a PipelineResult
+        3. Reranker        — optional, re-scores and re-ranks retrieved chunks
+        4. PromptBuilder  — assembles prompt from query + chunks
+        5. LLM            — generates response from prompt
+        6. ResponseBuilder— wraps everything into a PipelineResult
 
     Args:
         embedder:        Embeds the user query. Must be the same model used
@@ -50,6 +53,7 @@ class QueryPipeline:
         top_k:           Maximum chunks to retrieve. Default: 5.
         score_threshold: Minimum similarity score for retrieved chunks. Default: 0.0.
         observer:        Optional. Defaults to NoOpObserver.
+        reranker:        Optional. Re-scores and re-ranks retrieved chunks.
     """
 
     def __init__(
@@ -62,6 +66,7 @@ class QueryPipeline:
         top_k: int = 5,
         score_threshold: float = 0.0,
         observer: BaseObserver | None = None,
+        reranker: BaseReranker | None = None,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
@@ -71,6 +76,7 @@ class QueryPipeline:
         self._top_k = top_k
         self._score_threshold = score_threshold
         self._observer = observer or NoOpObserver()
+        self._reranker = reranker
 
     # Public API
 
@@ -107,8 +113,13 @@ class QueryPipeline:
         active_top_k = top_k if top_k is not None else self._top_k
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
 
+        stage_latencies: dict[str, float] = {}
         try:
+            t = time.monotonic()
             query_embedding = self._run_query_embedder(query, pipeline_id)
+            stage_latencies["embedder"] = (time.monotonic() - t) * 1000
+
+            t = time.monotonic()
             chunks = self._run_retriever(
                 query,
                 query_embedding,
@@ -118,8 +129,20 @@ class QueryPipeline:
                 metadata_filter,
                 pipeline_id,
             )
+            stage_latencies["retriever"] = (time.monotonic() - t) * 1000
+
+            if self._reranker is not None:
+                t = time.monotonic()
+                chunks = self._run_reranker(query, chunks, pipeline_id)
+                stage_latencies["reranker"] = (time.monotonic() - t) * 1000
+
+            t = time.monotonic()
             prompt = self._run_prompt_builder(query, chunks, pipeline_id)
-            answer = self._run_llm(prompt, pipeline_id)
+            stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
+
+            t = time.monotonic()
+            answer, token_usage = self._run_llm(prompt, pipeline_id)
+            stage_latencies["llm"] = (time.monotonic() - t) * 1000
         except PipelineError:
             raise
         except Exception as e:
@@ -140,6 +163,8 @@ class QueryPipeline:
             collection=active_collection,
             latency_ms=latency_ms,
             pipeline_id=pipeline_id,
+            token_usage=token_usage,
+            stage_latencies=stage_latencies,
         )
 
     def stream(
@@ -176,17 +201,30 @@ class QueryPipeline:
         active_top_k = top_k if top_k is not None else self._top_k
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
 
-        query_embedding = self._run_query_embedder(query, pipeline_id)
-        chunks = self._run_retriever(
-            query,
-            query_embedding,
-            active_collection,
-            active_top_k,
-            active_threshold,
-            metadata_filter,
-            pipeline_id,
-        )
-        prompt = self._run_prompt_builder(query, chunks, pipeline_id)
+        try:
+            query_embedding = self._run_query_embedder(query, pipeline_id)
+            chunks = self._run_retriever(
+                query,
+                query_embedding,
+                active_collection,
+                active_top_k,
+                active_threshold,
+                metadata_filter,
+                pipeline_id,
+            )
+            if self._reranker is not None:
+                chunks = self._run_reranker(query, chunks, pipeline_id)
+            prompt = self._run_prompt_builder(query, chunks, pipeline_id)
+        except PipelineError:
+            raise
+        except Exception as e:
+            raise PipelineError(
+                f"Unexpected error during streaming pipeline: {e}",
+                stage="pipeline",
+                component="query",
+                pipeline_id=pipeline_id,
+                cause=e,
+            ) from e
 
         self._emit(pipeline_id, "llm", "started")
         t = time.monotonic()
@@ -226,7 +264,7 @@ class QueryPipeline:
             "embedder",
             "completed",
             t,
-            {"dimensions": len(embedding)},
+            {"model": self._embedder.model_name, "dimensions": len(embedding)},
         )
         return embedding
 
@@ -270,6 +308,35 @@ class QueryPipeline:
         )
         return chunks
 
+    def _run_reranker(
+        self,
+        query: str,
+        chunks: list[ScoredChunk],
+        pipeline_id: str,
+    ) -> list[ScoredChunk]:
+        assert self._reranker is not None
+        self._emit(pipeline_id, "reranker", "started")
+        t = time.monotonic()
+        top_n = min(self._reranker.top_n, len(chunks))
+        try:
+            reranked = self._reranker.rerank(query, chunks, top_n)
+        except Exception as e:
+            raise PipelineError(
+                "Reranker failed to re-score chunks.",
+                stage="reranker",
+                component=type(self._reranker).__name__,
+                pipeline_id=pipeline_id,
+                cause=e,
+            ) from e
+        self._emit(
+            pipeline_id,
+            "reranker",
+            "completed",
+            t,
+            {"chunks_in": len(chunks), "chunks_out": len(reranked), "top_n": top_n},
+        )
+        return reranked
+
     def _run_prompt_builder(self, query: str, chunks: list[ScoredChunk], pipeline_id: str) -> str:
         self._emit(pipeline_id, "prompt_builder", "started")
         t = time.monotonic()
@@ -294,11 +361,11 @@ class QueryPipeline:
         )
         return prompt
 
-    def _run_llm(self, prompt: str, pipeline_id: str) -> str:
+    def _run_llm(self, prompt: str, pipeline_id: str) -> tuple[str, TokenUsage | None]:
         self._emit(pipeline_id, "llm", "started")
         t = time.monotonic()
         try:
-            answer = self._llm.generate(prompt)
+            answer, token_usage = self._llm.generate(prompt)
         except LLMError:
             raise
         except Exception as e:
@@ -309,8 +376,18 @@ class QueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        self._emit(pipeline_id, "llm", "completed", t, {"response_length": len(answer)})
-        return answer
+        meta: dict[str, Any] = {
+            "model": getattr(self._llm, "_model", None),
+            "response_length": len(answer),
+        }
+        if token_usage is not None:
+            meta["token_usage"] = {
+                "prompt_tokens": token_usage.prompt_tokens,
+                "completion_tokens": token_usage.completion_tokens,
+                "total_tokens": token_usage.total_tokens,
+            }
+        self._emit(pipeline_id, "llm", "completed", t, meta)
+        return answer, token_usage
 
     # Response assembly
 
@@ -322,6 +399,8 @@ class QueryPipeline:
         collection: str,
         latency_ms: float,
         pipeline_id: str,
+        token_usage: TokenUsage | None = None,
+        stage_latencies: dict[str, float] | None = None,
     ) -> PipelineResult:
         """
         Wrap all pipeline outputs into a structured PipelineResult.
@@ -346,6 +425,28 @@ class QueryPipeline:
         ]
         scores = [sc.score for sc in chunks]
 
+        sl = stage_latencies or {}
+        metrics = RunMetrics(
+            pipeline_id=pipeline_id,
+            total_latency_ms=latency_ms,
+            stage_latencies=sl,
+            token_usage=token_usage,
+            model=getattr(self._llm, "_model", None),
+            chunks_retrieved=len(chunks),
+        )
+        self._emit(pipeline_id, "response_builder", "completed", t)
+        meta: dict[str, Any] = {
+            "total_latency_ms": round(latency_ms, 2),
+            "chunks_retrieved": len(chunks),
+        }
+        if token_usage is not None:
+            meta["token_usage"] = {
+                "prompt_tokens": token_usage.prompt_tokens,
+                "completion_tokens": token_usage.completion_tokens,
+                "total_tokens": token_usage.total_tokens,
+            }
+        self._emit(pipeline_id, "pipeline", "completed", metadata=meta)
+
         result = PipelineResult(
             answer=answer,
             query=query,
@@ -354,9 +455,10 @@ class QueryPipeline:
             collection_used=collection,
             latency_ms=latency_ms,
             pipeline_id=pipeline_id,
+            token_usage=token_usage,
+            metrics=metrics,
         )
 
-        self._emit(pipeline_id, "response_builder", "completed", t)
         return result
 
     # Helper

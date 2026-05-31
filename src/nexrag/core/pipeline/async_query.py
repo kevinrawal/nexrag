@@ -20,9 +20,11 @@ from nexrag.core.interfaces.embedder import BaseEmbedder
 from nexrag.core.interfaces.llm import BaseLLM
 from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
 from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
+from nexrag.core.interfaces.reranker import BaseReranker
 from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.models.chunk import ScoredChunk
 from nexrag.core.models.event import PipelineEvent
+from nexrag.core.models.metrics import RunMetrics, TokenUsage
 from nexrag.core.models.result import PipelineResult, Source
 from nexrag.exceptions import (
     EmbedderError,
@@ -66,6 +68,7 @@ class AsyncQueryPipeline:
         top_k: int = 5,
         score_threshold: float = 0.0,
         observer: BaseObserver | None = None,
+        reranker: BaseReranker | None = None,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
@@ -75,6 +78,7 @@ class AsyncQueryPipeline:
         self._top_k = top_k
         self._score_threshold = score_threshold
         self._observer = observer or NoOpObserver()
+        self._reranker = reranker
 
     def run(
         self,
@@ -166,8 +170,13 @@ class AsyncQueryPipeline:
         active_top_k = top_k if top_k is not None else self._top_k
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
 
+        stage_latencies: dict[str, float] = {}
         try:
+            t = time.monotonic()
             query_embedding = await self._run_query_embedder(query, pipeline_id)
+            stage_latencies["embedder"] = (time.monotonic() - t) * 1000
+
+            t = time.monotonic()
             chunks = await self._run_retriever(
                 query,
                 query_embedding,
@@ -177,8 +186,20 @@ class AsyncQueryPipeline:
                 metadata_filter,
                 pipeline_id,
             )
+            stage_latencies["retriever"] = (time.monotonic() - t) * 1000
+
+            if self._reranker is not None:
+                t = time.monotonic()
+                chunks = await self._run_reranker(query, chunks, pipeline_id)
+                stage_latencies["reranker"] = (time.monotonic() - t) * 1000
+
+            t = time.monotonic()
             prompt = await self._run_prompt_builder(query, chunks, pipeline_id)
-            answer = await self._run_llm(prompt, pipeline_id)
+            stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
+
+            t = time.monotonic()
+            answer, token_usage = await self._run_llm(prompt, pipeline_id)
+            stage_latencies["llm"] = (time.monotonic() - t) * 1000
         except PipelineError:
             raise
         except Exception as e:
@@ -198,6 +219,8 @@ class AsyncQueryPipeline:
             collection=active_collection,
             latency_ms=latency_ms,
             pipeline_id=pipeline_id,
+            token_usage=token_usage,
+            stage_latencies=stage_latencies,
         )
 
     async def astream(
@@ -231,6 +254,8 @@ class AsyncQueryPipeline:
             metadata_filter,
             pipeline_id,
         )
+        if self._reranker is not None:
+            chunks = await self._run_reranker(query, chunks, pipeline_id)
         prompt = await self._run_prompt_builder(query, chunks, pipeline_id)
 
         await self._emit(pipeline_id, "llm", "started")
@@ -267,7 +292,13 @@ class AsyncQueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        await self._emit(pipeline_id, "embedder", "completed", t, {"dimensions": len(embedding)})
+        await self._emit(
+            pipeline_id,
+            "embedder",
+            "completed",
+            t,
+            {"model": self._embedder.model_name, "dimensions": len(embedding)},
+        )
         return embedding
 
     async def _run_retriever(
@@ -310,6 +341,35 @@ class AsyncQueryPipeline:
         )
         return chunks
 
+    async def _run_reranker(
+        self,
+        query: str,
+        chunks: list[ScoredChunk],
+        pipeline_id: str,
+    ) -> list[ScoredChunk]:
+        assert self._reranker is not None
+        await self._emit(pipeline_id, "reranker", "started")
+        t = time.monotonic()
+        top_n = min(self._reranker.top_n, len(chunks))
+        try:
+            reranked = await self._reranker.async_rerank(query, chunks, top_n)
+        except Exception as e:
+            raise PipelineError(
+                "Reranker failed to re-score chunks.",
+                stage="reranker",
+                component=type(self._reranker).__name__,
+                pipeline_id=pipeline_id,
+                cause=e,
+            ) from e
+        await self._emit(
+            pipeline_id,
+            "reranker",
+            "completed",
+            t,
+            {"chunks_in": len(chunks), "chunks_out": len(reranked), "top_n": top_n},
+        )
+        return reranked
+
     async def _run_prompt_builder(
         self, query: str, chunks: list[ScoredChunk], pipeline_id: str
     ) -> str:
@@ -332,11 +392,11 @@ class AsyncQueryPipeline:
         )
         return prompt
 
-    async def _run_llm(self, prompt: str, pipeline_id: str) -> str:
+    async def _run_llm(self, prompt: str, pipeline_id: str) -> tuple[str, TokenUsage | None]:
         await self._emit(pipeline_id, "llm", "started")
         t = time.monotonic()
         try:
-            answer = await self._llm.async_generate(prompt)
+            answer, token_usage = await self._llm.async_generate(prompt)
         except LLMError:
             raise
         except Exception as e:
@@ -347,8 +407,18 @@ class AsyncQueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        await self._emit(pipeline_id, "llm", "completed", t, {"response_length": len(answer)})
-        return answer
+        meta: dict[str, Any] = {
+            "model": getattr(self._llm, "_model", None),
+            "response_length": len(answer),
+        }
+        if token_usage is not None:
+            meta["token_usage"] = {
+                "prompt_tokens": token_usage.prompt_tokens,
+                "completion_tokens": token_usage.completion_tokens,
+                "total_tokens": token_usage.total_tokens,
+            }
+        await self._emit(pipeline_id, "llm", "completed", t, meta)
+        return answer, token_usage
 
     async def _build_result(
         self,
@@ -358,6 +428,8 @@ class AsyncQueryPipeline:
         collection: str,
         latency_ms: float,
         pipeline_id: str,
+        token_usage: TokenUsage | None = None,
+        stage_latencies: dict[str, float] | None = None,
     ) -> PipelineResult:
         await self._emit(pipeline_id, "response_builder", "started")
         t = time.monotonic()
@@ -374,6 +446,28 @@ class AsyncQueryPipeline:
         ]
         scores = [sc.score for sc in chunks]
 
+        sl = stage_latencies or {}
+        metrics = RunMetrics(
+            pipeline_id=pipeline_id,
+            total_latency_ms=latency_ms,
+            stage_latencies=sl,
+            token_usage=token_usage,
+            model=getattr(self._llm, "_model", None),
+            chunks_retrieved=len(chunks),
+        )
+        await self._emit(pipeline_id, "response_builder", "completed", t)
+        meta: dict[str, Any] = {
+            "total_latency_ms": round(latency_ms, 2),
+            "chunks_retrieved": len(chunks),
+        }
+        if token_usage is not None:
+            meta["token_usage"] = {
+                "prompt_tokens": token_usage.prompt_tokens,
+                "completion_tokens": token_usage.completion_tokens,
+                "total_tokens": token_usage.total_tokens,
+            }
+        await self._emit(pipeline_id, "pipeline", "completed", metadata=meta)
+
         result = PipelineResult(
             answer=answer,
             query=query,
@@ -382,9 +476,10 @@ class AsyncQueryPipeline:
             collection_used=collection,
             latency_ms=latency_ms,
             pipeline_id=pipeline_id,
+            token_usage=token_usage,
+            metrics=metrics,
         )
 
-        await self._emit(pipeline_id, "response_builder", "completed", t)
         return result
 
     # Helpers

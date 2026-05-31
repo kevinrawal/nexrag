@@ -4,6 +4,8 @@ NexRAG never returns a raw string — always this structured object.
 
 Source is a user-facing view of a ScoredChunk — flattened for convenience
 so users don't need to navigate nested objects to get what they need.
+
+TokenUsage is defined in metrics.py — import it from there.
 """
 
 from __future__ import annotations
@@ -11,26 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from nexrag.core.models.metrics import RunMetrics, TokenUsage
 
-@dataclass(frozen=True)
-class TokenUsage:
-    """
-    Token counts from the LLM call.
-
-    Populated when the LLM provider returns usage data.
-    None when the provider does not expose token counts (e.g. some Ollama models).
-    """
-
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-
-    def __repr__(self) -> str:
-        return (
-            f"TokenUsage(prompt={self.prompt_tokens}, "
-            f"completion={self.completion_tokens}, "
-            f"total={self.total_tokens})"
-        )
+__all__ = ["Source", "PipelineResult", "TokenUsage", "RunMetrics"]
 
 
 @dataclass(frozen=True)
@@ -80,6 +65,7 @@ class PipelineResult:
         pipeline_id:     Unique ID for this pipeline run — use for log correlation.
         token_usage:     Token counts from the LLM. None if provider doesn't expose them.
         metadata:        Any extra data the pipeline wants to surface (model name, etc.).
+        metrics:         Per-run aggregated metrics (latency, token usage, stage breakdown).
     """
 
     answer: str
@@ -91,6 +77,7 @@ class PipelineResult:
     pipeline_id: str
     token_usage: TokenUsage | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    metrics: RunMetrics | None = None
 
     def __repr__(self) -> str:
         preview = self.answer[:80].replace("\n", " ")

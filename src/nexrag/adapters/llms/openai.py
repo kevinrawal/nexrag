@@ -17,6 +17,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from nexrag.core.interfaces.llm import BaseLLM
+from nexrag.core.models.metrics import TokenUsage
 from nexrag.exceptions import LLMError, LLMRateLimitError, LLMTimeoutError
 
 _BASE_BACKOFF = 1.0  # seconds; doubles each retry
@@ -54,15 +55,16 @@ class OpenAILLM(BaseLLM):
         self._client: Any = self._build_client(api_key, base_url)
         self._async_client: Any = self._build_async_client(api_key, base_url)
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str) -> tuple[str, TokenUsage | None]:
         """
-        Send the prompt and return the complete response.
+        Send the prompt and return (response_text, token_usage).
 
         The prompt is split at the first "---" separator line into system and
         user messages. If no separator is found, the whole prompt is the user message.
 
         Returns:
-            The assistant response text.
+            (response_text, TokenUsage) — token_usage is None if the API response
+            does not include usage data.
 
         Raises:
             LLMRateLimitError: On 429 rate limit (after retries exhausted).
@@ -79,7 +81,15 @@ class OpenAILLM(BaseLLM):
                     max_tokens=self._max_tokens,
                     timeout=self._timeout,
                 )
-                return response.choices[0].message.content or ""
+                text = response.choices[0].message.content or ""
+                usage = None
+                if response.usage:
+                    usage = TokenUsage(
+                        prompt_tokens=response.usage.prompt_tokens,
+                        completion_tokens=response.usage.completion_tokens,
+                        total_tokens=response.usage.total_tokens,
+                    )
+                return text, usage
             except Exception as e:
                 if self._is_retryable(e) and attempt < self._max_retries:
                     time.sleep(_BASE_BACKOFF * (2**attempt) + random.uniform(0, 1))
@@ -117,8 +127,8 @@ class OpenAILLM(BaseLLM):
         except Exception as e:
             self._map_exception(e)
 
-    async def async_generate(self, prompt: str) -> str:
-        """Generate using AsyncOpenAI — native async, no thread pool needed."""
+    async def async_generate(self, prompt: str) -> tuple[str, TokenUsage | None]:
+        """Generate using AsyncOpenAI — native async, returns (text, token_usage)."""
         messages = self._build_messages(prompt)
         for attempt in range(self._max_retries + 1):
             try:
@@ -129,7 +139,15 @@ class OpenAILLM(BaseLLM):
                     max_tokens=self._max_tokens,
                     timeout=self._timeout,
                 )
-                return response.choices[0].message.content or ""
+                text = response.choices[0].message.content or ""
+                usage = None
+                if response.usage:
+                    usage = TokenUsage(
+                        prompt_tokens=response.usage.prompt_tokens,
+                        completion_tokens=response.usage.completion_tokens,
+                        total_tokens=response.usage.total_tokens,
+                    )
+                return text, usage
             except Exception as e:
                 if self._is_retryable(e) and attempt < self._max_retries:
                     import asyncio
