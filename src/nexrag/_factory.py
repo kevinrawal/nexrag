@@ -6,6 +6,8 @@ Not part of the public API. Import from nexrag, not from here.
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 from nexrag.core.config.resolver import resolve_class
 from nexrag.core.config.schema import (
     ChunkerConfig,
@@ -276,7 +278,13 @@ def _build_vector_db(config: VectorDBConfig) -> BaseVectorDB:
     if config.provider == "chroma":
         from nexrag.adapters.vector_dbs.chroma import ChromaDBAdapter, _MultiChromaAdapter
 
-        shared = dict(
+        class _ChromaShared(TypedDict):
+            upsert_batch_size: int
+            query_batch_size: int
+            max_retries: int
+            retry_delay: float
+
+        shared: _ChromaShared = dict(
             upsert_batch_size=config.upsert_batch_size,
             query_batch_size=config.query_batch_size,
             max_retries=config.max_retries,
