@@ -49,9 +49,11 @@ class NexRAG:
         self,
         ingestion: IngestionPipeline | AsyncIngestionPipeline,
         query: QueryPipeline | AsyncQueryPipeline,
+        retriever: Any | None = None,
     ) -> None:
         self._ingestion = ingestion
         self._query = query
+        self._retriever = retriever
 
     @classmethod
     def from_config(cls, path: str | Path = "nexrag.yaml") -> NexRAG:
@@ -72,8 +74,13 @@ class NexRAG:
         from nexrag.core.config.loader import load_config
 
         config = load_config(path)
-        ingestion, query = wire(config)
-        return cls(ingestion=ingestion, query=query)
+        ingestion, query, retriever = wire(config)
+        return cls(ingestion=ingestion, query=query, retriever=retriever)
+
+    def _notify_ingest(self, collection: str) -> None:
+        """Notify the retriever to invalidate cache for this collection, if supported."""
+        if self._retriever is not None and hasattr(self._retriever, "invalidate_cache"):
+            self._retriever.invalidate_cache(collection)
 
     # Public pipeline methods
 
@@ -101,7 +108,9 @@ class NexRAG:
         Returns:
             IngestionResult with document count, chunk count, latency, and collection_used.
         """
-        return self._ingestion.ingest(data, loader, metadata=metadata, collection=collection)
+        result = self._ingestion.ingest(data, loader, metadata=metadata, collection=collection)
+        self._notify_ingest(result.collection_used)
+        return result
 
     def ingest_batch(
         self,
@@ -145,7 +154,9 @@ class NexRAG:
         Returns:
             IngestionResult with counts, pipeline_id, and collection_used.
         """
-        return self._ingestion.ingest_documents(documents, collection=collection)
+        result = self._ingestion.ingest_documents(documents, collection=collection)
+        self._notify_ingest(result.collection_used)
+        return result
 
     def query(
         self,
@@ -321,6 +332,10 @@ class NexRAG:
             IngestionResult with document count, chunk count, and latency.
         """
         if isinstance(self._ingestion, AsyncIngestionPipeline):
-            return await self._ingestion.aingest(data, loader, metadata, collection)
-
-        return await asyncio.to_thread(self._ingestion.ingest, data, loader, metadata, collection)
+            result = await self._ingestion.aingest(data, loader, metadata, collection)
+        else:
+            result = await asyncio.to_thread(
+                self._ingestion.ingest, data, loader, metadata, collection
+            )
+        self._notify_ingest(result.collection_used)
+        return result

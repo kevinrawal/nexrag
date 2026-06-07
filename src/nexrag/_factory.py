@@ -42,15 +42,19 @@ from nexrag.loaders.auto import AutoLoader
 
 def wire(
     config: NexRAGConfig,
-) -> tuple[IngestionPipeline | AsyncIngestionPipeline, QueryPipeline | AsyncQueryPipeline]:
+) -> tuple[
+    IngestionPipeline | AsyncIngestionPipeline,
+    QueryPipeline | AsyncQueryPipeline,
+    BaseRetriever,
+]:
     """
     Instantiate all components from config and wire them into pipelines.
 
     When config.mode is "async", returns AsyncIngestionPipeline + AsyncQueryPipeline.
     When config.mode is "sync" (default), returns the standard sync pipelines.
 
-    Returns a (ingestion_pipeline, query_pipeline) tuple so the caller (NexRAG.from_config)
-    can construct the NexRAG instance without creating a circular import.
+    Returns a (ingestion_pipeline, query_pipeline, retriever) tuple so the caller
+    (NexRAG.from_config) can store the retriever for post-ingest cache invalidation.
     """
     observer = _build_observer(config.observability)
 
@@ -126,7 +130,7 @@ def wire(
             reranker=reranker,
         )
 
-    return ingestion_pipeline, query_pipeline
+    return ingestion_pipeline, query_pipeline, retriever
 
 
 # Component builders
@@ -270,18 +274,50 @@ def _build_vector_db(config: VectorDBConfig) -> BaseVectorDB:
         return resolve_class(config.class_path, BaseVectorDB, config.params, stage="vector_db")  # type: ignore[type-abstract]
 
     if config.provider == "chroma":
-        from nexrag.adapters.vector_dbs.chroma import ChromaDBAdapter
+        from nexrag.adapters.vector_dbs.chroma import ChromaDBAdapter, _MultiChromaAdapter
 
-        coll_cfg = config.collections[config.default_collection]
-        return ChromaDBAdapter(
-            path=coll_cfg.path,
-            mode=coll_cfg.mode,
-            host=coll_cfg.host,
-            port=coll_cfg.port,
+        shared = dict(
             upsert_batch_size=config.upsert_batch_size,
             query_batch_size=config.query_batch_size,
             max_retries=config.max_retries,
             retry_delay=config.retry_delay,
+        )
+
+        def _make(cfg: object) -> ChromaDBAdapter:
+            from nexrag.core.config.schema import CollectionConfig as _CC
+
+            assert isinstance(cfg, _CC)
+            return ChromaDBAdapter(
+                mode=cfg.mode, path=cfg.path, host=cfg.host, port=cfg.port, **shared
+            )
+
+        def _key(cfg: object) -> tuple[str, str | None, str | None, int | None]:
+            from nexrag.core.config.schema import CollectionConfig as _CC
+
+            assert isinstance(cfg, _CC)
+            return (cfg.mode, cfg.path, cfg.host, cfg.port)
+
+        default_cfg = config.collections[config.default_collection]
+        default_key = _key(default_cfg)
+        default_adapter = _make(default_cfg)
+
+        # Build per-collection adapters for collections whose config differs from the default.
+        # Reuse the same adapter instance for collections that share (mode, path, host, port).
+        key_to_adapter: dict[tuple[str, str | None, str | None, int | None], ChromaDBAdapter] = {}
+        collection_adapters: dict[str, ChromaDBAdapter] = {}
+        for name, coll_cfg in config.collections.items():
+            k = _key(coll_cfg)
+            if k == default_key:
+                continue
+            if k not in key_to_adapter:
+                key_to_adapter[k] = _make(coll_cfg)
+            collection_adapters[name] = key_to_adapter[k]
+
+        if not collection_adapters:
+            return default_adapter
+
+        return _MultiChromaAdapter(
+            default_adapter=default_adapter, collection_adapters=collection_adapters
         )
 
     raise ConfigError(

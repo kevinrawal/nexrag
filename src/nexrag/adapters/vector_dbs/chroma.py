@@ -386,3 +386,76 @@ class ChromaDBAdapter(BaseVectorDB):
             scored.append(ScoredChunk(chunk=chunk, score=score, rank=rank))
 
         return scored
+
+
+class _MultiChromaAdapter(BaseVectorDB):
+    """
+    Routes vector DB calls to per-collection ChromaDBAdapter instances.
+
+    Used by the factory when different collections are configured with different
+    mode/path/host/port settings. Each unique (mode, path, host, port) combination
+    gets its own ChromaDBAdapter (and therefore its own ChromaDB client). Collections
+    not explicitly mapped fall back to the default adapter.
+
+    This class is internal — it is never exposed in the public API.
+    """
+
+    def __init__(
+        self,
+        default_adapter: ChromaDBAdapter,
+        collection_adapters: dict[str, ChromaDBAdapter],
+    ) -> None:
+        self._default = default_adapter
+        self._adapters = collection_adapters
+
+    def _for(self, collection_name: str) -> ChromaDBAdapter:
+        return self._adapters.get(collection_name, self._default)
+
+    def upsert(
+        self,
+        chunks: list[Chunk],
+        embeddings: list[list[float]],
+        collection_name: str,
+    ) -> None:
+        self._for(collection_name).upsert(chunks, embeddings, collection_name)
+
+    def query(
+        self,
+        embedding: list[float],
+        top_k: int,
+        collection_name: str,
+        filters: dict[str, Any] | None = None,
+    ) -> list[ScoredChunk]:
+        return self._for(collection_name).query(embedding, top_k, collection_name, filters)
+
+    def delete(self, ids: list[str], collection_name: str) -> None:
+        self._for(collection_name).delete(ids, collection_name)
+
+    def count(self, collection_name: str) -> int:
+        return self._for(collection_name).count(collection_name)
+
+    def get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
+        return self._for(collection_name).get_all(collection_name, limit)
+
+    def get_collection_metadata(self, collection_name: str) -> dict[str, Any]:
+        return self._for(collection_name).get_collection_metadata(collection_name)
+
+    def set_collection_metadata(self, collection_name: str, metadata: dict[str, Any]) -> None:
+        self._for(collection_name).set_collection_metadata(collection_name, metadata)
+
+    def list_collections(self) -> list[str]:
+        seen: set[str] = set()
+        result: list[str] = []
+        visited_adapters: set[int] = set()
+        for adapter in [self._default, *self._adapters.values()]:
+            if id(adapter) in visited_adapters:
+                continue
+            visited_adapters.add(id(adapter))
+            try:
+                for name in adapter.list_collections():
+                    if name not in seen:
+                        seen.add(name)
+                        result.append(name)
+            except Exception:
+                pass
+        return result

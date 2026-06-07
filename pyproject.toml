@@ -98,9 +98,22 @@ all-loaders = [
     "nexrag[excel]",
     "nexrag[html]",
 ]
+all-sparse = [
+    "nexrag[bm25]",
+]
+all-rerankers = [
+    "nexrag[cohere]",
+    "nexrag[cross-encoder]",
+]
+all-retrieval = [
+    "nexrag[all-sparse]",
+    "nexrag[all-rerankers]",
+]
+# Full bundle — dev/CI only; installs heavy deps (PyTorch via sentence-transformers)
 all = [
     "nexrag[all-providers]",
     "nexrag[all-loaders]",
+    "nexrag[all-retrieval]",
 ]
 
 # Dev dependencies
