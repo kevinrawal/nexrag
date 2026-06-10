@@ -7,7 +7,7 @@ Currently supported formats:
     bytes starting with %PDF  →  PDFLoader
     str                       →  RawTextLoader
 
-Unsupported formats (images, JSON, Excel, etc.) raise NotImplementedError with a
+Unsupported formats (images, JSON, Excel, etc.) raise LoaderError with a
 message directing the caller to use a specific loader. Support grows as new loaders
 are added to NexRAG.
 """
@@ -47,8 +47,7 @@ class AutoLoader(BaseLoader):
             Documents produced by the detected loader.
 
         Raises:
-            LoaderError: If data is not bytes or str.
-            NotImplementedError: If the bytes content format is not yet supported.
+            LoaderError: If data is not bytes or str, or if the bytes format is unsupported.
         """
         if isinstance(data, bytes):
             if data[:4] == _PDF_MAGIC:
@@ -56,11 +55,13 @@ class AutoLoader(BaseLoader):
 
                 return PDFLoader(source_override=self._source_override).load(data)
 
-            raise NotImplementedError(
+            raise LoaderError(
                 "AutoLoader could not identify the data format from its content. "
                 f"Got bytes starting with {data[:8]!r}. "
                 "Supported: PDF (bytes starting with %PDF). "
-                "Use a specific loader: PDFLoader(bytes), RawTextLoader(str)."
+                "Use a specific loader: PDFLoader(bytes), RawTextLoader(str).",
+                stage="loader",
+                component="AutoLoader",
             )
 
         if isinstance(data, str):

@@ -87,7 +87,9 @@ class IngestionPipeline:
         self._collection = collection
         self._on_conflict = on_conflict
         self._observer = observer or NoOpObserver()
-        self._valid_collections: frozenset[str] = valid_collections or frozenset([collection])
+        self._valid_collections: frozenset[str] = (
+            valid_collections if valid_collections is not None else frozenset([collection])
+        )
 
     # Public API
 
@@ -483,17 +485,15 @@ class IngestionPipeline:
             )
             return chunks, embeddings
 
-        # For each source, find existing chunks in the DB.
+        # For each source, fetch existing chunk IDs by metadata (not by vector similarity).
         existing_hashes: set[str] = set()
         for source in sources:
             try:
-                existing = self._vector_db.query(
-                    embedding=embeddings[0],
-                    top_k=10_000,
-                    collection_name=collection,
+                existing_ids = self._vector_db.get_ids_by_metadata(
                     filters={"source": source},
+                    collection_name=collection,
                 )
-                existing_hashes.update(sc.chunk.content_hash for sc in existing)
+                existing_hashes.update(existing_ids)
             except VectorDBError:
                 existing_hashes = set()
 

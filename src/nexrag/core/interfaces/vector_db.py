@@ -115,6 +115,35 @@ class BaseVectorDB(ABC):
         Called on first ingestion to persist the embedding model fingerprint.
         """
 
+    def get_ids_by_metadata(self, filters: dict[str, Any], collection_name: str) -> list[str]:
+        """
+        Return the content_hash IDs of all chunks whose metadata matches the given filters.
+
+        Used by the idempotency check to find existing chunks for a source without
+        relying on vector similarity (which is semantically incorrect for dedup).
+
+        Args:
+            filters:         Metadata key-value pairs to match (e.g. {"source": "foo.pdf"}).
+            collection_name: Collection to query.
+
+        Returns:
+            List of content_hash strings (ChromaDB IDs). Empty list if none found.
+
+        Raises:
+            NotImplementedError: If the adapter does not implement this method.
+            VectorDBError:       If the underlying query fails.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__}.get_ids_by_metadata() is not implemented. "
+            "Required for correct idempotency checking."
+        )
+
+    async def async_get_ids_by_metadata(
+        self, filters: dict[str, Any], collection_name: str
+    ) -> list[str]:
+        """Async variant of get_ids_by_metadata(). Default: runs sync version in a thread pool."""
+        return await asyncio.to_thread(self.get_ids_by_metadata, filters, collection_name)
+
     def get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
         """
         Return all chunks stored in the collection.

@@ -147,27 +147,25 @@ class BM25Retriever(BaseSparseRetriever):
                 if self._cache_ttl is None or (time.monotonic() - entry.built_at) < self._cache_ttl:
                     return entry
 
-        try:
-            corpus = self._vector_db.get_all(collection)
-        except Exception as e:
-            raise RetrieverError(
-                f"BM25Retriever failed to fetch corpus from collection '{collection}': {e}",
-                stage="retriever",
-                component="BM25Retriever",
-                cause=e,
-            ) from e
+            # Build inside the lock so only one thread rebuilds at a time.
+            try:
+                corpus = self._vector_db.get_all(collection)
+            except Exception as e:
+                raise RetrieverError(
+                    f"BM25Retriever failed to fetch corpus from collection '{collection}': {e}",
+                    stage="retriever",
+                    component="BM25Retriever",
+                    cause=e,
+                ) from e
 
-        if not corpus:
-            return None
+            if not corpus:
+                return None
 
-        tokenized = [doc.text.lower().split() for doc in corpus]
-        bm25 = BM25Okapi(tokenized)
-        new_entry = _BM25CacheEntry(bm25=bm25, corpus=corpus, built_at=time.monotonic())
-
-        with self._lock:
+            tokenized = [doc.text.lower().split() for doc in corpus]
+            bm25 = BM25Okapi(tokenized)
+            new_entry = _BM25CacheEntry(bm25=bm25, corpus=corpus, built_at=time.monotonic())
             self._cache[collection] = new_entry
-
-        return new_entry
+            return new_entry
 
 
 def _normalize_scores(scores: list[float]) -> list[float]:

@@ -26,9 +26,13 @@ U = TypeVar("U")
 _SENSITIVE_KEYS = frozenset({"api_key", "token", "secret", "password", "credential", "key", "auth"})
 
 
-def _redact(params: dict[str, Any]) -> dict[str, Any]:
+def _redact(obj: Any) -> Any:
     """Replace values of sensitive keys with *** to prevent secret leakage in error messages."""
-    return {k: "***" if k.lower() in _SENSITIVE_KEYS else v for k, v in params.items()}
+    if isinstance(obj, dict):
+        return {k: "***" if k.lower() in _SENSITIVE_KEYS else _redact(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return type(obj)(_redact(i) for i in obj)
+    return obj
 
 
 def resolve_class[T](

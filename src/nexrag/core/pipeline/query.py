@@ -243,11 +243,14 @@ class QueryPipeline:
 
         self._emit(pipeline_id, "llm", "started")
         t = time.monotonic()
+        llm_failed = False
         try:
             yield from self._llm.stream(prompt)
-        except LLMError:
+        except (LLMError, PipelineError):
+            llm_failed = True
             raise
         except Exception as e:
+            llm_failed = True
             raise PipelineError(
                 "LLM failed during streaming.",
                 stage="llm",
@@ -255,18 +258,18 @@ class QueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        stage_latencies["llm"] = (time.monotonic() - t) * 1000
-        self._emit(pipeline_id, "llm", "completed", t)
-
-        latency_ms = (time.monotonic() - started_at) * 1000
-        yield RunMetrics(
-            pipeline_id=pipeline_id,
-            total_latency_ms=latency_ms,
-            stage_latencies=stage_latencies,
-            token_usage=None,
-            model=getattr(self._llm, "_model", None),
-            chunks_retrieved=len(chunks),
-        )
+        finally:
+            stage_latencies["llm"] = (time.monotonic() - t) * 1000
+            self._emit(pipeline_id, "llm", "failed" if llm_failed else "completed", t)
+            latency_ms = (time.monotonic() - started_at) * 1000
+            yield RunMetrics(
+                pipeline_id=pipeline_id,
+                total_latency_ms=latency_ms,
+                stage_latencies=stage_latencies,
+                token_usage=None,
+                model=getattr(self._llm, "_model", None),
+                chunks_retrieved=len(chunks),
+            )
 
     # Stage runners
 
@@ -340,7 +343,8 @@ class QueryPipeline:
         chunks: list[ScoredChunk],
         pipeline_id: str,
     ) -> list[ScoredChunk]:
-        assert self._reranker is not None
+        if self._reranker is None:
+            return chunks
         self._emit(pipeline_id, "reranker", "started")
         t = time.monotonic()
         top_n = min(self._reranker.top_n, len(chunks))

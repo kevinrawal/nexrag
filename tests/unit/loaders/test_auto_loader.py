@@ -35,12 +35,12 @@ class TestAutoLoader:
         mock_load.assert_called_once_with("some plain text")
         assert result == fake_docs
 
-    def test_unknown_bytes_raises_not_implemented(self):
-        with pytest.raises(NotImplementedError, match="AutoLoader could not identify"):
+    def test_unknown_bytes_raises_loader_error(self):
+        with pytest.raises(LoaderError, match="AutoLoader could not identify"):
             self.loader.load(_JPEG_BYTES)
 
     def test_unknown_bytes_error_mentions_supported_formats(self):
-        with pytest.raises(NotImplementedError, match="%PDF"):
+        with pytest.raises(LoaderError, match="%PDF"):
             self.loader.load(b"\x00\x00\x00\x00 unknown format")
 
     def test_path_input_raises_loader_error(self):
@@ -67,13 +67,13 @@ class TestAutoLoader:
                 loader.load("some text")
         mock_init.assert_called_once_with(source="my-doc-id")
 
-    def test_empty_bytes_not_pdf_raises_not_implemented(self):
-        with pytest.raises(NotImplementedError):
+    def test_empty_bytes_raises_loader_error(self):
+        with pytest.raises(LoaderError):
             self.loader.load(b"")
 
     def test_pdf_magic_case_sensitive(self):
         # Magic byte detection is exact — lowercase %pdf does not match
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(LoaderError):
             self.loader.load(b"%pdf-1.4 lowercase")
 
     def test_no_source_override_raw_loader_has_no_source_in_metadata(self):

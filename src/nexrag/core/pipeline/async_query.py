@@ -276,12 +276,15 @@ class AsyncQueryPipeline:
 
         await self._emit(pipeline_id, "llm", "started")
         t = time.monotonic()
+        llm_failed = False
         try:
             async for token in self._llm.async_stream(prompt):
                 yield token
-        except LLMError:
+        except (LLMError, PipelineError):
+            llm_failed = True
             raise
         except Exception as e:
+            llm_failed = True
             raise PipelineError(
                 "LLM failed during async streaming.",
                 stage="llm",
@@ -289,18 +292,18 @@ class AsyncQueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        stage_latencies["llm"] = (time.monotonic() - t) * 1000
-        await self._emit(pipeline_id, "llm", "completed", t)
-
-        latency_ms = (time.monotonic() - started_at) * 1000
-        yield RunMetrics(
-            pipeline_id=pipeline_id,
-            total_latency_ms=latency_ms,
-            stage_latencies=stage_latencies,
-            token_usage=None,
-            model=getattr(self._llm, "_model", None),
-            chunks_retrieved=len(chunks),
-        )
+        finally:
+            stage_latencies["llm"] = (time.monotonic() - t) * 1000
+            await self._emit(pipeline_id, "llm", "failed" if llm_failed else "completed", t)
+            latency_ms = (time.monotonic() - started_at) * 1000
+            yield RunMetrics(
+                pipeline_id=pipeline_id,
+                total_latency_ms=latency_ms,
+                stage_latencies=stage_latencies,
+                token_usage=None,
+                model=getattr(self._llm, "_model", None),
+                chunks_retrieved=len(chunks),
+            )
 
     # Stage runners
 
@@ -374,7 +377,8 @@ class AsyncQueryPipeline:
         chunks: list[ScoredChunk],
         pipeline_id: str,
     ) -> list[ScoredChunk]:
-        assert self._reranker is not None
+        if self._reranker is None:
+            return chunks
         await self._emit(pipeline_id, "reranker", "started")
         t = time.monotonic()
         top_n = min(self._reranker.top_n, len(chunks))
