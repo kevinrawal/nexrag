@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from nexrag.core.interfaces.loader import BaseLoader
+from nexrag.core.models.metrics import RunMetrics
 from nexrag.core.models.result import PipelineResult
 from nexrag.core.pipeline.async_ingestion import AsyncIngestionPipeline
 from nexrag.core.pipeline.async_query import AsyncQueryPipeline
@@ -29,6 +30,7 @@ __all__ = [
     "NexRAG",
     "PipelineResult",
     "IngestionResult",
+    "RunMetrics",
     "NexRAGError",
     "__version__",
 ]
@@ -196,12 +198,13 @@ class NexRAG:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[str | RunMetrics]:
         """
         Stream the LLM response token by token (sync).
 
-        All pipeline stages run synchronously except the LLM generation step,
-        which yields tokens as they arrive. Compatible with any sync caller.
+        All pipeline stages run synchronously. Tokens are yielded as they arrive
+        from the LLM. The final item yielded is always a RunMetrics object with
+        full per-stage latencies and chunk count.
 
         Args:
             text:             The user's question.
@@ -211,7 +214,8 @@ class NexRAG:
             metadata_filter:  Optional metadata filters.
 
         Yields:
-            Response text tokens as they stream from the LLM.
+            Response text tokens followed by a final RunMetrics object.
+            Use isinstance(item, RunMetrics) to separate tokens from metrics.
         """
         return self._query.stream(
             text,
@@ -229,7 +233,7 @@ class NexRAG:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[str | RunMetrics]:
         """
         Stream the LLM response token by token (async).
 
@@ -240,6 +244,9 @@ class NexRAG:
         the event loop) and tokens are yielded after the full stream completes in the
         thread. Configure mode: async for true live token streaming.
 
+        The final item yielded is always a RunMetrics object with full per-stage
+        latencies and chunk count.
+
         Args:
             text:             The user's question.
             collection:       Override the default collection.
@@ -248,7 +255,8 @@ class NexRAG:
             metadata_filter:  Optional metadata filters.
 
         Yields:
-            Response text tokens as they stream from the LLM.
+            Response text tokens followed by a final RunMetrics object.
+            Use isinstance(item, RunMetrics) to separate tokens from metrics.
         """
         if isinstance(self._query, AsyncQueryPipeline):
             async for token in self._query.astream(

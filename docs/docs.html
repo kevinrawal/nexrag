@@ -527,7 +527,10 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
           <div class="extra-cell"><div class="extra-name">cross-encoder</div><div class="extra-desc">CrossEncoder reranker (sentence-transformers)</div></div>
           <div class="extra-cell"><div class="extra-name">all-providers</div><div class="extra-desc">All embedder &amp; LLM providers</div></div>
           <div class="extra-cell"><div class="extra-name">all-loaders</div><div class="extra-desc">All document loaders (PDF, Word, HTML, Excel)</div></div>
-          <div class="extra-cell"><div class="extra-name">all</div><div class="extra-desc">all-providers + all-loaders (bm25/cohere/cross-encoder are separate — see <a href="https://github.com/kevinrawal/nexrag/issues/21">#21</a>)</div></div>
+          <div class="extra-cell"><div class="extra-name">all-sparse</div><div class="extra-desc">BM25 sparse retrieval bundle (rank-bm25)</div></div>
+          <div class="extra-cell"><div class="extra-name">all-rerankers</div><div class="extra-desc">All reranker backends (Cohere + sentence-transformers)</div></div>
+          <div class="extra-cell"><div class="extra-name">all-retrieval</div><div class="extra-desc">all-sparse + all-rerankers</div></div>
+          <div class="extra-cell"><div class="extra-name">all</div><div class="extra-desc">Everything — all-providers + all-loaders + all-retrieval. Dev/CI only: pulls PyTorch via sentence-transformers.</div></div>
         </div>
 
         <div class="callout">
@@ -751,9 +754,9 @@ results = pipeline.ingest_batch([
 result = pipeline.query(<span class="str">"Candidate with Python experience"</span>, collection=<span class="str">"resumes"</span>)
 <span class="fn">print</span>(result.collection_used)   <span class="cmt"># → "resumes"</span></code></pre>
 
-        <div class="callout warn">
-          <div class="callout-icon">!</div>
-          <p><strong>v0.3.0 limitation:</strong> all collections share a single ChromaDB client instance. Per-collection <code>path</code> and <code>mode</code> configuration is parsed but not yet applied — tracked in <a href="https://github.com/kevinrawal/nexrag/issues/24">#24</a>.</p>
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p>Each collection with a distinct <code>mode</code>, <code>path</code>, <code>host</code>, or <code>port</code> gets its own ChromaDB client instance. Collections sharing the same connection settings reuse the same client. This allows mixing persistent and in-memory collections in the same pipeline.</p>
         </div>
       </div>
 
@@ -790,9 +793,9 @@ result = pipeline.query(
     <span class="key">sparse:</span>
       <span class="key">provider:</span> <span class="val">bm25</span></code></pre>
 
-        <div class="callout warn">
-          <div class="callout-icon">!</div>
-          <p><strong>BM25 v0.3.0 limitations:</strong> the BM25 index is rebuilt from the full corpus on every query call (no caching — tracked in <a href="https://github.com/kevinrawal/nexrag/issues/23">#23</a>), and <code>metadata_filter</code> is silently ignored by BM25 (tracked in <a href="https://github.com/kevinrawal/nexrag/issues/22">#22</a>).</p>
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p><code>metadata_filter</code> is supported for <code>bm25</code> and <code>hybrid</code> providers — filtering is applied post-scoring. The BM25 index is cached per-collection in memory and automatically invalidated after each <code>ingest()</code> call.</p>
         </div>
 
         <div id="query-reranking" data-sub-anchor="query-reranking" class="doc-h2">Reranking</div>
@@ -1317,9 +1320,9 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
       <span class="yml-cmt"># host: localhost   # ChromaDB server host</span>
       <span class="yml-cmt"># port: 8000        # ChromaDB server port</span></code></pre>
 
-        <div class="callout warn">
-          <div class="callout-icon">!</div>
-          <p><strong>v0.3.0 limitation:</strong> all collections share a single ChromaDB client. Per-collection <code>mode</code> and <code>path</code> config is parsed but not yet applied — tracked in <a href="https://github.com/kevinrawal/nexrag/issues/24">#24</a>. Pinecone and Weaviate support are planned for v1.</p>
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p>Each collection with distinct <code>mode</code>, <code>path</code>, <code>host</code>, or <code>port</code> settings gets its own ChromaDB client. This enables mixing persistent and in-memory collections in the same pipeline, or pointing different collections at separate disk paths. Pinecone and Weaviate support are planned for v1.</p>
         </div>
 
         <div id="vdb-custom" data-sub-anchor="vdb-custom" class="doc-h2">Custom vector DB</div>
@@ -1374,9 +1377,9 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
   <span class="key">retriever:</span>
     <span class="key">provider:</span> <span class="val">bm25</span>
     <span class="key">top_k:</span> <span class="val">5</span></code></pre>
-        <div class="callout warn">
-          <div class="callout-icon">!</div>
-          <p><strong>v0.3.0 limitations:</strong> BM25 fetches the full collection corpus on every query call (no index caching — <a href="https://github.com/kevinrawal/nexrag/issues/23">#23</a>) and silently ignores <code>metadata_filter</code> (<a href="https://github.com/kevinrawal/nexrag/issues/22">#22</a>). Both are tracked for the next release.</p>
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p>The BM25 index is built once per collection and cached in memory. It is automatically invalidated after <code>ingest()</code> so new documents are always reflected on the next query. <code>metadata_filter</code> is fully supported — filtering is applied post-scoring.</p>
         </div>
 
         <div id="retriever-hybrid" data-sub-anchor="retriever-hybrid" class="doc-h2">Hybrid retrieval</div>
@@ -1567,15 +1570,33 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
 
         <!-- version switcher -->
         <div class="cl-ver-bar">
-          <button class="cl-vtab active" data-cl="v030">
-            v0.3.0 <span class="cl-vtab-latest">latest</span>
+          <button class="cl-vtab active" data-cl="v031">
+            v0.3.1 <span class="cl-vtab-latest">latest</span>
           </button>
+          <button class="cl-vtab" data-cl="v030">v0.3.0</button>
           <button class="cl-vtab" data-cl="v020">v0.2.0</button>
           <button class="cl-vtab" data-cl="v010">v0.1.0</button>
         </div>
 
+        <!-- v0.3.1 -->
+        <div class="cl-panel active" id="cl-v031">
+          <div class="cl-meta">
+            <span class="cl-ver-name">v0.3.1</span>
+            <span class="cl-date">2026-06-07</span>
+          </div>
+          <p class="cl-summary">Bug fixes and performance improvements: BM25 metadata filtering, per-collection BM25 index caching, multi-collection ChromaDB path isolation, and extras bundle restructuring.</p>
+          <table class="cl-table">
+            <tbody>
+              <tr><td><span class="cl-cat">fixed</span></td><td><code>BM25Retriever</code> now applies <code>metadata_filter</code> post-scoring — previously silently ignored. Semantics match <code>DenseRetriever</code>: scalar equality on metadata keys. Fixes <a href="https://github.com/kevinrawal/nexrag/issues/22">#22</a>.</td></tr>
+              <tr><td><span class="cl-cat">performance</span></td><td><code>BM25Retriever</code> caches the BM25 index per collection. <code>get_all()</code> is called once instead of on every query. Cache is invalidated automatically after <code>ingest()</code> / <code>ingest_documents()</code> / <code>async_ingest()</code>. Optional <code>cache_ttl</code> constructor arg for time-based expiry. Fixes <a href="https://github.com/kevinrawal/nexrag/issues/23">#23</a>.</td></tr>
+              <tr><td><span class="cl-cat">fixed</span></td><td>Multi-collection ChromaDB: per-collection <code>mode</code>, <code>path</code>, <code>host</code>, and <code>port</code> are now applied. Each unique configuration gets its own ChromaDB client. Fixes <a href="https://github.com/kevinrawal/nexrag/issues/24">#24</a>.</td></tr>
+              <tr><td><span class="cl-cat">config</span></td><td>New install extras: <code>nexrag[all-sparse]</code> (rank-bm25), <code>nexrag[all-rerankers]</code> (Cohere + sentence-transformers), <code>nexrag[all-retrieval]</code> (both). <code>nexrag[all]</code> now includes all retrieval deps. Fixes <a href="https://github.com/kevinrawal/nexrag/issues/21">#21</a>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <!-- v0.3.0 -->
-        <div class="cl-panel active" id="cl-v030">
+        <div class="cl-panel" id="cl-v030">
           <div class="cl-meta">
             <span class="cl-ver-name">v0.3.0</span>
             <span class="cl-date">2026-05-31</span>
@@ -1583,11 +1604,11 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
           <p class="cl-summary">Retrieval expansion: hybrid BM25+dense retrieval, optional reranking stage, multi-collection routing, RunMetrics observability, and PDF metadata extraction.</p>
           <table class="cl-table">
             <tbody>
-              <tr><td><span class="cl-cat">retrieval</span></td><td><code>BM25Retriever</code> — corpus-level keyword retrieval. Requires <code>nexrag[bm25]</code>. See known limitations: <a href="https://github.com/kevinrawal/nexrag/issues/22">#22</a>, <a href="https://github.com/kevinrawal/nexrag/issues/23">#23</a>.</td></tr>
+              <tr><td><span class="cl-cat">retrieval</span></td><td><code>BM25Retriever</code> — corpus-level keyword retrieval. Requires <code>nexrag[bm25]</code>. Metadata filtering and index caching shipped in v0.3.1.</td></tr>
               <tr><td><span class="cl-cat">retrieval</span></td><td><code>HybridRetriever</code> — fused dense+BM25 with configurable <code>alpha</code>. Typical pattern: retrieve <code>top_k=50</code>, rerank to <code>top_n=5</code>.</td></tr>
               <tr><td><span class="cl-cat">reranking</span></td><td>Optional reranker stage between retriever and prompt builder. <code>CohereReranker</code> (<code>nexrag[cohere]</code>) and <code>CrossEncoderReranker</code> (<code>nexrag[cross-encoder]</code>).</td></tr>
               <tr><td><span class="cl-cat">observability</span></td><td><code>RunMetrics</code> — per-stage latency, token usage, chunks written/retrieved. Attached to <code>PipelineResult.metrics</code> and <code>IngestionResult.metrics</code>. Not on streaming calls (<a href="https://github.com/kevinrawal/nexrag/issues/25">#25</a>).</td></tr>
-              <tr><td><span class="cl-cat">routing</span></td><td>Multi-collection routing — pass <code>collection="name"</code> to any <code>ingest*()</code> or <code>query()</code> call. <code>IngestionResult.collection_used</code> tracks which was used. Per-collection paths pending (<a href="https://github.com/kevinrawal/nexrag/issues/24">#24</a>).</td></tr>
+              <tr><td><span class="cl-cat">routing</span></td><td>Multi-collection routing — pass <code>collection="name"</code> to any <code>ingest*()</code> or <code>query()</code> call. <code>IngestionResult.collection_used</code> tracks which was used. Per-collection <code>path</code>/<code>mode</code> isolation shipped in v0.3.1.</td></tr>
               <tr><td><span class="cl-cat">loaders</span></td><td><code>PDFLoader</code> extracts up to 8 metadata fields (<code>title</code>, <code>author</code>, <code>subject</code>, <code>keywords</code>, <code>creator</code>, <code>producer</code>, <code>creation_date</code>, <code>modification_date</code>). Configurable via <code>loader.include_metadata</code> and <code>loader.metadata_fields</code>.</td></tr>
               <tr><td><span class="cl-cat">config</span></td><td><code>VectorDBConfig</code> gains <code>upsert_batch_size</code>, <code>query_batch_size</code>, <code>max_retries</code>, <code>retry_delay</code> for ChromaDB connection and batch tuning.</td></tr>
               <tr><td><span class="cl-cat">config</span></td><td>Chunker <code>strategy</code> reduced to <code>recursive | custom</code>. Values <code>fixed</code>, <code>sentence</code>, <code>paragraph</code> removed — they were never implemented.</td></tr>
