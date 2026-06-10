@@ -818,9 +818,9 @@ result = pipeline.query(
   <span class="key">top_n:</span> <span class="val">5</span>
   <span class="yml-cmt"># device: cuda   # optional — CPU by default</span></code></pre>
 
-        <div class="callout warn">
-          <div class="callout-icon">!</div>
-          <p><strong><code>stream_query()</code> and <code>astream_query()</code> do not attach <code>RunMetrics</code>.</strong> Use <code>pipeline.query()</code> or <code>pipeline.async_query()</code> when you need latency breakdowns or token counts.</p>
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p><strong><code>stream_query()</code> and <code>astream_query()</code> yield <code>RunMetrics</code> as the final stream item.</strong> Use <code>isinstance(item, RunMetrics)</code> to separate tokens from the metrics object — stage latencies and chunk count are available without a separate non-streaming call.</p>
         </div>
       </div>
 
@@ -848,34 +848,47 @@ result = pipeline.query(
         </div>
 
         <div id="async-sync-stream" data-sub-anchor="async-sync-stream" class="doc-h2">Sync streaming</div>
-        <p class="doc-p"><code>stream_query()</code> works with any sync caller — no event loop required. Tokens are yielded as they arrive from the LLM.</p>
-        <pre class="doc-code"><code>pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
+        <p class="doc-p"><code>stream_query()</code> works with any sync caller — no event loop required. Tokens are yielded as they arrive from the LLM. The final item in the stream is always a <code>RunMetrics</code> object — use <code>isinstance</code> to separate tokens from metrics.</p>
+        <pre class="doc-code"><code><span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG, RunMetrics
 
-<span class="kw">for</span> token <span class="kw">in</span> pipeline.stream_query(<span class="str">"Summarize the key obligations"</span>):
-    <span class="fn">print</span>(token, end=<span class="str">""</span>, flush=<span class="kw">True</span>)
+pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
+
+metrics = <span class="kw">None</span>
+<span class="kw">for</span> item <span class="kw">in</span> pipeline.stream_query(<span class="str">"Summarize the key obligations"</span>):
+    <span class="kw">if</span> <span class="fn">isinstance</span>(item, RunMetrics):
+        metrics = item
+    <span class="kw">else</span>:
+        <span class="fn">print</span>(item, end=<span class="str">""</span>, flush=<span class="kw">True</span>)
 <span class="fn">print</span>()
+<span class="fn">print</span>(<span class="str">f"<span class="cmt">{metrics.total_latency_ms:.0f}</span>ms — <span class="cmt">{metrics.chunks_retrieved}</span> chunks"</span>)
 
 <span class="cmt"># Runtime overrides work identically to query()</span>
-<span class="kw">for</span> token <span class="kw">in</span> pipeline.stream_query(
+<span class="kw">for</span> item <span class="kw">in</span> pipeline.stream_query(
     <span class="str">"What are the termination clauses?"</span>,
     top_k=<span class="num">10</span>,
     score_threshold=<span class="num">0.6</span>,
 ):
-    <span class="fn">print</span>(token, end=<span class="str">""</span>, flush=<span class="kw">True</span>)</code></pre>
+    <span class="kw">if not</span> <span class="fn">isinstance</span>(item, RunMetrics):
+        <span class="fn">print</span>(item, end=<span class="str">""</span>, flush=<span class="kw">True</span>)</code></pre>
 
         <div id="async-astream" data-sub-anchor="async-astream" class="doc-h2">Async streaming</div>
-        <p class="doc-p"><code>astream_query()</code> is the async variant. With <code>mode: async</code> configured, pre-LLM stages use native async clients and tokens stream live. With <code>mode: sync</code>, the sync stream runs in a thread pool — non-blocking for the event loop, but tokens buffer until the stream completes in the thread.</p>
+        <p class="doc-p"><code>astream_query()</code> is the async variant. With <code>mode: async</code> configured, pre-LLM stages use native async clients and tokens stream live. With <code>mode: sync</code>, the sync stream runs in a thread pool — non-blocking for the event loop, but tokens buffer until the stream completes in the thread. Like the sync variant, <code>RunMetrics</code> is the final item yielded.</p>
         <pre class="doc-code"><code><span class="kw">import</span> asyncio
-<span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
+<span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG, RunMetrics
 
 pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
 
 <span class="kw">async def</span> <span class="fn">main</span>():
-    <span class="kw">async for</span> token <span class="kw">in</span> pipeline.astream_query(
+    metrics = <span class="kw">None</span>
+    <span class="kw">async for</span> item <span class="kw">in</span> pipeline.astream_query(
         <span class="str">"What changed in 2024?"</span>,
         metadata_filter={<span class="str">"year"</span>: <span class="num">2024</span>},
     ):
-        <span class="fn">print</span>(token, end=<span class="str">""</span>, flush=<span class="kw">True</span>)
+        <span class="kw">if</span> <span class="fn">isinstance</span>(item, RunMetrics):
+            metrics = item
+        <span class="kw">else</span>:
+            <span class="fn">print</span>(item, end=<span class="str">""</span>, flush=<span class="kw">True</span>)
+    <span class="fn">print</span>(<span class="str">f"\n<span class="cmt">{metrics.total_latency_ms:.0f}</span>ms"</span>)
 
 asyncio.run(<span class="fn">main</span>())</code></pre>
 
@@ -905,9 +918,9 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)  <span cla
           <p><strong>Do not call <code>pipeline.query()</code> or <code>pipeline.ingest()</code> from inside a running event loop.</strong> Use <code>async_query()</code> and <code>async_ingest()</code> inside async contexts. NexRAG raises a clear <code>NexRAGError</code> if you mix sync and async entry points.</p>
         </div>
 
-        <div class="callout warn">
-          <div class="callout-icon">!</div>
-          <p><strong>Streaming calls do not return <code>RunMetrics</code>.</strong> <code>stream_query()</code> and <code>astream_query()</code> yield tokens only — there is no single result object. Access <code>result.metrics</code> via <code>pipeline.query()</code> or <code>pipeline.async_query()</code> instead. Tracked in <a href="https://github.com/kevinrawal/nexrag/issues/25">#25</a>.</p>
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p><strong>Streaming calls yield <code>RunMetrics</code> as the last item.</strong> Both <code>stream_query()</code> and <code>astream_query()</code> yield string tokens followed by a single <code>RunMetrics</code> object. Use <code>isinstance(item, RunMetrics)</code> to detect it. <code>token_usage</code> is <code>None</code> in streaming (streaming LLM APIs do not expose counts mid-stream).</p>
         </div>
 
         <div class="doc-h2">All async methods</div>
@@ -915,9 +928,9 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)  <span cla
           <thead><tr><th>Method</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td>async_query(text, **kwargs)</td><td>Non-blocking query — awaitable, returns PipelineResult</td></tr>
-            <tr><td>astream_query(text, **kwargs)</td><td>Async generator — yields tokens live from the LLM</td></tr>
+            <tr><td>astream_query(text, **kwargs)</td><td>Async generator — yields tokens then a final <code>RunMetrics</code>; use <code>isinstance(item, RunMetrics)</code> to separate</td></tr>
             <tr><td>async_ingest(data, loader?)</td><td>Non-blocking ingest — awaitable, returns IngestionResult</td></tr>
-            <tr><td>stream_query(text, **kwargs)</td><td>Sync generator — yields tokens, no event loop needed</td></tr>
+            <tr><td>stream_query(text, **kwargs)</td><td>Sync generator — yields tokens then a final <code>RunMetrics</code>; no event loop needed</td></tr>
           </tbody>
         </table>
       </div>
@@ -1081,7 +1094,7 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
         </table>
 
         <div id="api-metrics" data-sub-anchor="api-metrics" class="doc-h2">RunMetrics</div>
-        <p class="doc-p">Attached to <code>PipelineResult.metrics</code> and <code>IngestionResult.metrics</code>. Not attached to streaming calls (<a href="https://github.com/kevinrawal/nexrag/issues/25">#25</a>).</p>
+        <p class="doc-p">Attached to <code>PipelineResult.metrics</code> and <code>IngestionResult.metrics</code>. Also yielded as the final item from <code>stream_query()</code> and <code>astream_query()</code> — use <code>isinstance(item, RunMetrics)</code> to detect it in a stream.</p>
         <table class="field-table">
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
@@ -1435,9 +1448,9 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
         <h1 class="doc-h1">Rerankers</h1>
         <p class="doc-lead">An optional post-retrieval stage that re-scores a larger candidate set and returns the top-N most relevant chunks. The pattern: retrieve a wide set (<code>top_k=50</code>) for high recall, then rerank to a narrow set (<code>top_n=5</code>) for high precision — only the top-N reach the LLM.</p>
 
-        <div class="callout warn">
-          <div class="callout-icon">!</div>
-          <p><strong>Streaming does not return <code>RunMetrics</code>.</strong> <code>stream_query()</code> and <code>astream_query()</code> yield tokens only. Use <code>query()</code> or <code>async_query()</code> when you need latency breakdowns.</p>
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p><strong>Streaming calls include reranker latency in <code>RunMetrics</code>.</strong> When a reranker is configured, its latency appears as <code>stage_latencies["reranker"]</code> in the <code>RunMetrics</code> yielded at the end of <code>stream_query()</code> and <code>astream_query()</code>.</p>
         </div>
 
         <div id="reranker-cohere" data-sub-anchor="reranker-cohere" class="doc-h2">Cohere</div>
@@ -1582,15 +1595,16 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
         <div class="cl-panel active" id="cl-v031">
           <div class="cl-meta">
             <span class="cl-ver-name">v0.3.1</span>
-            <span class="cl-date">2026-06-07</span>
+            <span class="cl-date">2026-06-10</span>
           </div>
-          <p class="cl-summary">Bug fixes and performance improvements: BM25 metadata filtering, per-collection BM25 index caching, multi-collection ChromaDB path isolation, and extras bundle restructuring.</p>
+          <p class="cl-summary">Bug fixes and performance improvements: BM25 metadata filtering, per-collection BM25 index caching, multi-collection ChromaDB path isolation, extras bundle restructuring, and streaming metrics via <code>RunMetrics</code>.</p>
           <table class="cl-table">
             <tbody>
               <tr><td><span class="cl-cat">fixed</span></td><td><code>BM25Retriever</code> now applies <code>metadata_filter</code> post-scoring — previously silently ignored. Semantics match <code>DenseRetriever</code>: scalar equality on metadata keys. Fixes <a href="https://github.com/kevinrawal/nexrag/issues/22">#22</a>.</td></tr>
               <tr><td><span class="cl-cat">performance</span></td><td><code>BM25Retriever</code> caches the BM25 index per collection. <code>get_all()</code> is called once instead of on every query. Cache is invalidated automatically after <code>ingest()</code> / <code>ingest_documents()</code> / <code>async_ingest()</code>. Optional <code>cache_ttl</code> constructor arg for time-based expiry. Fixes <a href="https://github.com/kevinrawal/nexrag/issues/23">#23</a>.</td></tr>
               <tr><td><span class="cl-cat">fixed</span></td><td>Multi-collection ChromaDB: per-collection <code>mode</code>, <code>path</code>, <code>host</code>, and <code>port</code> are now applied. Each unique configuration gets its own ChromaDB client. Fixes <a href="https://github.com/kevinrawal/nexrag/issues/24">#24</a>.</td></tr>
               <tr><td><span class="cl-cat">config</span></td><td>New install extras: <code>nexrag[all-sparse]</code> (rank-bm25), <code>nexrag[all-rerankers]</code> (Cohere + sentence-transformers), <code>nexrag[all-retrieval]</code> (both). <code>nexrag[all]</code> now includes all retrieval deps. Fixes <a href="https://github.com/kevinrawal/nexrag/issues/21">#21</a>.</td></tr>
+              <tr><td><span class="cl-cat">observability</span></td><td><code>stream_query()</code> and <code>astream_query()</code> now yield <code>RunMetrics</code> as the final stream item. All pre-LLM stages are timed identically to <code>query()</code>. Return types updated to <code>Iterator[str | RunMetrics]</code> / <code>AsyncIterator[str | RunMetrics]</code>. <code>RunMetrics</code> exported from top-level package. Fixes <a href="https://github.com/kevinrawal/nexrag/issues/25">#25</a>.</td></tr>
             </tbody>
           </table>
         </div>

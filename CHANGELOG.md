@@ -7,6 +7,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.3.1] - 2026-06-10
+
+### Added
+
+- `stream_query()` and `astream_query()` now yield `RunMetrics` as the final stream item — callers access per-stage latencies (`embedder`, `retriever`, `reranker`, `prompt_builder`, `llm`) and `chunks_retrieved` without a separate non-streaming call; use `isinstance(item, RunMetrics)` to separate tokens from the metrics object
+- `RunMetrics` exported from the top-level `nexrag` package (`from nexrag import NexRAG, RunMetrics`)
+- BM25 index caching — corpus is built once per collection on first query and reused across subsequent queries; TTL configurable via `cache_ttl` on `BM25Retriever`; cache invalidated automatically after every `ingest()`, `ingest_documents()`, and `async_ingest()` call
+- `BM25Retriever.invalidate_cache(collection=None)` — public API to flush cache for one collection or all
+- Per-collection ChromaDB isolation — when collections declare different `(mode, path, host, port)` configs, each collection is routed to its own `ChromaDBAdapter` instance (backed by `_MultiChromaAdapter`); collections sharing the same config share one adapter instance
+- `pyproject.toml` extras: `all-sparse` (`bm25`), `all-rerankers` (`cohere` + `cross-encoder`), `all-retrieval` (`all-sparse` + `all-rerankers`) for targeted installs without pulling PyTorch
+
+### Fixed
+
+- `stream_query()` and `astream_query()` return types corrected from `Iterator[str]` / `AsyncIterator[str]` to `Iterator[str | RunMetrics]` / `AsyncIterator[str | RunMetrics]`
+- All pre-LLM pipeline stages (embed, retrieve, rerank, prompt_build) now timed in the streaming path, matching the non-streaming `query()` / `async_query()` behaviour
+
+---
+
 ## [0.3.0] - 2026-05-31
 
 ### Added
@@ -150,5 +168,6 @@ Nothing yet.
 
 | Version | Date | Description |
 |---|---|---|
+| 0.3.1 | 2026-06-10 | Streaming metrics, BM25 caching, per-collection ChromaDB isolation, targeted extras |
 | 0.3.0 | 2026-05-31 | Async pipelines, streaming, hybrid/sparse retrieval, reranking, RunMetrics, multi-collection routing |
 | 0.2.0 | 2026-05-28 | Public release — full naive RAG pipeline |

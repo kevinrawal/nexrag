@@ -1,7 +1,7 @@
 """Basic smoke tests — verify the package is importable and structured correctly."""
 
 import nexrag
-from nexrag import NexRAG, PipelineResult
+from nexrag import NexRAG, PipelineResult, RunMetrics
 from nexrag.exceptions import (
     ChunkError,
     ClassResolutionError,
@@ -26,12 +26,13 @@ from nexrag.exceptions import (
 def test_version_exists():
     assert hasattr(nexrag, "__version__")
     assert isinstance(nexrag.__version__, str)
-    assert nexrag.__version__ == "0.3.0"
+    assert nexrag.__version__ == "0.3.1"
 
 
 def test_public_api_importable():
     assert NexRAG is not None
     assert PipelineResult is not None
+    assert RunMetrics is not None
     assert NexRAGError is not None
 
 
