@@ -1669,6 +1669,7 @@ all = [
     { name = "anthropic" },
     { name = "beautifulsoup4" },
     { name = "chromadb" },
+    { name = "cohere" },
     { name = "huggingface-hub" },
     { name = "lxml" },
     { name = "ollama" },
@@ -1676,6 +1677,8 @@ all = [
     { name = "openpyxl" },
     { name = "pypdf" },
     { name = "python-docx" },
+    { name = "rank-bm25" },
+    { name = "sentence-transformers" },
 ]
 all-loaders = [
     { name = "beautifulsoup4" },
@@ -1690,6 +1693,18 @@ all-providers = [
     { name = "huggingface-hub" },
     { name = "ollama" },
     { name = "openai" },
+]
+all-rerankers = [
+    { name = "cohere" },
+    { name = "sentence-transformers" },
+]
+all-retrieval = [
+    { name = "cohere" },
+    { name = "rank-bm25" },
+    { name = "sentence-transformers" },
+]
+all-sparse = [
+    { name = "rank-bm25" },
 ]
 anthropic = [
     { name = "anthropic" },
@@ -1750,8 +1765,14 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "nexrag", extras = ["all-loaders"], marker = "extra == 'all'" },
     { name = "nexrag", extras = ["all-providers"], marker = "extra == 'all'" },
+    { name = "nexrag", extras = ["all-rerankers"], marker = "extra == 'all-retrieval'" },
+    { name = "nexrag", extras = ["all-retrieval"], marker = "extra == 'all'" },
+    { name = "nexrag", extras = ["all-sparse"], marker = "extra == 'all-retrieval'" },
     { name = "nexrag", extras = ["anthropic"], marker = "extra == 'all-providers'" },
+    { name = "nexrag", extras = ["bm25"], marker = "extra == 'all-sparse'" },
     { name = "nexrag", extras = ["chromadb"], marker = "extra == 'all-providers'" },
+    { name = "nexrag", extras = ["cohere"], marker = "extra == 'all-rerankers'" },
+    { name = "nexrag", extras = ["cross-encoder"], marker = "extra == 'all-rerankers'" },
     { name = "nexrag", extras = ["excel"], marker = "extra == 'all-loaders'" },
     { name = "nexrag", extras = ["html"], marker = "extra == 'all-loaders'" },
     { name = "nexrag", extras = ["huggingface"], marker = "extra == 'all-providers'" },
@@ -1776,7 +1797,7 @@ requires-dist = [
     { name = "sentence-transformers", marker = "extra == 'cross-encoder'", specifier = ">=2.7" },
     { name = "types-pyyaml", marker = "extra == 'dev'" },
 ]
-provides-extras = ["openai", "anthropic", "ollama", "chromadb", "huggingface", "pdf", "word", "excel", "html", "bm25", "cohere", "cross-encoder", "all-providers", "all-loaders", "all", "dev"]
+provides-extras = ["openai", "anthropic", "ollama", "chromadb", "huggingface", "pdf", "word", "excel", "html", "bm25", "cohere", "cross-encoder", "all-providers", "all-loaders", "all-sparse", "all-rerankers", "all-retrieval", "all", "dev"]
 
 [[package]]
 name = "nodeenv"

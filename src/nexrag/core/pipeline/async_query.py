@@ -114,9 +114,9 @@ class AsyncQueryPipeline:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[str | RunMetrics]:
         """
-        Sync streaming — collects tokens from astream() via asyncio.run().
+        Sync streaming — collects tokens and final RunMetrics from astream() via asyncio.run().
 
         Note: tokens are buffered until the full stream completes before yielding.
         For true live token streaming, use astream_query() with mode: async.
@@ -124,10 +124,10 @@ class AsyncQueryPipeline:
         """
         self._assert_no_running_loop()
 
-        async def _collect() -> list[str]:
+        async def _collect() -> list[str | RunMetrics]:
             return [
-                t
-                async for t in self.astream(
+                item
+                async for item in self.astream(
                     query,
                     collection=collection,
                     top_k=top_k,
@@ -231,20 +231,29 @@ class AsyncQueryPipeline:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[str | RunMetrics]:
         """
-        Async streaming variant. Pre-LLM stages run via async ABCs,
-        then tokens are yielded live from llm.async_stream().
+        Async streaming variant. Pre-LLM stages run via async ABCs and are timed
+        identically to arun(). Tokens are yielded live from llm.async_stream().
+        The final item yielded is always a RunMetrics object.
 
         Yields:
-            Response text tokens as they arrive from the LLM.
+            Response text tokens as they arrive from the LLM, followed by a
+            final RunMetrics object. Use isinstance(item, RunMetrics) to detect it.
         """
         pipeline_id = str(uuid.uuid4())
+        started_at = time.monotonic()
         active_collection = collection or self._collection
         active_top_k = top_k if top_k is not None else self._top_k
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
 
+        stage_latencies: dict[str, float] = {}
+
+        t = time.monotonic()
         query_embedding = await self._run_query_embedder(query, pipeline_id)
+        stage_latencies["embedder"] = (time.monotonic() - t) * 1000
+
+        t = time.monotonic()
         chunks = await self._run_retriever(
             query,
             query_embedding,
@@ -254,9 +263,16 @@ class AsyncQueryPipeline:
             metadata_filter,
             pipeline_id,
         )
+        stage_latencies["retriever"] = (time.monotonic() - t) * 1000
+
         if self._reranker is not None:
+            t = time.monotonic()
             chunks = await self._run_reranker(query, chunks, pipeline_id)
+            stage_latencies["reranker"] = (time.monotonic() - t) * 1000
+
+        t = time.monotonic()
         prompt = await self._run_prompt_builder(query, chunks, pipeline_id)
+        stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
 
         await self._emit(pipeline_id, "llm", "started")
         t = time.monotonic()
@@ -273,7 +289,18 @@ class AsyncQueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
+        stage_latencies["llm"] = (time.monotonic() - t) * 1000
         await self._emit(pipeline_id, "llm", "completed", t)
+
+        latency_ms = (time.monotonic() - started_at) * 1000
+        yield RunMetrics(
+            pipeline_id=pipeline_id,
+            total_latency_ms=latency_ms,
+            stage_latencies=stage_latencies,
+            token_usage=None,
+            model=getattr(self._llm, "_model", None),
+            chunks_retrieved=len(chunks),
+        )
 
     # Stage runners
 

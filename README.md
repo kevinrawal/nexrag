@@ -38,19 +38,28 @@ cp nexrag.example.yaml nexrag.yaml   # edit to taste
 ```
 
 ```python
-from nexrag import NexRAG
+from nexrag import NexRAG, RunMetrics
 
 pipeline = NexRAG.from_config("nexrag.yaml")
 
 # Ingest a PDF
 result = pipeline.ingest("contracts/agreement.pdf")
-print(f"Ingested {result.documents_loaded} doc, {result.chunks_written} chunks")
+print(f"Ingested {result.documents_loaded} doc, {result.chunks_produced} chunks")
 
-# Query
+# Query (blocking)
 result = pipeline.query("What are the termination clauses?")
 print(result.answer)
 for source in result.sources:
     print(f"  [{source.rank}] score={source.score:.3f}  {source.chunk.metadata.get('source')}")
+
+# Streaming — tokens arrive live; RunMetrics is the final item
+metrics = None
+for item in pipeline.stream_query("Summarise the key obligations."):
+    if isinstance(item, RunMetrics):
+        metrics = item
+    else:
+        print(item, end="", flush=True)
+print(f"\n\n{metrics.total_latency_ms:.0f}ms — {metrics.chunks_retrieved} chunks retrieved")
 ```
 
 ```yaml
@@ -78,7 +87,7 @@ query:
     api_key: ${OPENAI_API_KEY}
 ```
 
-See [docs/user-guide.md](docs/user-guide.md) for the full guide.
+See [docs/](docs/) for the full documentation site.
 
 ---
 
@@ -88,10 +97,30 @@ See [docs/user-guide.md](docs/user-guide.md) for the full guide.
 # Core only
 pip install nexrag
 
-# With OpenAI support
-pip install "nexrag[openai]"
+# Provider extras — install only what you use
+pip install "nexrag[openai]"         # OpenAI embedder + LLM
+pip install "nexrag[anthropic]"      # Anthropic (Claude) LLM
+pip install "nexrag[ollama]"         # Ollama local LLM + embedder
+pip install "nexrag[huggingface]"    # HuggingFace embedder
 
-# With everything
+# Document loaders
+pip install "nexrag[pdf]"            # PDFLoader (pypdf)
+pip install "nexrag[word]"           # Word documents (python-docx)
+pip install "nexrag[html]"           # HTML pages (beautifulsoup4)
+
+# Retrieval extras
+pip install "nexrag[bm25]"           # BM25Retriever keyword search (rank-bm25)
+pip install "nexrag[cohere]"         # CohereReranker
+pip install "nexrag[cross-encoder]"  # CrossEncoderReranker (sentence-transformers)
+
+# Convenience bundles
+pip install "nexrag[all-sparse]"     # all sparse retrievers (bm25)
+pip install "nexrag[all-rerankers]"  # all rerankers (cohere + cross-encoder)
+pip install "nexrag[all-retrieval]"  # all-sparse + all-rerankers
+pip install "nexrag[all-loaders]"    # all document loaders
+pip install "nexrag[all-providers]"  # all LLM + embedder providers
+
+# Full bundle — dev/CI; pulls PyTorch via sentence-transformers
 pip install "nexrag[all]"
 ```
 
@@ -124,23 +153,15 @@ See [Architecture Documentation](docs/) for full pipeline diagrams.
 
 ## Supported Providers
 
-**Available now**
-
 | Category | Providers |
 |---|---|
-| Embedders | OpenAI |
-| Vector DBs | ChromaDB (local persistent, in-memory) |
-| LLMs | OpenAI, Ollama |
-| Loaders | PDF, plain text |
+| Embedders | OpenAI, Ollama, HuggingFace |
+| Vector DBs | ChromaDB (in-memory, persistent, remote server) |
+| LLMs | OpenAI, Ollama, Anthropic |
+| Loaders | PDF, plain text, Word, HTML, Excel |
 | Chunkers | Recursive (separator-aware) |
-
-**Coming in V1**
-
-| Category | Providers |
-|---|---|
-| Embedders | Ollama, HuggingFace |
-| Vector DBs | ChromaDB (remote server via HttpClient) |
-| LLMs | Anthropic |
+| Retrievers | Dense (cosine similarity), BM25 (keyword), Hybrid (dense + BM25) |
+| Rerankers | Cohere, CrossEncoder (sentence-transformers) |
 
 ---
 

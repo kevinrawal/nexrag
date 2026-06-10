@@ -192,10 +192,37 @@ class TestAsyncQueryPipeline:
         pipeline = _make_async_query_pipeline("The answer")
 
         async def collect():
-            return [t async for t in pipeline.astream("q")]
+            return [item async for item in pipeline.astream("q")]
 
-        tokens = asyncio.run(collect())
+        items = asyncio.run(collect())
+        tokens = [item for item in items if isinstance(item, str)]
         assert tokens == ["The", "answer"]
+
+    def test_astream_last_item_is_run_metrics(self):
+        from nexrag.core.models.metrics import RunMetrics
+
+        pipeline = _make_async_query_pipeline("word")
+
+        async def collect():
+            return [item async for item in pipeline.astream("q")]
+
+        items = asyncio.run(collect())
+        assert isinstance(items[-1], RunMetrics)
+
+    def test_astream_metrics_has_all_stage_latencies(self):
+        from nexrag.core.models.metrics import RunMetrics
+
+        pipeline = _make_async_query_pipeline("word")
+
+        async def collect():
+            return [item async for item in pipeline.astream("q")]
+
+        items = asyncio.run(collect())
+        m = next(item for item in items if isinstance(item, RunMetrics))
+        assert "embedder" in m.stage_latencies
+        assert "retriever" in m.stage_latencies
+        assert "prompt_builder" in m.stage_latencies
+        assert "llm" in m.stage_latencies
 
     def test_astream_fires_llm_events(self):
         pipeline = _make_async_query_pipeline("word")

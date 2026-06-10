@@ -127,3 +127,137 @@ class TestBM25Retriever:
 
             with pytest.raises(RetrieverError, match="rank_bm25"):
                 retriever.retrieve("test", [], top_k=5, collection="col")
+
+
+class TestBM25RetrieverMetadataFilter:
+    @pytest.fixture
+    def adapter(self):
+        return ChromaDBAdapter(mode="memory")
+
+    @pytest.fixture
+    def col(self):
+        return f"filter_{uuid.uuid4().hex[:8]}"
+
+    def test_filter_returns_only_matching_chunks(self, adapter, col):
+        chunks = [
+            _make_chunk("contract clause about payment", source="contract.pdf"),
+            _make_chunk("invoice number and amount", source="invoice.pdf"),
+            _make_chunk("contract renewal terms", source="contract.pdf"),
+        ]
+        adapter.upsert(chunks, [[float(i), 0.0] for i in range(3)], col)
+
+        retriever = BM25Retriever(vector_db=adapter)
+        results = retriever.retrieve(
+            "contract",
+            [],
+            top_k=10,
+            collection=col,
+            filters={"source": "contract.pdf"},
+        )
+
+        assert len(results) == 2
+        assert all(r.chunk.metadata["source"] == "contract.pdf" for r in results)
+
+    def test_filter_no_match_returns_empty(self, adapter, col):
+        chunks = [_make_chunk("some text", source="a.pdf")]
+        adapter.upsert(chunks, [[1.0, 0.0]], col)
+
+        retriever = BM25Retriever(vector_db=adapter)
+        results = retriever.retrieve(
+            "text",
+            [],
+            top_k=5,
+            collection=col,
+            filters={"source": "b.pdf"},
+        )
+        assert results == []
+
+    def test_no_filter_returns_all_chunks(self, adapter, col):
+        chunks = [
+            _make_chunk("doc one alpha", source="a.pdf"),
+            _make_chunk("doc two alpha", source="b.pdf"),
+        ]
+        adapter.upsert(chunks, [[1.0, 0.0], [0.9, 0.1]], col)
+
+        retriever = BM25Retriever(vector_db=adapter)
+        results = retriever.retrieve("alpha", [], top_k=10, collection=col)
+        assert len(results) == 2
+
+    def test_filter_ranks_are_contiguous_from_one(self, adapter, col):
+        chunks = [
+            _make_chunk("alpha beta", source="x.pdf"),
+            _make_chunk("alpha gamma", source="y.pdf"),
+            _make_chunk("delta epsilon", source="x.pdf"),
+        ]
+        adapter.upsert(chunks, [[float(i), 0.0] for i in range(3)], col)
+
+        retriever = BM25Retriever(vector_db=adapter)
+        results = retriever.retrieve(
+            "alpha", [], top_k=10, collection=col, filters={"source": "x.pdf"}
+        )
+        ranks = [r.rank for r in results]
+        assert ranks == list(range(1, len(ranks) + 1))
+
+
+class TestBM25RetrieverCaching:
+    def test_second_retrieve_uses_cache(self):
+        db = MagicMock()
+        chunks = [_make_chunk("hello world"), _make_chunk("goodbye world")]
+        db.get_all.return_value = chunks
+
+        retriever = BM25Retriever(vector_db=db)
+        retriever.retrieve("hello", [], top_k=5, collection="col")
+        retriever.retrieve("hello", [], top_k=5, collection="col")
+
+        assert db.get_all.call_count == 1
+
+    def test_invalidate_cache_triggers_rebuild(self):
+        db = MagicMock()
+        db.get_all.return_value = [_make_chunk("hello world")]
+
+        retriever = BM25Retriever(vector_db=db)
+        retriever.retrieve("hello", [], top_k=5, collection="col")
+        retriever.invalidate_cache("col")
+        retriever.retrieve("hello", [], top_k=5, collection="col")
+
+        assert db.get_all.call_count == 2
+
+    def test_invalidate_none_clears_all_collections(self):
+        db = MagicMock()
+        db.get_all.return_value = [_make_chunk("some text")]
+
+        retriever = BM25Retriever(vector_db=db)
+        retriever.retrieve("some", [], top_k=5, collection="col_a")
+        retriever.retrieve("some", [], top_k=5, collection="col_b")
+        assert db.get_all.call_count == 2
+
+        retriever.invalidate_cache()  # clear all
+        retriever.retrieve("some", [], top_k=5, collection="col_a")
+        retriever.retrieve("some", [], top_k=5, collection="col_b")
+        assert db.get_all.call_count == 4
+
+    def test_different_collections_cached_independently(self):
+        db = MagicMock()
+        db.get_all.return_value = [_make_chunk("text")]
+
+        retriever = BM25Retriever(vector_db=db)
+        retriever.retrieve("text", [], top_k=5, collection="col_a")
+        retriever.retrieve("text", [], top_k=5, collection="col_a")
+        retriever.retrieve("text", [], top_k=5, collection="col_b")
+        retriever.retrieve("text", [], top_k=5, collection="col_b")
+
+        assert db.get_all.call_count == 2  # one build per collection
+
+    def test_ttl_expiry_triggers_rebuild(self):
+        db = MagicMock()
+        db.get_all.return_value = [_make_chunk("text")]
+
+        retriever = BM25Retriever(vector_db=db, cache_ttl=0.01)
+        retriever.retrieve("text", [], top_k=5, collection="col")
+
+        import time
+
+        time.sleep(0.02)
+
+        retriever.retrieve("text", [], top_k=5, collection="col")
+        assert db.get_all.call_count == 2

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from nexrag.core.interfaces.loader import BaseLoader
+from nexrag.core.models.metrics import RunMetrics
 from nexrag.core.models.result import PipelineResult
 from nexrag.core.pipeline.async_ingestion import AsyncIngestionPipeline
 from nexrag.core.pipeline.async_query import AsyncQueryPipeline
@@ -24,11 +25,12 @@ from nexrag.core.pipeline.ingestion import IngestionPipeline, IngestionResult
 from nexrag.core.pipeline.query import QueryPipeline
 from nexrag.exceptions import NexRAGError
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __all__ = [
     "NexRAG",
     "PipelineResult",
     "IngestionResult",
+    "RunMetrics",
     "NexRAGError",
     "__version__",
 ]
@@ -49,9 +51,11 @@ class NexRAG:
         self,
         ingestion: IngestionPipeline | AsyncIngestionPipeline,
         query: QueryPipeline | AsyncQueryPipeline,
+        retriever: Any | None = None,
     ) -> None:
         self._ingestion = ingestion
         self._query = query
+        self._retriever = retriever
 
     @classmethod
     def from_config(cls, path: str | Path = "nexrag.yaml") -> NexRAG:
@@ -72,8 +76,13 @@ class NexRAG:
         from nexrag.core.config.loader import load_config
 
         config = load_config(path)
-        ingestion, query = wire(config)
-        return cls(ingestion=ingestion, query=query)
+        ingestion, query, retriever = wire(config)
+        return cls(ingestion=ingestion, query=query, retriever=retriever)
+
+    def _notify_ingest(self, collection: str) -> None:
+        """Notify the retriever to invalidate cache for this collection, if supported."""
+        if self._retriever is not None and hasattr(self._retriever, "invalidate_cache"):
+            self._retriever.invalidate_cache(collection)
 
     # Public pipeline methods
 
@@ -101,7 +110,9 @@ class NexRAG:
         Returns:
             IngestionResult with document count, chunk count, latency, and collection_used.
         """
-        return self._ingestion.ingest(data, loader, metadata=metadata, collection=collection)
+        result = self._ingestion.ingest(data, loader, metadata=metadata, collection=collection)
+        self._notify_ingest(result.collection_used)
+        return result
 
     def ingest_batch(
         self,
@@ -145,7 +156,9 @@ class NexRAG:
         Returns:
             IngestionResult with counts, pipeline_id, and collection_used.
         """
-        return self._ingestion.ingest_documents(documents, collection=collection)
+        result = self._ingestion.ingest_documents(documents, collection=collection)
+        self._notify_ingest(result.collection_used)
+        return result
 
     def query(
         self,
@@ -185,12 +198,13 @@ class NexRAG:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[str | RunMetrics]:
         """
         Stream the LLM response token by token (sync).
 
-        All pipeline stages run synchronously except the LLM generation step,
-        which yields tokens as they arrive. Compatible with any sync caller.
+        All pipeline stages run synchronously. Tokens are yielded as they arrive
+        from the LLM. The final item yielded is always a RunMetrics object with
+        full per-stage latencies and chunk count.
 
         Args:
             text:             The user's question.
@@ -200,7 +214,8 @@ class NexRAG:
             metadata_filter:  Optional metadata filters.
 
         Yields:
-            Response text tokens as they stream from the LLM.
+            Response text tokens followed by a final RunMetrics object.
+            Use isinstance(item, RunMetrics) to separate tokens from metrics.
         """
         return self._query.stream(
             text,
@@ -218,7 +233,7 @@ class NexRAG:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[str | RunMetrics]:
         """
         Stream the LLM response token by token (async).
 
@@ -229,6 +244,9 @@ class NexRAG:
         the event loop) and tokens are yielded after the full stream completes in the
         thread. Configure mode: async for true live token streaming.
 
+        The final item yielded is always a RunMetrics object with full per-stage
+        latencies and chunk count.
+
         Args:
             text:             The user's question.
             collection:       Override the default collection.
@@ -237,7 +255,8 @@ class NexRAG:
             metadata_filter:  Optional metadata filters.
 
         Yields:
-            Response text tokens as they stream from the LLM.
+            Response text tokens followed by a final RunMetrics object.
+            Use isinstance(item, RunMetrics) to separate tokens from metrics.
         """
         if isinstance(self._query, AsyncQueryPipeline):
             async for token in self._query.astream(
@@ -321,6 +340,10 @@ class NexRAG:
             IngestionResult with document count, chunk count, and latency.
         """
         if isinstance(self._ingestion, AsyncIngestionPipeline):
-            return await self._ingestion.aingest(data, loader, metadata, collection)
-
-        return await asyncio.to_thread(self._ingestion.ingest, data, loader, metadata, collection)
+            result = await self._ingestion.aingest(data, loader, metadata, collection)
+        else:
+            result = await asyncio.to_thread(
+                self._ingestion.ingest, data, loader, metadata, collection
+            )
+        self._notify_ingest(result.collection_used)
+        return result

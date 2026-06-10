@@ -175,13 +175,14 @@ class QueryPipeline:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
-    ) -> Iterator[str]:
+    ) -> Iterator[str | RunMetrics]:
         """
         Run the query pipeline and stream LLM response tokens as they arrive.
 
-        All stages before the LLM (embed, retrieve, prompt_builder) run synchronously.
-        Tokens are yielded as they stream from the LLM. Pipeline events fire for all
-        stages; the llm 'completed' event fires after the last token is yielded.
+        All stages before the LLM (embed, retrieve, rerank, prompt_builder) run
+        synchronously and are timed identically to run(). Tokens are yielded as they
+        stream from the LLM. The final item yielded is always a RunMetrics object
+        carrying full per-stage latencies and chunk count.
 
         Args:
             query:           The user's question as a plain string.
@@ -191,18 +192,25 @@ class QueryPipeline:
             metadata_filter: Optional metadata filters applied during retrieval.
 
         Yields:
-            Response text tokens as they arrive from the LLM.
+            Response text tokens as they arrive from the LLM, followed by a
+            final RunMetrics object. Use isinstance(item, RunMetrics) to detect it.
 
         Raises:
             PipelineError: Wraps any stage-level error with full context.
         """
         pipeline_id = str(uuid.uuid4())
+        started_at = time.monotonic()
         active_collection = collection or self._collection
         active_top_k = top_k if top_k is not None else self._top_k
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
 
+        stage_latencies: dict[str, float] = {}
         try:
+            t = time.monotonic()
             query_embedding = self._run_query_embedder(query, pipeline_id)
+            stage_latencies["embedder"] = (time.monotonic() - t) * 1000
+
+            t = time.monotonic()
             chunks = self._run_retriever(
                 query,
                 query_embedding,
@@ -212,9 +220,16 @@ class QueryPipeline:
                 metadata_filter,
                 pipeline_id,
             )
+            stage_latencies["retriever"] = (time.monotonic() - t) * 1000
+
             if self._reranker is not None:
+                t = time.monotonic()
                 chunks = self._run_reranker(query, chunks, pipeline_id)
+                stage_latencies["reranker"] = (time.monotonic() - t) * 1000
+
+            t = time.monotonic()
             prompt = self._run_prompt_builder(query, chunks, pipeline_id)
+            stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
         except PipelineError:
             raise
         except Exception as e:
@@ -240,7 +255,18 @@ class QueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
+        stage_latencies["llm"] = (time.monotonic() - t) * 1000
         self._emit(pipeline_id, "llm", "completed", t)
+
+        latency_ms = (time.monotonic() - started_at) * 1000
+        yield RunMetrics(
+            pipeline_id=pipeline_id,
+            total_latency_ms=latency_ms,
+            stage_latencies=stage_latencies,
+            token_usage=None,
+            model=getattr(self._llm, "_model", None),
+            chunks_retrieved=len(chunks),
+        )
 
     # Stage runners
 
