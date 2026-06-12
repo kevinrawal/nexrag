@@ -435,6 +435,7 @@
           <a href="#chunkers" class="sidebar-link">Chunkers</a>
           <div class="sidebar-sub">
             <a href="#chunker-recursive" class="sidebar-sub-link">Recursive</a>
+            <a href="#chunker-fixed"     class="sidebar-sub-link">Fixed</a>
             <a href="#chunker-custom"    class="sidebar-sub-link">Custom chunker</a>
           </div>
         </div>
@@ -546,7 +547,7 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
         <p class="doc-lead">NexRAG is configured entirely through a YAML file — by default <code>nexrag.yaml</code> in your working directory.</p>
 
         <div id="config-reference" data-sub-anchor="config-reference" style="scroll-margin-top:80px"></div>
-        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — full config reference (v0.3.0)</span>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — full config reference (v0.3.2)</span>
 
 <span class="key">mode:</span> <span class="val">sync</span>             <span class="yml-cmt"># sync (default) | async — enables native async pipeline</span>
 
@@ -557,7 +558,7 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
     <span class="yml-cmt"># metadata_fields: [title, author, creation_date]  # whitelist — omit for all 8</span>
 
   <span class="key">chunker:</span>
-    <span class="key">strategy:</span> <span class="val">recursive</span>   <span class="yml-cmt"># recursive | custom</span>
+    <span class="key">strategy:</span> <span class="val">recursive</span>   <span class="yml-cmt"># recursive | fixed | custom</span>
     <span class="key">chunk_size:</span> <span class="val">512</span>
     <span class="key">chunk_overlap:</span> <span class="val">64</span>
     <span class="key">min_chunk_size:</span> <span class="val">50</span>
@@ -600,6 +601,7 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
   <span class="yml-cmt">#   model: rerank-english-v3.0</span>
   <span class="yml-cmt">#   api_key: ${COHERE_API_KEY}</span>
   <span class="yml-cmt">#   top_n: 5                       # chunks passed to LLM after reranking</span>
+  <span class="yml-cmt"># max_query_length: 8000           # reject queries longer than this (chars); 0 = disabled</span>
   <span class="key">llm:</span>
     <span class="key">provider:</span> <span class="val">openai</span>
     <span class="key">model:</span> <span class="val">gpt-4o</span>
@@ -1123,6 +1125,9 @@ m = result.metrics
             <tr><td>metadata</td><td>dict</td><td>Full metadata dict from the chunk</td></tr>
             <tr><td>score</td><td>float</td><td>Cosine similarity score (0–1, higher = more similar)</td></tr>
             <tr><td>rank</td><td>int</td><td>1-based rank in the result list</td></tr>
+            <tr><td>chunk_index</td><td>int | None</td><td>0-based position of this chunk within its parent document</td></tr>
+            <tr><td>total_chunks</td><td>int | None</td><td>Total number of chunks the parent document was split into</td></tr>
+            <tr><td>parent_doc_id</td><td>str | None</td><td>Document ID of the source document this chunk came from</td></tr>
           </tbody>
         </table>
       </div>
@@ -1199,6 +1204,16 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
           <p>A chunk overlap of 10–15% of <code>chunk_size</code> typically improves retrieval — context at chunk boundaries is duplicated so a query landing near an edge still retrieves the relevant passage.</p>
         </div>
 
+        <div id="chunker-fixed" data-sub-anchor="chunker-fixed" class="doc-h2">Fixed</div>
+        <p class="doc-p">Splits text into fixed-length character windows with a configurable overlap (sliding window). No separator logic — each chunk is exactly <code>chunk_size</code> characters, except the last which may be shorter. Useful when you need strict, predictable chunk boundaries.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">chunker:</span>
+    <span class="key">strategy:</span> <span class="val">fixed</span>
+    <span class="key">chunk_size:</span> <span class="val">512</span>        <span class="yml-cmt"># characters per chunk</span>
+    <span class="key">chunk_overlap:</span> <span class="val">64</span>     <span class="yml-cmt"># overlap between consecutive chunks</span>
+    <span class="key">min_chunk_size:</span> <span class="val">50</span>    <span class="yml-cmt"># discard chunks shorter than this</span></code></pre>
+
         <div id="chunker-custom" data-sub-anchor="chunker-custom" class="doc-h2">Custom chunker</div>
         <p class="doc-p">Implement <code>BaseChunker</code> for semantic chunking, fixed-size chunking, or any domain-specific splitting strategy (e.g. split legal contracts by clause, code files by function).</p>
         <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.interfaces.chunker <span class="kw">import</span> BaseChunker
@@ -1249,7 +1264,8 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
     <span class="key">provider:</span> <span class="val">huggingface</span>
     <span class="key">model:</span> <span class="val">sentence-transformers/all-MiniLM-L6-v2</span>
     <span class="key">api_key:</span> <span class="val">${HF_API_KEY}</span>
-    <span class="yml-cmt"># base_url: https://your-dedicated-endpoint.hf.space  # dedicated endpoint override</span></code></pre>
+    <span class="yml-cmt"># base_url: https://your-dedicated-endpoint.hf.space  # dedicated endpoint override</span>
+    <span class="yml-cmt"># max_retries: 3   # retries on HTTP 429/5xx with exponential backoff (default: 3)</span></code></pre>
 
         <div id="embedder-ollama" data-sub-anchor="embedder-ollama" class="doc-h2">Ollama</div>
         <p class="doc-p">Calls a locally-running Ollama server. No API key required. Requires <code>pip install "nexrag[ollama]"</code> and Ollama running locally.</p>
@@ -1258,7 +1274,8 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
   <span class="key">embedder:</span>
     <span class="key">provider:</span> <span class="val">ollama</span>
     <span class="key">model:</span> <span class="val">nomic-embed-text</span>   <span class="yml-cmt"># or mxbai-embed-large, all-minilm, etc.</span>
-    <span class="yml-cmt"># base_url: http://localhost:11434  # default Ollama address</span></code></pre>
+    <span class="yml-cmt"># base_url: http://localhost:11434  # default Ollama address</span>
+    <span class="yml-cmt"># max_concurrent_requests: 10  # async concurrency limit (default: 10)</span></code></pre>
 
         <div id="embedder-custom" data-sub-anchor="embedder-custom" class="doc-h2">Custom embedder</div>
         <p class="doc-p">Implement <code>BaseEmbedder</code> for any model not covered above — local sentence-transformers, Cohere embed, Voyage AI, etc.</p>
@@ -1543,7 +1560,8 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
     <span class="key">model:</span> <span class="val">llama3.1</span>        <span class="yml-cmt"># any model pulled via `ollama pull`</span>
     <span class="yml-cmt"># base_url: http://localhost:11434  # default Ollama address</span>
     <span class="key">temperature:</span> <span class="val">0.2</span>
-    <span class="key">max_tokens:</span> <span class="val">1024</span></code></pre>
+    <span class="key">max_tokens:</span> <span class="val">1024</span>
+    <span class="yml-cmt"># max_retries: 2    # async retry attempts on transient failures (default: 2)</span></code></pre>
 
         <div id="llm-custom" data-sub-anchor="llm-custom" class="doc-h2">Custom LLM</div>
         <p class="doc-p">Implement <code>BaseLLM</code> to call any model API not covered above — Gemini, Mistral, Groq, a local vLLM server, etc. Implement <code>stream()</code> for <code>stream_query()</code> support.</p>
@@ -1583,16 +1601,41 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
 
         <!-- version switcher -->
         <div class="cl-ver-bar">
-          <button class="cl-vtab active" data-cl="v031">
-            v0.3.1 <span class="cl-vtab-latest">latest</span>
+          <button class="cl-vtab active" data-cl="v032">
+            v0.3.2 <span class="cl-vtab-latest">latest</span>
           </button>
+          <button class="cl-vtab" data-cl="v031">v0.3.1</button>
           <button class="cl-vtab" data-cl="v030">v0.3.0</button>
           <button class="cl-vtab" data-cl="v020">v0.2.0</button>
           <button class="cl-vtab" data-cl="v010">v0.1.0</button>
         </div>
 
+        <!-- v0.3.2 -->
+        <div class="cl-panel active" id="cl-v032">
+          <div class="cl-meta">
+            <span class="cl-ver-name">v0.3.2</span>
+            <span class="cl-date">2026-06-12</span>
+          </div>
+          <p class="cl-summary">Robustness and depth: retry logic for HuggingFace embedder, native async for Ollama via httpx, concurrent Ollama embeddings, query input validation, chunk provenance fields in <code>Source</code>, <code>FixedChunker</code>, and config-time collection name validation.</p>
+          <table class="cl-table">
+            <tbody>
+              <tr><td><span class="cl-cat">chunkers</span></td><td><code>FixedChunker</code> — sliding-window fixed-size chunking with configurable <code>chunk_size</code>, <code>chunk_overlap</code>, and <code>min_chunk_size</code>. Use <code>strategy: fixed</code> in YAML.</td></tr>
+              <tr><td><span class="cl-cat">breaking</span></td><td><code>AutoLoader</code> now raises <code>LoaderError</code> (was <code>NotImplementedError</code>) for unsupported formats. Callers catching <code>NotImplementedError</code> must be updated.</td></tr>
+              <tr><td><span class="cl-cat">interface</span></td><td><code>BaseVectorDB</code> gains <code>get_ids_by_metadata(filters, collection_name)</code> and <code>async_get_ids_by_metadata()</code>. Custom adapter implementations must add <code>get_ids_by_metadata()</code>.</td></tr>
+              <tr><td><span class="cl-cat">pipeline</span></td><td>Idempotency check (<code>on_conflict: skip</code>) now uses metadata fetch via <code>get_ids_by_metadata()</code> instead of a top-k similarity query — exact deduplication, lower cost.</td></tr>
+              <tr><td><span class="cl-cat">observability</span></td><td><code>stream_query()</code> and <code>astream_query()</code> now always yield <code>RunMetrics</code> as the final item, even when the LLM raises an exception mid-stream.</td></tr>
+              <tr><td><span class="cl-cat">API</span></td><td><code>Source</code> gains three optional fields: <code>chunk_index</code>, <code>total_chunks</code>, <code>parent_doc_id</code>. Populated from the underlying <code>Chunk</code>; defaults to <code>None</code>. Enables callers to reconstruct surrounding context.</td></tr>
+              <tr><td><span class="cl-cat">config</span></td><td><code>QueryConfig</code> gains <code>max_query_length: int = 8000</code>. Queries exceeding this character count raise <code>PipelineError(stage="validation")</code> before any API call. Set to <code>0</code> to disable.</td></tr>
+              <tr><td><span class="cl-cat">config</span></td><td><code>VectorDBConfig</code> validates all collection names (ChromaDB rules: 1–63 chars, alphanumeric/hyphens/underscores) at <code>from_config()</code> time. Invalid names raise <code>ConfigError</code> immediately.</td></tr>
+              <tr><td><span class="cl-cat">adapter</span></td><td><code>HuggingFaceEmbedder</code> gains <code>max_retries: int = 3</code> with exponential backoff on HTTP 429/500/502/503/504. Auth and model-not-found errors still fail immediately.</td></tr>
+              <tr><td><span class="cl-cat">adapter</span></td><td><code>OllamaEmbedder.async_embed()</code> fires all per-text requests concurrently, bounded by <code>max_concurrent_requests: int = 10</code>. Expected speedup: ~10× for large batches vs sequential.</td></tr>
+              <tr><td><span class="cl-cat">adapter</span></td><td><code>OllamaLLM.async_generate()</code> and <code>async_stream()</code> now use <code>httpx.AsyncClient</code> for true non-blocking I/O. New <code>max_retries: int = 2</code> applies to the async path. <code>httpx&gt;=0.27</code> added to <code>nexrag[ollama]</code>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <!-- v0.3.1 -->
-        <div class="cl-panel active" id="cl-v031">
+        <div class="cl-panel" id="cl-v031">
           <div class="cl-meta">
             <span class="cl-ver-name">v0.3.1</span>
             <span class="cl-date">2026-06-10</span>
@@ -1675,7 +1718,7 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
 
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.3.0</div>
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.3.2</div>
       <div class="footer-links">
         <a href="index.html">Home</a>
         <a href="story.html">Story</a>
