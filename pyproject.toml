@@ -52,6 +52,7 @@ anthropic = [
 ]
 ollama = [
     "ollama>=0.1",
+    "httpx>=0.27",
 ]
 chromadb = [
     "chromadb>=0.5",

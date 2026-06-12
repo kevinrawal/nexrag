@@ -6,6 +6,7 @@ by a Sanitizer, consumed by a Chunker.
 from __future__ import annotations
 
 import uuid
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -40,13 +41,17 @@ class Document:
 
     def with_metadata(self, extra: dict[str, Any]) -> Document:
         """
-        Return a new Document with merged metadata.
+        Return a new Document with merged metadata. Top-level dict values are
+        merged one level deep — nested keys from the original are preserved
+        unless extra explicitly overwrites them.
         """
-        return Document(
-            content=self.content,
-            metadata={**self.metadata, **extra},
-            doc_id=self.doc_id,
-        )
+        merged = deepcopy(self.metadata)
+        for key, value in extra.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = {**merged[key], **value}
+            else:
+                merged[key] = value
+        return Document(content=self.content, metadata=merged, doc_id=self.doc_id)
 
     def __repr__(self) -> str:
         preview = self.content[:60].replace("\n", " ")

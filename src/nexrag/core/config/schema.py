@@ -21,9 +21,14 @@ Structure mirrors nexrag.yaml exactly:
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# ChromaDB collection naming rules: 1–63 chars, alphanumeric/hyphens/underscores,
+# must start and end with alphanumeric (single-char names are also valid).
+_COLLECTION_NAME_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9_-]{0,61}[a-zA-Z0-9])?$")
 
 # Ingestion sub-configs
 
@@ -118,8 +123,26 @@ class VectorDBConfig(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+    @field_validator("default_collection")
+    @classmethod
+    def validate_default_collection_name(cls, v: str) -> str:
+        if not _COLLECTION_NAME_RE.match(v):
+            raise ValueError(
+                f"Invalid collection name '{v}'. Must be 1–63 characters, "
+                "alphanumeric, hyphens, or underscores; must start and end with "
+                "an alphanumeric character."
+            )
+        return v
+
     @model_validator(mode="after")
-    def default_collection_must_exist(self) -> VectorDBConfig:
+    def validate_collections(self) -> VectorDBConfig:
+        for name in self.collections:
+            if not _COLLECTION_NAME_RE.match(name):
+                raise ValueError(
+                    f"Invalid collection name '{name}' in vector_db.collections. "
+                    "Must be 1–63 characters, alphanumeric, hyphens, or underscores; "
+                    "must start and end with an alphanumeric character."
+                )
         if self.default_collection not in self.collections:
             raise ValueError(
                 f"vector_db.default_collection '{self.default_collection}' is not defined "
@@ -233,6 +256,7 @@ class QueryConfig(BaseModel):
     reranker: RerankerConfig | None = None
     prompt: PromptConfig = Field(default_factory=PromptConfig)
     llm: LLMConfig
+    max_query_length: int = 8000
 
 
 # Observability

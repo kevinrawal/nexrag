@@ -2,15 +2,20 @@
 OllamaLLM — wraps the Ollama local inference server.
 
 Drop-in replacement for OpenAILLM for local testing without API keys.
-Ollama exposes an OpenAI-compatible API at http://localhost:11434.
+Ollama exposes a REST API at http://localhost:11434.
 
-Requires: pip install "nexrag[ollama]"  (ollama)
+Sync methods use the ollama Python SDK.
+Async methods use httpx.AsyncClient for true non-blocking I/O — avoids
+thread-pool saturation under concurrent load (10+ simultaneous queries).
+
+Requires: pip install "nexrag[ollama]"  (ollama, httpx)
            and Ollama running locally: https://ollama.com
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import asyncio
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from nexrag.core.interfaces.llm import BaseLLM
@@ -28,6 +33,7 @@ class OllamaLLM(BaseLLM):
         temperature: Sampling temperature. Default 0.2.
         max_tokens:  Max tokens in response. Default 1024.
         timeout:     Request timeout in seconds. Default 60.
+        max_retries: Maximum retries on transient HTTP failures for async methods. Default 2.
     """
 
     def __init__(
@@ -37,12 +43,14 @@ class OllamaLLM(BaseLLM):
         temperature: float = 0.2,
         max_tokens: int = 1024,
         timeout: int = 60,
+        max_retries: int = 2,
     ) -> None:
         self._model = model
         self._base_url = base_url.rstrip("/")
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._timeout = timeout
+        self._max_retries = max_retries
 
     def generate(self, prompt: str) -> tuple[str, TokenUsage | None]:
         """
@@ -95,6 +103,110 @@ class OllamaLLM(BaseLLM):
                 if content:
                     yield content
         except Exception as e:
+            self._map_exception(e)
+
+    async def async_generate(self, prompt: str) -> tuple[str, TokenUsage | None]:
+        """
+        Native async generate using httpx.AsyncClient.
+
+        Uses true async I/O instead of asyncio.to_thread() so the event loop
+        is never blocked — safe under 20+ concurrent queries.
+
+        Returns:
+            (response_text, None)
+
+        Raises:
+            LLMTimeoutError: On timeout.
+            LLMError:        On connection failure or API error.
+        """
+        import httpx
+
+        messages = self._build_messages(prompt)
+        payload = {
+            "model": self._model,
+            "messages": messages,
+            "stream": False,
+            "options": {"temperature": self._temperature, "num_predict": self._max_tokens},
+        }
+
+        async with httpx.AsyncClient(base_url=self._base_url, timeout=self._timeout) as client:
+            for attempt in range(self._max_retries + 1):
+                try:
+                    resp = await client.post("/api/chat", json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    return str(data["message"]["content"]), None
+                except httpx.TimeoutException as e:
+                    raise LLMTimeoutError(
+                        f"Ollama request timed out after {self._timeout}s. "
+                        f"Is Ollama running at {self._base_url}?",
+                        stage="llm",
+                        component="OllamaLLM",
+                        cause=e,
+                    ) from e
+                except httpx.HTTPError as e:
+                    if attempt < self._max_retries:
+                        await asyncio.sleep(2**attempt)
+                        continue
+                    self._map_exception(e)
+                    raise  # unreachable
+
+        raise LLMError(  # unreachable
+            "Retry loop exhausted without returning.",
+            stage="llm",
+            component="OllamaLLM",
+        )
+
+    async def async_stream(self, prompt: str) -> AsyncIterator[str]:
+        """
+        Native async streaming using httpx.AsyncClient with server-sent events.
+
+        Yields tokens as they arrive — no buffering, no thread-pool involvement.
+
+        Yields:
+            Response text tokens as they stream from Ollama.
+
+        Raises:
+            LLMTimeoutError: On timeout.
+            LLMError:        On connection failure or API error.
+        """
+        import httpx
+
+        messages = self._build_messages(prompt)
+        payload = {
+            "model": self._model,
+            "messages": messages,
+            "stream": True,
+            "options": {"temperature": self._temperature, "num_predict": self._max_tokens},
+        }
+
+        try:
+            async with httpx.AsyncClient(base_url=self._base_url, timeout=self._timeout) as client:
+                async with client.stream("POST", "/api/chat", json=payload) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line.strip():
+                            continue
+                        import json as _json
+
+                        try:
+                            data = _json.loads(line)
+                        except _json.JSONDecodeError:
+                            continue
+                        content = data.get("message", {}).get("content", "")
+                        if content:
+                            yield content
+                        if data.get("done"):
+                            break
+        except httpx.TimeoutException as e:
+            raise LLMTimeoutError(
+                f"Ollama streaming timed out after {self._timeout}s. "
+                f"Is Ollama running at {self._base_url}?",
+                stage="llm",
+                component="OllamaLLM",
+                cause=e,
+            ) from e
+        except httpx.HTTPError as e:
             self._map_exception(e)
 
     # Private helpers

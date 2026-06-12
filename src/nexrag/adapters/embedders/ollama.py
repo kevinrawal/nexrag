@@ -2,7 +2,9 @@
 OllamaEmbedder — wraps the Ollama local embeddings API.
 
 Calls ollama.Client.embeddings() once per text (Ollama has no batch endpoint).
-No retry logic — Ollama is local; connection failures are immediate and persistent.
+The sync path is sequential. The async path fires all requests concurrently
+(bounded by max_concurrent_requests) via asyncio.gather() + asyncio.to_thread(),
+which gives a ~10x throughput improvement for large ingestion batches.
 
 Requires: pip install "nexrag[ollama]"  (ollama)
            and Ollama running locally: https://ollama.com
@@ -10,6 +12,7 @@ Requires: pip install "nexrag[ollama]"  (ollama)
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from nexrag.core.interfaces.embedder import BaseEmbedder
@@ -21,9 +24,11 @@ class OllamaEmbedder(BaseEmbedder):
     Embedding adapter for the Ollama local inference server.
 
     Args:
-        model:      Ollama model name. e.g. "nomic-embed-text", "mxbai-embed-large".
-        base_url:   Ollama server URL. Default "http://localhost:11434".
-        batch_size: Accepted for config compatibility; Ollama embeds one text at a time.
+        model:                  Ollama model name. e.g. "nomic-embed-text", "mxbai-embed-large".
+        base_url:               Ollama server URL. Default "http://localhost:11434".
+        batch_size:             Accepted for config compatibility; Ollama embeds one text at a time.
+        max_concurrent_requests: Maximum concurrent async HTTP calls in async_embed().
+                                 Prevents overwhelming the local Ollama server. Default 10.
     """
 
     def __init__(
@@ -31,10 +36,12 @@ class OllamaEmbedder(BaseEmbedder):
         model: str = "nomic-embed-text",
         base_url: str = "http://localhost:11434",
         batch_size: int = 100,
+        max_concurrent_requests: int = 10,
     ) -> None:
         self._model = model
         self._base_url = base_url.rstrip("/")
         self._batch_size = batch_size
+        self._max_concurrent_requests = max_concurrent_requests
         self._client: Any = self._build_client()
         self._dimensions: int | None = None
 
@@ -54,7 +61,8 @@ class OllamaEmbedder(BaseEmbedder):
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """
-        Embed a list of texts. Each text is sent as a separate API call.
+        Embed a list of texts sequentially. Each text is one HTTP call.
+        For concurrent throughput, use async_embed() instead.
 
         Returns:
             One vector per input text, in the same order.
@@ -83,6 +91,37 @@ class OllamaEmbedder(BaseEmbedder):
         if self._dimensions is None:
             self._dimensions = len(vec)
         return vec
+
+    async def async_embed(self, texts: list[str]) -> list[list[float]]:
+        """
+        Embed a list of texts concurrently using asyncio.gather().
+
+        Fires up to max_concurrent_requests calls simultaneously via
+        asyncio.to_thread(), so Ollama's CPU is kept busy without spawning
+        unbounded threads. For 512 texts at ~50ms/call with
+        max_concurrent_requests=10, this completes in ~2.6s vs ~25s sequential.
+
+        Returns:
+            One vector per input text, in the same order.
+
+        Raises:
+            EmbedderError: On connection failure, model not found, or API error.
+        """
+        if not texts:
+            return []
+
+        sem = asyncio.Semaphore(self._max_concurrent_requests)
+
+        async def _one(text: str) -> list[float]:
+            async with sem:
+                return await asyncio.to_thread(self._call_api, text)
+
+        results = await asyncio.gather(*[_one(t) for t in texts])
+
+        if self._dimensions is None and results:
+            self._dimensions = len(results[0])
+
+        return list(results)
 
     # Private helpers
 

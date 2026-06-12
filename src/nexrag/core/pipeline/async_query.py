@@ -69,6 +69,7 @@ class AsyncQueryPipeline:
         score_threshold: float = 0.0,
         observer: BaseObserver | None = None,
         reranker: BaseReranker | None = None,
+        max_query_length: int = 8000,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
@@ -79,6 +80,7 @@ class AsyncQueryPipeline:
         self._score_threshold = score_threshold
         self._observer = observer or NoOpObserver()
         self._reranker = reranker
+        self._max_query_length = max_query_length
 
     def run(
         self,
@@ -163,6 +165,13 @@ class AsyncQueryPipeline:
         Raises:
             PipelineError: Wraps any stage-level error with full context.
         """
+        if self._max_query_length and len(query) > self._max_query_length:
+            raise PipelineError(
+                f"Query length {len(query)} exceeds max_query_length={self._max_query_length}. "
+                "Truncate your query before calling .query().",
+                stage="validation",
+            )
+
         pipeline_id = str(uuid.uuid4())
         started_at = time.monotonic()
 
@@ -241,6 +250,13 @@ class AsyncQueryPipeline:
             Response text tokens as they arrive from the LLM, followed by a
             final RunMetrics object. Use isinstance(item, RunMetrics) to detect it.
         """
+        if self._max_query_length and len(query) > self._max_query_length:
+            raise PipelineError(
+                f"Query length {len(query)} exceeds max_query_length={self._max_query_length}. "
+                "Truncate your query before calling .query().",
+                stage="validation",
+            )
+
         pipeline_id = str(uuid.uuid4())
         started_at = time.monotonic()
         active_collection = collection or self._collection
@@ -472,6 +488,9 @@ class AsyncQueryPipeline:
                 metadata=sc.chunk.metadata,
                 score=sc.score,
                 rank=sc.rank,
+                chunk_index=sc.chunk.chunk_index,
+                total_chunks=sc.chunk.total_chunks,
+                parent_doc_id=sc.chunk.parent_doc_id,
             )
             for sc in chunks
         ]

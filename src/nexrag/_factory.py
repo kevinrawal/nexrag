@@ -107,6 +107,7 @@ def wire(
             score_threshold=config.query.retriever.score_threshold,
             observer=observer,
             reranker=reranker,
+            max_query_length=config.query.max_query_length,
         )
     else:
         ingestion_pipeline = IngestionPipeline(
@@ -130,6 +131,7 @@ def wire(
             score_threshold=config.query.retriever.score_threshold,
             observer=observer,
             reranker=reranker,
+            max_query_length=config.query.max_query_length,
         )
 
     return ingestion_pipeline, query_pipeline, retriever

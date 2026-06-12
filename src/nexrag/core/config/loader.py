@@ -107,9 +107,10 @@ def _resolve_env_vars(text: str, config_path: Path) -> str:
             var_name = expression.strip()
             value = os.environ.get(var_name)
             if value is None:
+                line_no = match.string[: match.start()].count("\n") + 1
                 raise ConfigError(
-                    f"Environment variable '{var_name}' is referenced in "
-                    f"{config_path} but is not set. "
+                    f"Environment variable '{var_name}' is not set "
+                    f"(referenced in {config_path}:{line_no}). "
                     f"Set it in your environment or use ${{VAR:-default}} syntax.",
                     stage="config",
                     component="loader",

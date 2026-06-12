@@ -4,15 +4,25 @@ HuggingFaceEmbedder — wraps the HuggingFace Inference API via huggingface_hub.
 Calls InferenceClient.feature_extraction() in batches.
 If base_url is set, targets a Dedicated Inference Endpoint instead of the shared API.
 
+Retries transient failures (rate limits, server errors) with exponential backoff,
+matching the retry behaviour of the OpenAI and Anthropic adapters.
+
 Requires: pip install "nexrag[huggingface]"  (huggingface-hub)
 """
 
 from __future__ import annotations
 
+import random
+import time
 from typing import Any
 
 from nexrag.core.interfaces.embedder import BaseEmbedder
 from nexrag.exceptions import EmbedderError
+
+_BASE_BACKOFF = 1.0  # seconds; doubles each retry
+
+# HTTP status codes that are safe to retry (transient server-side errors).
+_RETRYABLE_HTTP_CODES = {429, 500, 502, 503, 504}
 
 
 class HuggingFaceEmbedder(BaseEmbedder):
@@ -20,10 +30,11 @@ class HuggingFaceEmbedder(BaseEmbedder):
     Embedding adapter for the HuggingFace Inference API.
 
     Args:
-        model:      HuggingFace model ID. e.g. "sentence-transformers/all-MiniLM-L6-v2".
-        api_key:    HuggingFace token. If None, reads HF_TOKEN from env.
-        base_url:   Optional Dedicated Endpoint URL (overrides the shared Inference API).
-        batch_size: Number of texts per API call. Default 32.
+        model:       HuggingFace model ID. e.g. "sentence-transformers/all-MiniLM-L6-v2".
+        api_key:     HuggingFace token. If None, reads HF_TOKEN from env.
+        base_url:    Optional Dedicated Endpoint URL (overrides the shared Inference API).
+        batch_size:  Number of texts per API call. Default 32.
+        max_retries: Maximum retries on transient failures. Default 3.
     """
 
     def __init__(
@@ -32,11 +43,13 @@ class HuggingFaceEmbedder(BaseEmbedder):
         api_key: str | None = None,
         base_url: str | None = None,
         batch_size: int = 32,
+        max_retries: int = 3,
     ) -> None:
         self._model = model
         self._api_key = api_key
         self._base_url = base_url
         self._batch_size = batch_size
+        self._max_retries = max_retries
         self._client: Any = self._build_client()
         self._dimensions: int | None = None
 
@@ -57,6 +70,7 @@ class HuggingFaceEmbedder(BaseEmbedder):
     def embed(self, texts: list[str]) -> list[list[float]]:
         """
         Embed a list of texts, sending up to batch_size texts per API call.
+        Transient failures are retried up to max_retries times with exponential backoff.
 
         Returns:
             One vector per input text, in the same order.
@@ -70,7 +84,7 @@ class HuggingFaceEmbedder(BaseEmbedder):
         results: list[list[float]] = []
         for i in range(0, len(texts), self._batch_size):
             batch = texts[i : i + self._batch_size]
-            results.extend(self._call_api(batch))
+            results.extend(self._call_api_with_retry(batch))
 
         if self._dimensions is None and results:
             self._dimensions = len(results[0])
@@ -84,7 +98,7 @@ class HuggingFaceEmbedder(BaseEmbedder):
         Raises:
             EmbedderError: On auth failure, model not found, or API error.
         """
-        vec = self._call_api([text])[0]
+        vec = self._call_api_with_retry([text])[0]
         if self._dimensions is None:
             self._dimensions = len(vec)
         return vec
@@ -110,6 +124,21 @@ class HuggingFaceEmbedder(BaseEmbedder):
             kwargs["base_url"] = self._base_url
         return InferenceClient(**kwargs)
 
+    def _call_api_with_retry(self, texts: list[str]) -> list[list[float]]:
+        for attempt in range(self._max_retries + 1):
+            try:
+                return self._call_api(texts)
+            except EmbedderError as e:
+                if self._is_retryable(e) and attempt < self._max_retries:
+                    time.sleep(_BASE_BACKOFF * (2**attempt) + random.uniform(0, 0.5))
+                    continue
+                raise
+        raise EmbedderError(  # unreachable
+            "Retry loop exhausted without returning.",
+            stage="embedder",
+            component="HuggingFaceEmbedder",
+        )
+
     def _call_api(self, texts: list[str]) -> list[list[float]]:
         try:
             response = self._client.feature_extraction(text=texts)
@@ -124,6 +153,18 @@ class HuggingFaceEmbedder(BaseEmbedder):
         except Exception as e:
             self._map_exception(e)
             raise  # unreachable — _map_exception always raises
+
+    @staticmethod
+    def _is_retryable(exc: EmbedderError) -> bool:
+        msg = str(exc).lower()
+        # Never retry auth or not-found errors.
+        non_retryable_phrases = ("401", "unauthorized", "authentication", "not found", "404")
+        if any(p in msg for p in non_retryable_phrases):
+            return False
+        # Retry on any known transient HTTP code or "rate limit" / "service unavailable" text.
+        if any(str(code) in msg for code in _RETRYABLE_HTTP_CODES):
+            return True
+        return any(p in msg for p in ("rate limit", "service unavailable"))
 
     def _map_exception(self, exc: Exception) -> None:
         msg = str(exc).lower()

@@ -33,12 +33,15 @@ class Source:
     If the loader did not set metadata["source"], this will be an empty string.
 
     Attributes:
-        content:  The chunk text injected into the prompt.
-        source:   Origin identifier from chunk metadata. Opaque — set by the Loader.
-        metadata: Full metadata dict from the chunk (includes source and all
-                  user-defined fields like vendor, year, department, etc.)
-        score:    Similarity score from the vector DB.
-        rank:     Position in retrieval results (1 = most relevant).
+        content:       The chunk text injected into the prompt.
+        source:        Origin identifier from chunk metadata. Opaque — set by the Loader.
+        metadata:      Full metadata dict from the chunk (includes source and all
+                       user-defined fields like vendor, year, department, etc.)
+        score:         Similarity score from the vector DB.
+        rank:          Position in retrieval results (1 = most relevant).
+        chunk_index:   Position of this chunk within its source document (0-based).
+        total_chunks:  Total number of chunks produced from the source document.
+        parent_doc_id: ID of the Document from which this chunk was created.
     """
 
     content: str
@@ -46,6 +49,9 @@ class Source:
     metadata: dict[str, Any]
     score: float
     rank: int
+    chunk_index: int | None = None
+    total_chunks: int | None = None
+    parent_doc_id: str | None = None
 
 
 @dataclass(frozen=True)

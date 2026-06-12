@@ -144,12 +144,12 @@ class BaseVectorDB(ABC):
         """Async variant of get_ids_by_metadata(). Default: runs sync version in a thread pool."""
         return await asyncio.to_thread(self.get_ids_by_metadata, filters, collection_name)
 
+    @abstractmethod
     def get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
         """
         Return all chunks stored in the collection.
 
         Used by BM25Retriever to build a keyword index over the full corpus.
-        Not abstract — existing adapters that don't need BM25 don't have to implement it.
 
         Args:
             collection_name: Collection to fetch from.
@@ -159,27 +159,25 @@ class BaseVectorDB(ABC):
             List of Chunk objects (no scores). Empty list if collection is empty.
 
         Raises:
-            NotImplementedError: If the adapter does not implement this method.
+            VectorDBError: If the underlying query fails.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__}.get_all() is not implemented. "
-            "Required for BM25/hybrid retrieval (issue #10)."
-        )
+        ...
 
     async def async_get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
         """Async variant of get_all(). Default: runs sync get_all() in a thread pool."""
         return await asyncio.to_thread(self.get_all, collection_name, limit)
 
+    @abstractmethod
     def list_collections(self) -> list[str]:
         """
         Return all collection names in this vector DB instance.
-        Not abstract — existing adapters don't need to implement it immediately.
-        Required for multi-collection routing (#12) and async_list_collections().
+
+        Required for multi-collection routing and async_list_collections().
+
+        Raises:
+            VectorDBError: If the underlying query fails.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__}.list_collections() is not implemented. "
-            "Required for multi-collection routing (issue #12)."
-        )
+        ...
 
     # Async variants — default via asyncio.to_thread. Override with a native async client for true async I/O.
 
