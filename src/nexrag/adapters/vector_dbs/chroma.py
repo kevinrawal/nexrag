@@ -189,6 +189,20 @@ class ChromaDBAdapter(BaseVectorDB):
                 cause=e,
             ) from e
 
+    def get_ids_by_metadata(self, filters: dict[str, Any], collection_name: str) -> list[str]:
+        collection = self._get_or_create(collection_name)
+        where = self._build_where(filters)
+        try:
+            results = collection.get(where=where if where else None, include=[])
+        except Exception as e:
+            raise VectorDBError(
+                f"ChromaDB get_ids_by_metadata failed on collection '{collection_name}': {e}",
+                stage="idempotency_check",
+                component="ChromaDBAdapter",
+                cause=e,
+            ) from e
+        return results.get("ids") or []
+
     def get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
         collection = self._get_or_create(collection_name)
         try:
@@ -433,6 +447,9 @@ class _MultiChromaAdapter(BaseVectorDB):
 
     def count(self, collection_name: str) -> int:
         return self._for(collection_name).count(collection_name)
+
+    def get_ids_by_metadata(self, filters: dict[str, Any], collection_name: str) -> list[str]:
+        return self._for(collection_name).get_ids_by_metadata(filters, collection_name)
 
     def get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
         return self._for(collection_name).get_all(collection_name, limit)

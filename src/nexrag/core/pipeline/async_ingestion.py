@@ -88,7 +88,9 @@ class AsyncIngestionPipeline:
         self._on_conflict = on_conflict
         self._observer = observer or NoOpObserver()
         self._embed_batch_size = embed_batch_size
-        self._valid_collections: frozenset[str] = valid_collections or frozenset([collection])
+        self._valid_collections: frozenset[str] = (
+            valid_collections if valid_collections is not None else frozenset([collection])
+        )
         # Per-collection locks: serializes only the DB read-check + write sequence.
         self._collection_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
@@ -480,16 +482,15 @@ class AsyncIngestionPipeline:
             )
             return chunks, embeddings
 
+        # For each source, fetch existing chunk IDs by metadata (not by vector similarity).
         existing_hashes: set[str] = set()
         for source in sources:
             try:
-                existing = await self._vector_db.async_query(
-                    embedding=embeddings[0],
-                    top_k=10_000,
-                    collection_name=collection,
+                existing_ids = await self._vector_db.async_get_ids_by_metadata(
                     filters={"source": source},
+                    collection_name=collection,
                 )
-                existing_hashes.update(sc.chunk.content_hash for sc in existing)
+                existing_hashes.update(existing_ids)
             except VectorDBError:
                 existing_hashes = set()
 

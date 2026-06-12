@@ -97,6 +97,7 @@ def _make_async_ingestion_pipeline() -> AsyncIngestionPipeline:
     vector_db.query.return_value = []
     vector_db.async_upsert = AsyncMock()
     vector_db.async_query = AsyncMock(return_value=[])
+    vector_db.async_get_ids_by_metadata = AsyncMock(return_value=[])
 
     sanitizer = MagicMock()
     sanitizer.sanitize.return_value = MagicMock()
@@ -316,6 +317,7 @@ class TestAsyncIngestionPipeline:
         vector_db.set_collection_metadata.return_value = None
         vector_db.async_upsert = AsyncMock()
         vector_db.async_query = AsyncMock(return_value=[])
+        vector_db.async_get_ids_by_metadata = AsyncMock(return_value=[])
 
         sanitizer = MagicMock()
         sanitizer.sanitize.return_value = MagicMock()

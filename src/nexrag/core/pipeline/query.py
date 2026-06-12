@@ -67,6 +67,7 @@ class QueryPipeline:
         score_threshold: float = 0.0,
         observer: BaseObserver | None = None,
         reranker: BaseReranker | None = None,
+        max_query_length: int = 8000,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
@@ -77,6 +78,7 @@ class QueryPipeline:
         self._score_threshold = score_threshold
         self._observer = observer or NoOpObserver()
         self._reranker = reranker
+        self._max_query_length = max_query_length
 
     # Public API
 
@@ -106,6 +108,13 @@ class QueryPipeline:
         Raises:
             PipelineError: Wraps any stage-level error with full context.
         """
+        if self._max_query_length and len(query) > self._max_query_length:
+            raise PipelineError(
+                f"Query length {len(query)} exceeds max_query_length={self._max_query_length}. "
+                "Truncate your query before calling .query().",
+                stage="validation",
+            )
+
         pipeline_id = str(uuid.uuid4())
         started_at = time.monotonic()
 
@@ -198,6 +207,13 @@ class QueryPipeline:
         Raises:
             PipelineError: Wraps any stage-level error with full context.
         """
+        if self._max_query_length and len(query) > self._max_query_length:
+            raise PipelineError(
+                f"Query length {len(query)} exceeds max_query_length={self._max_query_length}. "
+                "Truncate your query before calling .query().",
+                stage="validation",
+            )
+
         pipeline_id = str(uuid.uuid4())
         started_at = time.monotonic()
         active_collection = collection or self._collection
@@ -243,11 +259,14 @@ class QueryPipeline:
 
         self._emit(pipeline_id, "llm", "started")
         t = time.monotonic()
+        llm_failed = False
         try:
             yield from self._llm.stream(prompt)
-        except LLMError:
+        except (LLMError, PipelineError):
+            llm_failed = True
             raise
         except Exception as e:
+            llm_failed = True
             raise PipelineError(
                 "LLM failed during streaming.",
                 stage="llm",
@@ -255,18 +274,18 @@ class QueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        stage_latencies["llm"] = (time.monotonic() - t) * 1000
-        self._emit(pipeline_id, "llm", "completed", t)
-
-        latency_ms = (time.monotonic() - started_at) * 1000
-        yield RunMetrics(
-            pipeline_id=pipeline_id,
-            total_latency_ms=latency_ms,
-            stage_latencies=stage_latencies,
-            token_usage=None,
-            model=getattr(self._llm, "_model", None),
-            chunks_retrieved=len(chunks),
-        )
+        finally:
+            stage_latencies["llm"] = (time.monotonic() - t) * 1000
+            self._emit(pipeline_id, "llm", "failed" if llm_failed else "completed", t)
+            latency_ms = (time.monotonic() - started_at) * 1000
+            yield RunMetrics(
+                pipeline_id=pipeline_id,
+                total_latency_ms=latency_ms,
+                stage_latencies=stage_latencies,
+                token_usage=None,
+                model=getattr(self._llm, "_model", None),
+                chunks_retrieved=len(chunks),
+            )
 
     # Stage runners
 
@@ -340,7 +359,8 @@ class QueryPipeline:
         chunks: list[ScoredChunk],
         pipeline_id: str,
     ) -> list[ScoredChunk]:
-        assert self._reranker is not None
+        if self._reranker is None:
+            return chunks
         self._emit(pipeline_id, "reranker", "started")
         t = time.monotonic()
         top_n = min(self._reranker.top_n, len(chunks))
@@ -446,6 +466,9 @@ class QueryPipeline:
                 metadata=sc.chunk.metadata,
                 score=sc.score,
                 rank=sc.rank,
+                chunk_index=sc.chunk.chunk_index,
+                total_chunks=sc.chunk.total_chunks,
+                parent_doc_id=sc.chunk.parent_doc_id,
             )
             for sc in chunks
         ]
