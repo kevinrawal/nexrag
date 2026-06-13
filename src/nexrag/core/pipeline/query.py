@@ -290,7 +290,7 @@ class QueryPipeline:
             total_latency_ms=latency_ms,
             stage_latencies=stage_latencies,
             token_usage=None,
-            model=getattr(self._llm, "_model", None),
+            model=self._llm.model_name,
             chunks_retrieved=len(chunks),
         )
 
@@ -435,7 +435,7 @@ class QueryPipeline:
                 cause=e,
             ) from e
         meta: dict[str, Any] = {
-            "model": getattr(self._llm, "_model", None),
+            "model": self._llm.model_name,
             "response_length": len(answer),
         }
         if token_usage is not None:
@@ -492,7 +492,7 @@ class QueryPipeline:
             total_latency_ms=latency_ms,
             stage_latencies=sl,
             token_usage=token_usage,
-            model=getattr(self._llm, "_model", None),
+            model=self._llm.model_name,
             chunks_retrieved=len(chunks),
         )
         self._emit(pipeline_id, "response_builder", "completed", t)

@@ -33,7 +33,7 @@ def _make_query_pipeline() -> QueryPipeline:
 
     llm = MagicMock()
     llm.generate.return_value = ("answer text", TokenUsage(100, 50, 150))
-    llm._model = "gpt-4o"
+    llm.model_name = "gpt-4o"
 
     observer = MagicMock()
     return QueryPipeline(

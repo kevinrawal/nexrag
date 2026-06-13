@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -109,6 +110,45 @@ class TestOpenAILLM:
 
         tokens = list(llm.stream("prompt"))
         assert "".join(tokens) == "Hello world"
+
+    def test_async_stream_yields_tokens_and_skips_choiceless_chunks(self):
+        from nexrag.adapters.llms.openai import OpenAILLM
+
+        def _chunk(token):
+            c = MagicMock()
+            delta = MagicMock()
+            delta.content = token
+            choice = MagicMock()
+            choice.delta = delta
+            c.choices = [choice]
+            return c
+
+        # Final usage-only chunk has empty choices — must be skipped, not crash.
+        usage_only = MagicMock()
+        usage_only.choices = []
+
+        async def _fake_stream():
+            for token in ["Hello", " ", "world"]:
+                yield _chunk(token)
+            yield usage_only
+
+        mock_async_client = MagicMock()
+        mock_async_client.chat.completions.create = AsyncMock(return_value=_fake_stream())
+
+        with (
+            patch("openai.OpenAI", return_value=MagicMock()),
+            patch("openai.AsyncOpenAI", return_value=mock_async_client),
+        ):
+            llm = OpenAILLM(api_key="sk-test")
+        llm._async_client = mock_async_client
+
+        async def _collect():
+            return [token async for token in llm.async_stream("prompt")]
+
+        tokens = asyncio.run(_collect())
+        assert "".join(tokens) == "Hello world"
+        # create() must be called with stream=True (the real streaming entry point).
+        assert mock_async_client.chat.completions.create.call_args.kwargs["stream"] is True
 
     def test_build_messages_with_separator(self):
         from nexrag.adapters.llms.openai import OpenAILLM

@@ -26,15 +26,19 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-# ChromaDB collection naming rules: 1–63 chars, alphanumeric/hyphens/underscores,
-# must start and end with alphanumeric (single-char names are also valid).
-_COLLECTION_NAME_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9_-]{0,61}[a-zA-Z0-9])?$")
+# ChromaDB (>=1.5) collection naming rules: 3–512 chars from [a-zA-Z0-9._-],
+# must start and end with an alphanumeric character. Validating here means an
+# invalid name fails fast at config load instead of crashing at the first DB call.
+_COLLECTION_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,510}[a-zA-Z0-9]$")
 
 # Ingestion sub-configs
 
 
 class LoaderConfig(BaseModel):
-    type: Literal["auto", "pdf", "txt", "excel", "json", "code", "word", "html", "custom"] = "auto"
+    # Only types the factory can actually build are accepted. Schema-only stubs
+    # (excel/json/code/word/html) are intentionally excluded until their loaders
+    # are wired into _factory.py — otherwise they pass validation then fail at wiring.
+    type: Literal["auto", "pdf", "txt", "text", "custom"] = "auto"
     class_path: str | None = Field(default=None, alias="class")
     params: dict[str, Any] = Field(default_factory=dict)
     # ignore this if Loader doesn't support metadata extraction
@@ -128,9 +132,9 @@ class VectorDBConfig(BaseModel):
     def validate_default_collection_name(cls, v: str) -> str:
         if not _COLLECTION_NAME_RE.match(v):
             raise ValueError(
-                f"Invalid collection name '{v}'. Must be 1–63 characters, "
-                "alphanumeric, hyphens, or underscores; must start and end with "
-                "an alphanumeric character."
+                f"Invalid collection name '{v}'. Must be 3–512 characters, "
+                "alphanumeric, dots, hyphens, or underscores; must start and end "
+                "with an alphanumeric character."
             )
         return v
 
@@ -140,7 +144,7 @@ class VectorDBConfig(BaseModel):
             if not _COLLECTION_NAME_RE.match(name):
                 raise ValueError(
                     f"Invalid collection name '{name}' in vector_db.collections. "
-                    "Must be 1–63 characters, alphanumeric, hyphens, or underscores; "
+                    "Must be 3–512 characters, alphanumeric, dots, hyphens, or underscores; "
                     "must start and end with an alphanumeric character."
                 )
         if self.default_collection not in self.collections:

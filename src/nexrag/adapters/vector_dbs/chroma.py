@@ -151,8 +151,10 @@ class ChromaDBAdapter(BaseVectorDB):
 
         try:
             results = collection.query(
+                # ChromaDB clamps n_results to the collection size internally, so
+                # there is no need for a separate count() round-trip to bound it.
                 query_embeddings=[embedding],
-                n_results=min(top_k, max(1, collection.count())),
+                n_results=top_k,
                 where=where if where else None,
                 include=["documents", "metadatas", "distances", "embeddings"],
             )

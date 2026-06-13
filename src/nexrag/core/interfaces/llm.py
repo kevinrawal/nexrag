@@ -32,6 +32,18 @@ from nexrag.core.models.metrics import TokenUsage
 class BaseLLM(ABC):
     """Abstract base class for all NexRAG LLM adapters."""
 
+    @property
+    def model_name(self) -> str | None:
+        """
+        Identifier for the model this adapter calls, surfaced in RunMetrics and
+        observability events.
+
+        Default: reads a ``_model`` attribute if the adapter sets one (all built-in
+        adapters do). Custom adapters that store the model under a different name
+        should override this property so their model shows up in metrics.
+        """
+        return getattr(self, "_model", None)
+
     @abstractmethod
     def generate(self, prompt: str) -> tuple[str, TokenUsage | None]:
         """

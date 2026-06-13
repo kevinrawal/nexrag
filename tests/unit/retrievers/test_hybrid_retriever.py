@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from nexrag.adapters.vector_dbs.chroma import ChromaDBAdapter
+from nexrag.core.interfaces.sparse_retriever import BaseSparseRetriever
 from nexrag.core.models.chunk import Chunk, ScoredChunk
 from nexrag.retrievers.hybrid import HybridRetriever
 
@@ -97,6 +98,72 @@ class TestHybridRetrieverFusion:
         results = retriever.retrieve("doc", [1.0], top_k=5, collection="col")
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
+
+    def test_metadata_filter_forwarded_to_sparse_path(self):
+        """A sparse-only keyword match that violates the filter must NOT leak through.
+
+        Regression: previously HybridRetriever passed filters=None to the sparse
+        retriever, so a strong keyword match from another tenant could surface in
+        the fused results despite a tenant filter.
+        """
+
+        class _RecordingSparse(BaseSparseRetriever):
+            def __init__(self, candidates):
+                self._candidates = candidates
+                self.received_filters = "UNSET"
+
+            def retrieve(
+                self, query, query_embedding, top_k, collection, score_threshold=0.0, filters=None
+            ):
+                self.received_filters = filters
+                out = self._candidates
+                if filters:
+                    out = [
+                        sc
+                        for sc in out
+                        if all(sc.chunk.metadata.get(k) == v for k, v in filters.items())
+                    ]
+                return out[:top_k]
+
+        acme = ScoredChunk(
+            chunk=Chunk(
+                text="secret contract terms",
+                chunk_index=0,
+                total_chunks=1,
+                parent_doc_id="d",
+                metadata={"source": "a.pdf", "tenant": "acme"},
+            ),
+            score=0.5,
+            rank=1,
+        )
+        other = ScoredChunk(
+            chunk=Chunk(
+                text="secret contract terms",
+                chunk_index=1,
+                total_chunks=1,
+                parent_doc_id="d",
+                metadata={"source": "b.pdf", "tenant": "other"},
+            ),
+            score=0.9,  # higher keyword score, but wrong tenant
+            rank=1,
+        )
+
+        db = MagicMock()
+        db.query.return_value = [acme]  # dense path already filtered at the DB layer
+        sparse = _RecordingSparse([acme, other])
+
+        retriever = HybridRetriever(vector_db=db, alpha=0.5, sparse=sparse)
+        results = retriever.retrieve(
+            "secret contract terms",
+            [0.1],
+            top_k=5,
+            collection="col",
+            filters={"tenant": "acme"},
+        )
+
+        assert sparse.received_filters == {"tenant": "acme"}
+        tenants = {r.chunk.metadata.get("tenant") for r in results}
+        assert tenants == {"acme"}
 
     def test_score_threshold_filters(self):
         chunks = [_make_chunk(f"text {i}", i) for i in range(4)]

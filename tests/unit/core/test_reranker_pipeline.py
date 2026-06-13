@@ -34,7 +34,7 @@ def _make_pipeline(reranker=None) -> QueryPipeline:
 
     llm = MagicMock()
     llm.generate.return_value = ("The answer.", None)
-    llm._model = "gpt-test"
+    llm.model_name = "gpt-test"
 
     observer = MagicMock()
 

@@ -41,7 +41,7 @@ def _make_async_query_pipeline(answer: str = "The answer.") -> AsyncQueryPipelin
 
     llm = MagicMock()
     llm.async_generate = AsyncMock(return_value=(answer, None))
-    llm._model = "test-model"
+    llm.model_name = "test-model"
 
     async def _async_stream(_prompt):
         for t in answer.split():

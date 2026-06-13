@@ -77,8 +77,10 @@ class HybridRetriever(BaseRetriever):
         """
         Retrieve chunks by fusing dense and sparse scores.
 
-        Dense retrieval respects metadata filters. Sparse retrieval does NOT
-        apply metadata filters (V1 limitation).
+        Metadata filters are applied to BOTH the dense and sparse paths so the
+        fused result set can never include a chunk that violates the filter —
+        critical for multi-tenant isolation, where a sparse-only keyword match
+        must not leak a chunk from another tenant into the results.
 
         Args:
             query:           Raw query string — passed to the sparse retriever.
@@ -86,7 +88,7 @@ class HybridRetriever(BaseRetriever):
             top_k:           Final number of chunks to return after fusion.
             collection:      Vector collection to search.
             score_threshold: Applied to fused scores. 0.0 returns all results.
-            filters:         Applied to dense path only.
+            filters:         Applied to both the dense and sparse paths.
 
         Returns:
             List of ScoredChunk ordered by fused score descending, trimmed to top_k.
@@ -107,7 +109,7 @@ class HybridRetriever(BaseRetriever):
             top_k=sparse_k,
             collection=collection,
             score_threshold=0.0,
-            filters=None,
+            filters=filters,
         )
 
         return self._fuse(dense_results, sparse_results, top_k, score_threshold)
@@ -145,7 +147,7 @@ class HybridRetriever(BaseRetriever):
                 top_k=sparse_k,
                 collection=collection,
                 score_threshold=0.0,
-                filters=None,
+                filters=filters,
             ),
         )
 

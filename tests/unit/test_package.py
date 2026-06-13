@@ -79,4 +79,4 @@ def test_embedder_mismatch_error_message():
     assert "contracts" in str(err)
     assert "text-embedding-3-small" in str(err)
     assert "text-embedding-3-large" in str(err)
-    assert "rebuild" in str(err)
+    assert "re-ingest" in str(err)

@@ -74,7 +74,8 @@ class EmbedderMismatchError(EmbedderError):
     Embedding model changed since the collection was created.
 
     Vectors produced by different models are incompatible.
-    Resolution: run with --rebuild to wipe and re-ingest the collection.
+    Resolution: re-ingest into a fresh collection — either delete the existing
+    collection's data and re-ingest, or point at a new collection name in nexrag.yaml.
     """
 
     def __init__(
@@ -90,7 +91,9 @@ class EmbedderMismatchError(EmbedderError):
         message = (
             f"Embedding model mismatch in collection '{collection}'. "
             f"Stored: '{stored_model}', configured: '{configured_model}'. "
-            f"Vectors are incompatible. Run: nexrag rebuild --config nexrag.yaml"
+            f"Vectors are incompatible. To recover, re-ingest into a fresh collection: "
+            f"delete collection '{collection}' (e.g. wipe its vector_db path/data) and "
+            f"re-ingest, or set a new collection name in nexrag.yaml."
         )
         super().__init__(message, **kwargs)  # type: ignore[arg-type]
 

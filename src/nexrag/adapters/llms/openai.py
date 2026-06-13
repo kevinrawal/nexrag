@@ -121,6 +121,8 @@ class OpenAILLM(BaseLLM):
                 stream=True,
             )
             for chunk in stream:
+                if not chunk.choices:
+                    continue
                 delta = chunk.choices[0].delta.content
                 if delta:
                     yield delta
@@ -162,17 +164,20 @@ class OpenAILLM(BaseLLM):
         """Stream using AsyncOpenAI — tokens arrive live without buffering."""
         messages = self._build_messages(prompt)
         try:
-            async with await self._async_client.chat.completions.stream(
+            stream = await self._async_client.chat.completions.create(
                 model=self._model,
                 messages=messages,
                 temperature=self._temperature,
                 max_tokens=self._max_tokens,
                 timeout=self._timeout,
-            ) as stream:
-                async for chunk in stream:
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        yield delta
+                stream=True,
+            )
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
         except Exception as e:
             self._map_exception(e)
 
