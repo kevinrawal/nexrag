@@ -96,7 +96,7 @@ class CrossEncoderReranker(BaseReranker):
 
     def _build_encoder(self) -> Any:
         try:
-            from sentence_transformers import CrossEncoder  # type: ignore[import-not-found]
+            from sentence_transformers import CrossEncoder
         except ImportError as e:
             raise RetrieverError(
                 "sentence-transformers package is required for CrossEncoderReranker. "

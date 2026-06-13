@@ -165,9 +165,23 @@ warn_return_any = true
 warn_unused_configs = true
 mypy_path = "src"
 
-# Optional deps without type stubs — suppress regardless of install state
+# Optional provider/loader deps — imported lazily inside adapters and installed
+# only via extras. CI type-checks the base package without extras, so suppress
+# missing-import errors regardless of install state. (ignore_missing_imports is
+# safe whether or not the package is present, unlike an inline `# type: ignore`.)
 [[tool.mypy.overrides]]
-module = ["rank_bm25", "rank_bm25.*"]
+module = [
+    "rank_bm25",
+    "chromadb",
+    "openai",
+    "anthropic",
+    "ollama",
+    "httpx",
+    "huggingface_hub",
+    "cohere",
+    "sentence_transformers",
+    "pypdf",
+]
 ignore_missing_imports = true
 
 # Pytest

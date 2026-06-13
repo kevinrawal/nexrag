@@ -127,7 +127,7 @@ class OllamaEmbedder(BaseEmbedder):
 
     def _build_client(self) -> Any:
         try:
-            import ollama  # type: ignore[import-not-found]
+            import ollama
 
             return ollama.Client(host=self._base_url)
         except ImportError as e:

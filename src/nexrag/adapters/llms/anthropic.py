@@ -185,7 +185,7 @@ class AnthropicLLM(BaseLLM):
 
     def _build_client(self, api_key: str | None, base_url: str | None) -> Any:
         try:
-            import anthropic  # type: ignore[import-not-found]
+            import anthropic
         except ImportError as e:
             raise LLMError(
                 "anthropic package is required for AnthropicLLM. "
