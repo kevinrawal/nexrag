@@ -17,8 +17,12 @@ class Chunk:
         chunk_index:   Position of this chunk within its parent document (0-based).
         total_chunks:  Total number of chunks the parent document was split into.
         parent_doc_id: ID of the Document this chunk came from.
-        content_hash:  sha256 of text. Auto-computed. Used for deduplication —
+        content_hash:  sha256 of text. Auto-computed. Identifies identical text —
                        never pass this manually.
+        row_id:        Document-scoped storage ID, sha256(parent_doc_id:content_hash).
+                       Auto-computed. This — not content_hash — is the vector-DB row
+                       key, so identical text in two different documents stays in two
+                       separate rows. Never pass this manually.
         metadata:      Inherited from parent Document metadata, merged with
                        chunk-level fields by the Chunker.
     """
@@ -31,14 +35,19 @@ class Chunk:
 
     # Computed automatically — do not pass manually.
     content_hash: str = field(init=False)
+    row_id: str = field(init=False)
 
     def __post_init__(self) -> None:
         # frozen=True means we can't do self.content_hash = ...
         # object.__setattr__ is the correct escape hatch for frozen dataclasses.
+        content_hash = hashlib.sha256(self.text.encode("utf-8")).hexdigest()
+        object.__setattr__(self, "content_hash", content_hash)
+        # Document-scoped row key: two documents containing identical text produce
+        # the same content_hash but different row_ids, so neither overwrites the other.
         object.__setattr__(
             self,
-            "content_hash",
-            hashlib.sha256(self.text.encode("utf-8")).hexdigest(),
+            "row_id",
+            hashlib.sha256(f"{self.parent_doc_id}:{content_hash}".encode()).hexdigest(),
         )
 
     def __repr__(self) -> str:

@@ -93,7 +93,7 @@ class CohereReranker(BaseReranker):
 
     def _build_client(self) -> Any:
         try:
-            import cohere  # type: ignore[import-not-found]
+            import cohere
         except ImportError as e:
             raise RetrieverError(
                 "cohere package is required for CohereReranker. "

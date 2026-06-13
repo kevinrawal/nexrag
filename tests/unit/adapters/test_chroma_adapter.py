@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytest.importorskip("chromadb")
+
 from nexrag.adapters.vector_dbs.chroma import _CHUNK_STRUCT_KEYS, ChromaDBAdapter
 from nexrag.core.models.chunk import Chunk
 
@@ -67,7 +69,8 @@ class TestChromaDBAdapter:
         chunk = _make_chunk("To be deleted")
         adapter.upsert([chunk], [[0.1, 0.2]], col)
         assert adapter.count(col) == 1
-        adapter.delete([chunk.content_hash], col)
+        # Rows are keyed by the document-scoped row_id, not the bare content_hash.
+        adapter.delete([chunk.row_id], col)
         assert adapter.count(col) == 0
 
     def test_delete_empty_list_is_noop(self, adapter, col):

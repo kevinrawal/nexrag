@@ -3,6 +3,8 @@
 import uuid
 from unittest.mock import MagicMock
 
+import pytest
+
 from nexrag.adapters.vector_dbs.chroma import ChromaDBAdapter, _MultiChromaAdapter
 from nexrag.core.models.chunk import Chunk
 
@@ -105,6 +107,10 @@ class TestMultiChromaAdapterRouting:
 class TestMultiChromaAdapterEndToEnd:
     """Integration test: two collections on different in-memory adapters."""
 
+    @pytest.fixture(autouse=True)
+    def _require_chromadb(self):
+        pytest.importorskip("chromadb")
+
     def test_isolated_collections_do_not_share_data(self):
         adapter_docs = ChromaDBAdapter(mode="memory")
         adapter_resumes = ChromaDBAdapter(mode="memory")
@@ -133,6 +139,10 @@ class TestMultiChromaAdapterEndToEnd:
 
 class TestFactoryMultiCollectionWiring:
     """Verify the factory builds _MultiChromaAdapter when collections differ."""
+
+    @pytest.fixture(autouse=True)
+    def _require_chromadb(self):
+        pytest.importorskip("chromadb")
 
     def test_single_config_returns_plain_adapter(self):
         from nexrag._factory import _build_vector_db

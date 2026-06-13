@@ -89,20 +89,22 @@ class ChromaDBAdapter(BaseVectorDB):
         if not chunks:
             return
 
-        # Deduplicate by content_hash — same text must not appear twice in one batch.
+        # Deduplicate by row_id — the same chunk of the same document must not
+        # appear twice in one batch. row_id is document-scoped, so identical text
+        # in two different documents is kept as two distinct rows.
         seen: set[str] = set()
         deduped_chunks: list[Chunk] = []
         deduped_embeddings: list[list[float]] = []
         for chunk, embedding in zip(chunks, embeddings, strict=True):
-            if chunk.content_hash not in seen:
-                seen.add(chunk.content_hash)
+            if chunk.row_id not in seen:
+                seen.add(chunk.row_id)
                 deduped_chunks.append(chunk)
                 deduped_embeddings.append(embedding)
         chunks, embeddings = deduped_chunks, deduped_embeddings
 
         collection = self._get_or_create(collection_name)
 
-        ids = [chunk.content_hash for chunk in chunks]
+        ids = [chunk.row_id for chunk in chunks]
         documents = [chunk.text for chunk in chunks]
         # Merge struct fields into stored metadata so they survive the round-trip.
         # chunk.metadata only contains document/user fields; struct fields are
@@ -203,12 +205,16 @@ class ChromaDBAdapter(BaseVectorDB):
             ) from e
         return results.get("ids") or []
 
-    def get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
+    def get_all(
+        self, collection_name: str, limit: int | None = None, offset: int | None = None
+    ) -> list[Chunk]:
         collection = self._get_or_create(collection_name)
         try:
             kwargs: dict[str, Any] = {"include": ["documents", "metadatas"]}
             if limit is not None:
                 kwargs["limit"] = limit
+            if offset is not None:
+                kwargs["offset"] = offset
             results = collection.get(**kwargs)
         except Exception as e:
             raise VectorDBError(
@@ -451,8 +457,10 @@ class _MultiChromaAdapter(BaseVectorDB):
     def get_ids_by_metadata(self, filters: dict[str, Any], collection_name: str) -> list[str]:
         return self._for(collection_name).get_ids_by_metadata(filters, collection_name)
 
-    def get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
-        return self._for(collection_name).get_all(collection_name, limit)
+    def get_all(
+        self, collection_name: str, limit: int | None = None, offset: int | None = None
+    ) -> list[Chunk]:
+        return self._for(collection_name).get_all(collection_name, limit, offset)
 
     def get_collection_metadata(self, collection_name: str) -> dict[str, Any]:
         return self._for(collection_name).get_collection_metadata(collection_name)

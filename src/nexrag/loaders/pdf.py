@@ -103,7 +103,7 @@ class PDFLoader(BaseLoader):
             )
 
         try:
-            from pypdf import PdfReader  # type: ignore[import-not-found]
+            from pypdf import PdfReader
         except ImportError as e:
             raise LoaderError(
                 "pypdf is required for PDFLoader. "

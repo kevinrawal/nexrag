@@ -145,27 +145,35 @@ class BaseVectorDB(ABC):
         return await asyncio.to_thread(self.get_ids_by_metadata, filters, collection_name)
 
     @abstractmethod
-    def get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
+    def get_all(
+        self, collection_name: str, limit: int | None = None, offset: int | None = None
+    ) -> list[Chunk]:
         """
-        Return all chunks stored in the collection.
+        Return chunks stored in the collection.
 
         Used by BM25Retriever to build a keyword index over the full corpus.
+        The optional ``limit``/``offset`` window lets callers page through a large
+        corpus instead of materialising it in a single call.
 
         Args:
             collection_name: Collection to fetch from.
             limit:           Optional cap on number of chunks returned.
+            offset:          Optional number of chunks to skip before returning.
 
         Returns:
-            List of Chunk objects (no scores). Empty list if collection is empty.
+            List of Chunk objects (no scores). Empty list if collection is empty
+            or the offset is past the end.
 
         Raises:
             VectorDBError: If the underlying query fails.
         """
         ...
 
-    async def async_get_all(self, collection_name: str, limit: int | None = None) -> list[Chunk]:
+    async def async_get_all(
+        self, collection_name: str, limit: int | None = None, offset: int | None = None
+    ) -> list[Chunk]:
         """Async variant of get_all(). Default: runs sync get_all() in a thread pool."""
-        return await asyncio.to_thread(self.get_all, collection_name, limit)
+        return await asyncio.to_thread(self.get_all, collection_name, limit, offset)
 
     @abstractmethod
     def list_collections(self) -> list[str]:

@@ -122,7 +122,16 @@ class NexRAG:
         collection: str | None = None,
     ) -> list[IngestionResult]:
         """
-        Ingest multiple items in sequence.
+        Ingest multiple items, one after another.
+
+        Each source is run through a full, independent ``ingest()`` call — loader →
+        chunk → embed → fingerprint check → idempotency check → write. Processing
+        is **sequential**: items are not parallelised, embeddings are not batched
+        across items, and every item pays its own fingerprint read and idempotency
+        lookups. This is a convenience wrapper, not a throughput optimisation; for
+        large batches into one collection, prefer building Documents yourself and
+        calling ``ingest_documents()`` once. (A single-pass batched ingest is
+        planned for a future release.)
 
         Args:
             sources:    Data items to ingest (bytes, str, tuples, etc.).
@@ -132,6 +141,10 @@ class NexRAG:
 
         Returns:
             One IngestionResult per source, in the same order.
+
+        Raises:
+            PipelineError: Propagated from the first item that fails — items after
+                           it are not processed (fail-fast).
         """
         return [
             self.ingest(source, loader=loader, metadata=metadata, collection=collection)
