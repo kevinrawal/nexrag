@@ -25,7 +25,7 @@ from nexrag.core.pipeline.ingestion import IngestionPipeline, IngestionResult
 from nexrag.core.pipeline.query import QueryPipeline
 from nexrag.exceptions import NexRAGError
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 __all__ = [
     "NexRAG",
     "PipelineResult",
