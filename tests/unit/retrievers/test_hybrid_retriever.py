@@ -116,6 +116,10 @@ class TestHybridRetrieverFusion:
 class TestHybridRetrieverIntegration:
     """Integration tests using real ChromaDB memory instance."""
 
+    @pytest.fixture(autouse=True)
+    def _require_chromadb(self):
+        pytest.importorskip("chromadb")
+
     @pytest.fixture
     def adapter(self):
         return ChromaDBAdapter(mode="memory")

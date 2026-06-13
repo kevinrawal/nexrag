@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytest.importorskip("chromadb")
+
 from nexrag.adapters.vector_dbs.chroma import _CHUNK_STRUCT_KEYS, ChromaDBAdapter
 from nexrag.core.models.chunk import Chunk
 

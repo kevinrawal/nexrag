@@ -17,6 +17,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytest.importorskip("chromadb")
+
 from nexrag.adapters.vector_dbs.chroma import ChromaDBAdapter
 from nexrag.chunkers.recursive import RecursiveChunker
 from nexrag.core.models.document import Document

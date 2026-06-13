@@ -40,6 +40,10 @@ class TestNormalizeScores:
 
 
 class TestBM25Retriever:
+    @pytest.fixture(autouse=True)
+    def _require_chromadb(self):
+        pytest.importorskip("chromadb")
+
     @pytest.fixture
     def adapter(self):
         return ChromaDBAdapter(mode="memory")
@@ -130,6 +134,10 @@ class TestBM25Retriever:
 
 
 class TestBM25RetrieverMetadataFilter:
+    @pytest.fixture(autouse=True)
+    def _require_chromadb(self):
+        pytest.importorskip("chromadb")
+
     @pytest.fixture
     def adapter(self):
         return ChromaDBAdapter(mode="memory")
