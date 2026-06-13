@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "nexrag"
-version = "0.3.2"
+version = "0.3.3"
 description = "Framework-agnostic RAG pipeline SDK. Plug in any component, swap any stage, configure everything in YAML"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -33,19 +33,20 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-# Keep this minimal. Only what the pipeline skeleton needs.
+# Keep this minimal. Only what the pipeline skeleton needs. Providers (chromadb,
+# openai, anthropic, ...) are optional extras — every adapter imports its SDK
+# lazily, so `pip install nexrag` stays light and you add only what you use.
 dependencies = [
-    "chromadb>=1.5.9",
-    "openai>=2.38.0",
     "pydantic>=2.0",   # config schema validation
     "pyyaml>=6.0",     # YAML config loading
 ]
 
 [project.optional-dependencies]
 
-# Provider extras — install only what you use
+# Provider extras — install only what you use.
+# These floors are the single source of truth; nothing pins them in core.
 openai = [
-    "openai>=1.0",
+    "openai>=2.38.0",
 ]
 anthropic = [
     "anthropic>=0.20",
@@ -55,7 +56,7 @@ ollama = [
     "httpx>=0.27",
 ]
 chromadb = [
-    "chromadb>=0.5",
+    "chromadb>=1.5.9",
 ]
 huggingface = [
     "huggingface-hub>=0.20",

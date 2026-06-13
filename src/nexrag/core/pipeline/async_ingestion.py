@@ -158,9 +158,10 @@ class AsyncIngestionPipeline:
             return await self._run_from_documents(
                 documents, pipeline_id, started_at, active_collection
             )
-        except PipelineError:
-            raise
         except Exception as e:
+            await self._emit_failed(pipeline_id, "pipeline", started_at, e)
+            if isinstance(e, PipelineError):
+                raise
             raise PipelineError(
                 f"Unexpected error during async ingestion: {e}",
                 stage="pipeline",
@@ -199,9 +200,10 @@ class AsyncIngestionPipeline:
             return await self._run_from_documents(
                 documents, pipeline_id, started_at, active_collection
             )
-        except PipelineError:
-            raise
         except Exception as e:
+            await self._emit_failed(pipeline_id, "pipeline", started_at, e)
+            if isinstance(e, PipelineError):
+                raise
             raise PipelineError(
                 f"Unexpected error during async ingestion: {e}",
                 stage="pipeline",
@@ -289,9 +291,10 @@ class AsyncIngestionPipeline:
         t = time.monotonic()
         try:
             documents = await asyncio.to_thread(loader.load, data)
-        except LoaderError:
-            raise
         except Exception as e:
+            await self._emit_failed(pipeline_id, "loader", t, e)
+            if isinstance(e, LoaderError):
+                raise
             raise PipelineError(
                 f"Loader '{type(loader).__name__}' raised an unexpected error.",
                 stage="loader",
@@ -301,12 +304,14 @@ class AsyncIngestionPipeline:
             ) from e
 
         if not documents:
-            raise PipelineError(
+            err = PipelineError(
                 f"Loader '{type(loader).__name__}' returned an empty list.",
                 stage="loader",
                 component=type(loader).__name__,
                 pipeline_id=pipeline_id,
             )
+            await self._emit_failed(pipeline_id, "loader", t, err)
+            raise err
 
         await self._emit(pipeline_id, "loader", "completed", t, {"document_count": len(documents)})
         return documents
@@ -323,9 +328,10 @@ class AsyncIngestionPipeline:
             t = time.monotonic()
             try:
                 clean_doc = await asyncio.to_thread(self._sanitizer.sanitize, document)
-            except SanitizerError:
-                raise
             except Exception as e:
+                await self._emit_failed(pipeline_id, "sanitizer", t, e)
+                if isinstance(e, SanitizerError):
+                    raise
                 raise PipelineError(
                     f"Sanitizer failed on document '{document.doc_id}'.",
                     stage="sanitizer",
@@ -339,9 +345,10 @@ class AsyncIngestionPipeline:
             t = time.monotonic()
             try:
                 chunks = await asyncio.to_thread(self._chunker.chunk, clean_doc)
-            except ChunkError:
-                raise
             except Exception as e:
+                await self._emit_failed(pipeline_id, "chunker", t, e)
+                if isinstance(e, ChunkError):
+                    raise
                 raise PipelineError(
                     f"Chunker failed on document '{document.doc_id}'.",
                     stage="chunker",
@@ -375,9 +382,10 @@ class AsyncIngestionPipeline:
             batch_results = await asyncio.gather(
                 *[self._embedder.async_embed(batch) for batch in batches]
             )
-        except EmbedderError:
-            raise
         except Exception as e:
+            await self._emit_failed(pipeline_id, "embedder", t, e)
+            if isinstance(e, EmbedderError):
+                raise
             raise PipelineError(
                 "Embedder failed during async batch embedding.",
                 stage="embedder",
@@ -389,12 +397,14 @@ class AsyncIngestionPipeline:
         embeddings = [emb for batch in batch_results for emb in batch]
 
         if len(embeddings) != len(chunks):
-            raise PipelineError(
+            err = PipelineError(
                 f"Embedder returned {len(embeddings)} vectors for {len(chunks)} chunks.",
                 stage="embedder",
                 component=type(self._embedder).__name__,
                 pipeline_id=pipeline_id,
             )
+            await self._emit_failed(pipeline_id, "embedder", t, err)
+            raise err
 
         await self._emit(
             pipeline_id,
@@ -413,26 +423,31 @@ class AsyncIngestionPipeline:
         await self._emit(pipeline_id, "fingerprint_check", "started")
         t = time.monotonic()
 
-        try:
-            stored = await asyncio.to_thread(self._vector_db.get_collection_metadata, collection)
-        except VectorDBError:
-            raise
-
         current_fingerprint = _compute_fingerprint(
             self._embedder.model_name, self._embedder.dimensions
         )
 
-        if not stored:
-            await asyncio.to_thread(
-                self._vector_db.set_collection_metadata,
-                collection,
-                {
-                    "embedding_model": self._embedder.model_name,
-                    "embedding_dimensions": self._embedder.dimensions,
-                    "fingerprint": current_fingerprint,
-                },
-            )
-        else:
+        try:
+            stored = await asyncio.to_thread(self._vector_db.get_collection_metadata, collection)
+
+            if not stored:
+                await asyncio.to_thread(
+                    self._vector_db.set_collection_metadata,
+                    collection,
+                    {
+                        "embedding_model": self._embedder.model_name,
+                        "embedding_dimensions": self._embedder.dimensions,
+                        "fingerprint": current_fingerprint,
+                    },
+                )
+                # Best-effort compare-and-set: re-read and confirm OUR fingerprint
+                # won. The per-collection lock serializes tasks in THIS process, but
+                # a separate process racing the first ingest with a different embedder
+                # is not covered — detect that here rather than silently mixing models.
+                stored = await asyncio.to_thread(
+                    self._vector_db.get_collection_metadata, collection
+                )
+
             stored_fingerprint = stored.get("fingerprint")
             if stored_fingerprint and stored_fingerprint != current_fingerprint:
                 raise EmbedderMismatchError(
@@ -442,6 +457,9 @@ class AsyncIngestionPipeline:
                     stage="fingerprint_check",
                     pipeline_id=pipeline_id,
                 )
+        except Exception as e:
+            await self._emit_failed(pipeline_id, "fingerprint_check", t, e)
+            raise
 
         await self._emit(pipeline_id, "fingerprint_check", "completed", t)
 
@@ -453,6 +471,15 @@ class AsyncIngestionPipeline:
         collection: str,
         pipeline_id: str,
     ) -> tuple[list[Chunk], list[list[float]]]:
+        """
+        Apply on_conflict rules independently per document source.
+
+        Same per-source semantics as the sync pipeline: each source's skip /
+        overwrite decision is made from its own existing rows only, a per-source
+        VectorDB lookup failure never clears the others' state (the source is
+        written and a failed event emitted), and chunks without metadata["source"]
+        are always written.
+        """
         await self._emit(pipeline_id, "idempotency_check", "started")
         t = time.monotonic()
 
@@ -466,80 +493,81 @@ class AsyncIngestionPipeline:
             )
             return chunks, embeddings
 
-        sources = {doc.metadata.get("source") for doc in documents if doc.metadata.get("source")}
+        # Bucket (chunk, embedding) pairs by source, preserving order. The "" key
+        # holds chunks without a source — always written (no dedup possible).
+        buckets: dict[str, list[tuple[Chunk, list[float]]]] = {}
+        for chunk, embedding in zip(chunks, embeddings, strict=True):
+            source = chunk.metadata.get("source") or ""
+            buckets.setdefault(source, []).append((chunk, embedding))
 
-        if not sources:
-            await self._emit(
-                pipeline_id,
-                "idempotency_check",
-                "completed",
-                t,
-                {
-                    "action": "insert",
-                    "reason": "no source in metadata",
-                    "chunks_to_write": len(chunks),
-                },
-            )
-            return chunks, embeddings
+        chunks_to_write: list[Chunk] = []
+        embeddings_to_write: list[list[float]] = []
+        actions: dict[str, int] = {"insert": 0, "overwrite": 0, "skipped": 0, "failed": 0}
 
-        # For each source, fetch existing chunk IDs by metadata (not by vector similarity).
-        existing_hashes: set[str] = set()
-        for source in sources:
+        for source, pairs in buckets.items():
+            src_chunks = [c for c, _ in pairs]
+            src_embeddings = [e for _, e in pairs]
+
+            if not source:
+                chunks_to_write.extend(src_chunks)
+                embeddings_to_write.extend(src_embeddings)
+                actions["insert"] += 1
+                continue
+
             try:
-                existing_ids = await self._vector_db.async_get_ids_by_metadata(
-                    filters={"source": source},
-                    collection_name=collection,
+                existing_ids = set(
+                    await self._vector_db.async_get_ids_by_metadata(
+                        filters={"source": source},
+                        collection_name=collection,
+                    )
                 )
-                existing_hashes.update(existing_ids)
-            except VectorDBError:
-                existing_hashes = set()
+            except VectorDBError as e:
+                await self._emit_failed(pipeline_id, "idempotency_check", t, e)
+                chunks_to_write.extend(src_chunks)
+                embeddings_to_write.extend(src_embeddings)
+                actions["failed"] += 1
+                continue
 
-        incoming_hashes = {chunk.content_hash for chunk in chunks}
+            incoming_ids = {c.row_id for c in src_chunks}
 
-        if self._on_conflict == "skip":
-            if existing_hashes:
-                await self._emit(
-                    pipeline_id,
-                    "idempotency_check",
-                    "completed",
-                    t,
-                    {"action": "skipped", "reason": "source already exists"},
-                )
-                return [], []
-            await self._emit(
-                pipeline_id,
-                "idempotency_check",
-                "completed",
-                t,
-                {"action": "insert", "chunks_to_write": len(chunks)},
-            )
-            return chunks, embeddings
+            if self._on_conflict == "skip":
+                if existing_ids:
+                    actions["skipped"] += 1
+                    continue
+                chunks_to_write.extend(src_chunks)
+                embeddings_to_write.extend(src_embeddings)
+                actions["insert"] += 1
+                continue
 
-        # on_conflict == "overwrite"
-        if existing_hashes == incoming_hashes:
-            await self._emit(
-                pipeline_id,
-                "idempotency_check",
-                "completed",
-                t,
-                {"action": "skipped", "reason": "all hashes match"},
-            )
-            return [], []
-
-        if existing_hashes:
-            try:
-                await asyncio.to_thread(self._vector_db.delete, list(existing_hashes), collection)
-            except VectorDBError:
-                raise
+            # on_conflict == "overwrite"
+            if existing_ids == incoming_ids:
+                actions["skipped"] += 1
+                continue
+            if existing_ids:
+                try:
+                    await asyncio.to_thread(self._vector_db.delete, list(existing_ids), collection)
+                except VectorDBError as e:
+                    await self._emit_failed(pipeline_id, "idempotency_check", t, e)
+                    raise
+            chunks_to_write.extend(src_chunks)
+            embeddings_to_write.extend(src_embeddings)
+            actions["overwrite"] += 1
 
         await self._emit(
             pipeline_id,
             "idempotency_check",
             "completed",
             t,
-            {"action": "overwrite", "chunks_to_write": len(chunks)},
+            {
+                "sources": len(buckets),
+                "sources_inserted": actions["insert"],
+                "sources_overwritten": actions["overwrite"],
+                "sources_skipped": actions["skipped"],
+                "sources_failed_lookup": actions["failed"],
+                "chunks_to_write": len(chunks_to_write),
+            },
         )
-        return chunks, embeddings
+        return chunks_to_write, embeddings_to_write
 
     async def _run_vector_db_write(
         self,
@@ -555,9 +583,10 @@ class AsyncIngestionPipeline:
         t = time.monotonic()
         try:
             await self._vector_db.async_upsert(chunks, embeddings, collection)
-        except VectorDBError:
-            raise
         except Exception as e:
+            await self._emit_failed(pipeline_id, "index_writer", t, e)
+            if isinstance(e, VectorDBError):
+                raise
             raise PipelineError(
                 "VectorDB write failed.",
                 stage="index_writer",
@@ -602,6 +631,22 @@ class AsyncIngestionPipeline:
             metadata=metadata or {},
         )
         await self._observer.async_emit(event)
+
+    async def _emit_failed(
+        self,
+        pipeline_id: str,
+        stage: str,
+        started: float | None,
+        exc: BaseException,
+    ) -> None:
+        """Emit a terminal 'failed' event for a stage, with error context."""
+        await self._emit(
+            pipeline_id,
+            stage,
+            "failed",
+            started,
+            {"error_type": type(exc).__name__, "message": str(exc)},
+        )
 
     def _assert_no_running_loop(self) -> None:
         try:

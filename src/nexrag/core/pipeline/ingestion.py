@@ -142,9 +142,10 @@ class IngestionPipeline:
             if metadata:
                 documents = [doc.with_metadata(metadata) for doc in documents]
             return self._run_from_documents(documents, pipeline_id, started_at, active_collection)
-        except PipelineError:
-            raise
         except Exception as e:
+            self._emit_failed(pipeline_id, "pipeline", started_at, e)
+            if isinstance(e, PipelineError):
+                raise
             raise PipelineError(
                 f"Unexpected error during ingestion: {e}",
                 stage="pipeline",
@@ -191,9 +192,10 @@ class IngestionPipeline:
 
         try:
             return self._run_from_documents(documents, pipeline_id, started_at, active_collection)
-        except PipelineError:
-            raise
         except Exception as e:
+            self._emit_failed(pipeline_id, "pipeline", started_at, e)
+            if isinstance(e, PipelineError):
+                raise
             raise PipelineError(
                 f"Unexpected error during ingestion: {e}",
                 stage="pipeline",
@@ -282,9 +284,10 @@ class IngestionPipeline:
         t = time.monotonic()
         try:
             documents = loader.load(data)
-        except LoaderError:
-            raise
         except Exception as e:
+            self._emit_failed(pipeline_id, "loader", t, e)
+            if isinstance(e, LoaderError):
+                raise
             raise PipelineError(
                 f"Loader '{type(loader).__name__}' raised an unexpected error.",
                 stage="loader",
@@ -294,13 +297,15 @@ class IngestionPipeline:
             ) from e
 
         if not documents:
-            raise PipelineError(
+            err = PipelineError(
                 f"Loader '{type(loader).__name__}' returned an empty list. "
                 f"Raise LoaderError inside load() if the data cannot be parsed.",
                 stage="loader",
                 component=type(loader).__name__,
                 pipeline_id=pipeline_id,
             )
+            self._emit_failed(pipeline_id, "loader", t, err)
+            raise err
 
         self._emit(
             pipeline_id,
@@ -323,9 +328,10 @@ class IngestionPipeline:
             t = time.monotonic()
             try:
                 clean_doc = self._sanitizer.sanitize(document)
-            except SanitizerError:
-                raise
             except Exception as e:
+                self._emit_failed(pipeline_id, "sanitizer", t, e)
+                if isinstance(e, SanitizerError):
+                    raise
                 raise PipelineError(
                     f"Sanitizer failed on document '{document.doc_id}'.",
                     stage="sanitizer",
@@ -339,9 +345,10 @@ class IngestionPipeline:
             t = time.monotonic()
             try:
                 chunks = self._chunker.chunk(clean_doc)
-            except ChunkError:
-                raise
             except Exception as e:
+                self._emit_failed(pipeline_id, "chunker", t, e)
+                if isinstance(e, ChunkError):
+                    raise
                 raise PipelineError(
                     f"Chunker failed on document '{document.doc_id}'.",
                     stage="chunker",
@@ -369,9 +376,10 @@ class IngestionPipeline:
         t = time.monotonic()
         try:
             embeddings = self._embedder.embed([chunk.text for chunk in chunks])
-        except EmbedderError:
-            raise
         except Exception as e:
+            self._emit_failed(pipeline_id, "embedder", t, e)
+            if isinstance(e, EmbedderError):
+                raise
             raise PipelineError(
                 "Embedder failed during batch embedding.",
                 stage="embedder",
@@ -381,13 +389,15 @@ class IngestionPipeline:
             ) from e
 
         if len(embeddings) != len(chunks):
-            raise PipelineError(
+            err = PipelineError(
                 f"Embedder returned {len(embeddings)} vectors for {len(chunks)} chunks. "
                 f"Must return exactly one vector per input text.",
                 stage="embedder",
                 component=type(self._embedder).__name__,
                 pipeline_id=pipeline_id,
             )
+            self._emit_failed(pipeline_id, "embedder", t, err)
+            raise err
 
         self._emit(
             pipeline_id,
@@ -402,32 +412,33 @@ class IngestionPipeline:
         )
         return embeddings
 
-    # TODO: can we optimize this part?
-    # instead of collecting all metadata["source"] and then querying the DB for each,
-    # can we do a single query with a $in filter on source?
     def _run_fingerprint_check(self, collection: str, pipeline_id: str) -> None:
         self._emit(pipeline_id, "fingerprint_check", "started")
         t = time.monotonic()
-
-        try:
-            stored = self._vector_db.get_collection_metadata(collection)
-        except VectorDBError:
-            raise
 
         current_fingerprint = _compute_fingerprint(
             self._embedder.model_name, self._embedder.dimensions
         )
 
-        if not stored:
-            self._vector_db.set_collection_metadata(
-                collection,
-                {
-                    "embedding_model": self._embedder.model_name,
-                    "embedding_dimensions": self._embedder.dimensions,
-                    "fingerprint": current_fingerprint,
-                },
-            )
-        else:
+        try:
+            stored = self._vector_db.get_collection_metadata(collection)
+
+            if not stored:
+                self._vector_db.set_collection_metadata(
+                    collection,
+                    {
+                        "embedding_model": self._embedder.model_name,
+                        "embedding_dimensions": self._embedder.dimensions,
+                        "fingerprint": current_fingerprint,
+                    },
+                )
+                # Best-effort compare-and-set: re-read and confirm OUR fingerprint
+                # won. Cross-process atomicity is not guaranteed by ChromaDB's
+                # metadata API, so a racing first-ingest with a different embedder
+                # may have written in between — detect that here instead of silently
+                # producing a mixed-model collection.
+                stored = self._vector_db.get_collection_metadata(collection)
+
             stored_fingerprint = stored.get("fingerprint")
             if stored_fingerprint and stored_fingerprint != current_fingerprint:
                 raise EmbedderMismatchError(
@@ -437,6 +448,9 @@ class IngestionPipeline:
                     stage="fingerprint_check",
                     pipeline_id=pipeline_id,
                 )
+        except Exception as e:
+            self._emit_failed(pipeline_id, "fingerprint_check", t, e)
+            raise
 
         self._emit(pipeline_id, "fingerprint_check", "completed", t)
 
@@ -449,10 +463,17 @@ class IngestionPipeline:
         pipeline_id: str,
     ) -> tuple[list[Chunk], list[list[float]]]:
         """
-        Apply on_conflict rules per document source.
+        Apply on_conflict rules independently per document source.
 
-        Uses metadata["source"] from each Document to identify existing chunks.
-        Documents without metadata["source"] are always written (no dedup possible).
+        Each source's skip / overwrite decision is made from *its own* existing
+        rows only, so a brand-new document never gets dropped just because it
+        shares a batch with an already-ingested one, and an unchanged document is
+        never deleted/rewritten just because another document in the batch changed.
+
+        Uses metadata["source"] from each chunk to identify existing rows.
+        Chunks without metadata["source"] cannot be deduplicated and are always
+        written. A VectorDB lookup failure for one source never affects the
+        others: that source is written and a failed event is emitted.
         """
         self._emit(pipeline_id, "idempotency_check", "started")
         t = time.monotonic()
@@ -467,82 +488,85 @@ class IngestionPipeline:
             )
             return chunks, embeddings
 
-        # Collect all source identifiers from the documents.
-        sources = {doc.metadata.get("source") for doc in documents if doc.metadata.get("source")}
+        # Bucket (chunk, embedding) pairs by source, preserving order. The "" key
+        # holds chunks without a source — they are always written (no dedup).
+        buckets: dict[str, list[tuple[Chunk, list[float]]]] = {}
+        for chunk, embedding in zip(chunks, embeddings, strict=True):
+            source = chunk.metadata.get("source") or ""
+            buckets.setdefault(source, []).append((chunk, embedding))
 
-        if not sources:
-            # No sources set — cannot do dedup. Write everything.
-            self._emit(
-                pipeline_id,
-                "idempotency_check",
-                "completed",
-                t,
-                {
-                    "action": "insert",
-                    "reason": "no source in metadata",
-                    "chunks_to_write": len(chunks),
-                },
-            )
-            return chunks, embeddings
+        chunks_to_write: list[Chunk] = []
+        embeddings_to_write: list[list[float]] = []
+        actions: dict[str, int] = {"insert": 0, "overwrite": 0, "skipped": 0, "failed": 0}
 
-        # For each source, fetch existing chunk IDs by metadata (not by vector similarity).
-        existing_hashes: set[str] = set()
-        for source in sources:
+        for source, pairs in buckets.items():
+            src_chunks = [c for c, _ in pairs]
+            src_embeddings = [e for _, e in pairs]
+
+            # No source → cannot dedup, always write.
+            if not source:
+                chunks_to_write.extend(src_chunks)
+                embeddings_to_write.extend(src_embeddings)
+                actions["insert"] += 1
+                continue
+
             try:
-                existing_ids = self._vector_db.get_ids_by_metadata(
-                    filters={"source": source},
-                    collection_name=collection,
+                existing_ids = set(
+                    self._vector_db.get_ids_by_metadata(
+                        filters={"source": source},
+                        collection_name=collection,
+                    )
                 )
-                existing_hashes.update(existing_ids)
-            except VectorDBError:
-                existing_hashes = set()
+            except VectorDBError as e:
+                # Lookup failed for THIS source only — never clear the others'
+                # decisions. Write the source (skipping dedup) and surface it.
+                self._emit_failed(pipeline_id, "idempotency_check", t, e)
+                chunks_to_write.extend(src_chunks)
+                embeddings_to_write.extend(src_embeddings)
+                actions["failed"] += 1
+                continue
 
-        incoming_hashes = {chunk.content_hash for chunk in chunks}
+            incoming_ids = {c.row_id for c in src_chunks}
 
-        if self._on_conflict == "skip":
-            if existing_hashes:
-                self._emit(
-                    pipeline_id,
-                    "idempotency_check",
-                    "completed",
-                    t,
-                    {"action": "skipped", "reason": "source already exists"},
-                )
-                return [], []
-            self._emit(
-                pipeline_id,
-                "idempotency_check",
-                "completed",
-                t,
-                {"action": "insert", "chunks_to_write": len(chunks)},
-            )
-            return chunks, embeddings
+            if self._on_conflict == "skip":
+                if existing_ids:
+                    actions["skipped"] += 1
+                    continue
+                chunks_to_write.extend(src_chunks)
+                embeddings_to_write.extend(src_embeddings)
+                actions["insert"] += 1
+                continue
 
-        # on_conflict == "overwrite"
-        if existing_hashes == incoming_hashes:
-            self._emit(
-                pipeline_id,
-                "idempotency_check",
-                "completed",
-                t,
-                {"action": "skipped", "reason": "all hashes match"},
-            )
-            return [], []
-
-        if existing_hashes:
-            try:
-                self._vector_db.delete(list(existing_hashes), collection)
-            except VectorDBError:
-                raise
+            # on_conflict == "overwrite"
+            if existing_ids == incoming_ids:
+                # Identical content already stored — nothing to do for this source.
+                actions["skipped"] += 1
+                continue
+            if existing_ids:
+                try:
+                    self._vector_db.delete(list(existing_ids), collection)
+                except VectorDBError as e:
+                    self._emit_failed(pipeline_id, "idempotency_check", t, e)
+                    raise
+            chunks_to_write.extend(src_chunks)
+            embeddings_to_write.extend(src_embeddings)
+            actions["overwrite"] += 1
 
         self._emit(
             pipeline_id,
             "idempotency_check",
             "completed",
             t,
-            {"action": "overwrite", "chunks_to_write": len(chunks)},
+            {
+                "sources": len(buckets),
+                "sources_inserted": actions["insert"],
+                "sources_overwritten": actions["overwrite"],
+                "sources_skipped": actions["skipped"],
+                "sources_failed_lookup": actions["failed"],
+                "chunks_to_write": len(chunks_to_write),
+            },
         )
-        return chunks, embeddings
+        return chunks_to_write, embeddings_to_write
 
     def _run_vector_db_write(
         self,
@@ -558,9 +582,10 @@ class IngestionPipeline:
         t = time.monotonic()
         try:
             self._vector_db.upsert(chunks, embeddings, collection)
-        except VectorDBError:
-            raise
         except Exception as e:
+            self._emit_failed(pipeline_id, "index_writer", t, e)
+            if isinstance(e, VectorDBError):
+                raise
             raise PipelineError(
                 "VectorDB write failed.",
                 stage="index_writer",
@@ -609,6 +634,22 @@ class IngestionPipeline:
             metadata=metadata or {},
         )
         self._observer.emit(event)
+
+    def _emit_failed(
+        self,
+        pipeline_id: str,
+        stage: str,
+        started: float | None,
+        exc: BaseException,
+    ) -> None:
+        """Emit a terminal 'failed' event for a stage, with error context."""
+        self._emit(
+            pipeline_id,
+            stage,
+            "failed",
+            started,
+            {"error_type": type(exc).__name__, "message": str(exc)},
+        )
 
 
 # Result object

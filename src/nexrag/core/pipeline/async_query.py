@@ -209,9 +209,10 @@ class AsyncQueryPipeline:
             t = time.monotonic()
             answer, token_usage = await self._run_llm(prompt, pipeline_id)
             stage_latencies["llm"] = (time.monotonic() - t) * 1000
-        except PipelineError:
-            raise
         except Exception as e:
+            await self._emit_failed(pipeline_id, "pipeline", started_at, e)
+            if isinstance(e, PipelineError):
+                raise
             raise PipelineError(
                 f"Unexpected error during async query pipeline: {e}",
                 stage="pipeline",
@@ -265,42 +266,59 @@ class AsyncQueryPipeline:
 
         stage_latencies: dict[str, float] = {}
 
-        t = time.monotonic()
-        query_embedding = await self._run_query_embedder(query, pipeline_id)
-        stage_latencies["embedder"] = (time.monotonic() - t) * 1000
-
-        t = time.monotonic()
-        chunks = await self._run_retriever(
-            query,
-            query_embedding,
-            active_collection,
-            active_top_k,
-            active_threshold,
-            metadata_filter,
-            pipeline_id,
-        )
-        stage_latencies["retriever"] = (time.monotonic() - t) * 1000
-
-        if self._reranker is not None:
+        try:
             t = time.monotonic()
-            chunks = await self._run_reranker(query, chunks, pipeline_id)
-            stage_latencies["reranker"] = (time.monotonic() - t) * 1000
+            query_embedding = await self._run_query_embedder(query, pipeline_id)
+            stage_latencies["embedder"] = (time.monotonic() - t) * 1000
 
-        t = time.monotonic()
-        prompt = await self._run_prompt_builder(query, chunks, pipeline_id)
-        stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
+            t = time.monotonic()
+            chunks = await self._run_retriever(
+                query,
+                query_embedding,
+                active_collection,
+                active_top_k,
+                active_threshold,
+                metadata_filter,
+                pipeline_id,
+            )
+            stage_latencies["retriever"] = (time.monotonic() - t) * 1000
+
+            if self._reranker is not None:
+                t = time.monotonic()
+                chunks = await self._run_reranker(query, chunks, pipeline_id)
+                stage_latencies["reranker"] = (time.monotonic() - t) * 1000
+
+            t = time.monotonic()
+            prompt = await self._run_prompt_builder(query, chunks, pipeline_id)
+            stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
+        except Exception as e:
+            await self._emit_failed(pipeline_id, "pipeline", started_at, e)
+            if isinstance(e, PipelineError):
+                raise
+            raise PipelineError(
+                f"Unexpected error during async streaming pipeline: {e}",
+                stage="pipeline",
+                component="async_query",
+                pipeline_id=pipeline_id,
+                cause=e,
+            ) from e
 
         await self._emit(pipeline_id, "llm", "started")
         t = time.monotonic()
-        llm_failed = False
+        # Do NOT yield inside a finally/except: yielding while an exception is in
+        # flight suspends it, so a consumer that breaks after the metrics object
+        # never sees the error, and yielding during GeneratorExit raises
+        # "async generator ignored GeneratorExit". RunMetrics is yielded only on
+        # the success path; failure-path metrics travel via the failed event.
         try:
             async for token in self._llm.async_stream(prompt):
                 yield token
-        except (LLMError, PipelineError):
-            llm_failed = True
-            raise
         except Exception as e:
-            llm_failed = True
+            stage_latencies["llm"] = (time.monotonic() - t) * 1000
+            await self._emit_failed(pipeline_id, "llm", t, e)
+            await self._emit_failed(pipeline_id, "pipeline", started_at, e)
+            if isinstance(e, (LLMError, PipelineError)):
+                raise
             raise PipelineError(
                 "LLM failed during async streaming.",
                 stage="llm",
@@ -308,18 +326,18 @@ class AsyncQueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        finally:
-            stage_latencies["llm"] = (time.monotonic() - t) * 1000
-            await self._emit(pipeline_id, "llm", "failed" if llm_failed else "completed", t)
-            latency_ms = (time.monotonic() - started_at) * 1000
-            yield RunMetrics(
-                pipeline_id=pipeline_id,
-                total_latency_ms=latency_ms,
-                stage_latencies=stage_latencies,
-                token_usage=None,
-                model=getattr(self._llm, "_model", None),
-                chunks_retrieved=len(chunks),
-            )
+
+        stage_latencies["llm"] = (time.monotonic() - t) * 1000
+        await self._emit(pipeline_id, "llm", "completed", t)
+        latency_ms = (time.monotonic() - started_at) * 1000
+        yield RunMetrics(
+            pipeline_id=pipeline_id,
+            total_latency_ms=latency_ms,
+            stage_latencies=stage_latencies,
+            token_usage=None,
+            model=getattr(self._llm, "_model", None),
+            chunks_retrieved=len(chunks),
+        )
 
     # Stage runners
 
@@ -328,9 +346,10 @@ class AsyncQueryPipeline:
         t = time.monotonic()
         try:
             embedding = await self._embedder.async_embed_query(query)
-        except EmbedderError:
-            raise
         except Exception as e:
+            await self._emit_failed(pipeline_id, "embedder", t, e)
+            if isinstance(e, EmbedderError):
+                raise
             raise PipelineError(
                 "Embedder failed while embedding the query.",
                 stage="embedder",
@@ -368,9 +387,10 @@ class AsyncQueryPipeline:
                 score_threshold=score_threshold,
                 filters=metadata_filter,
             )
-        except RetrieverError:
-            raise
         except Exception as e:
+            await self._emit_failed(pipeline_id, "retriever", t, e)
+            if isinstance(e, RetrieverError):
+                raise
             raise PipelineError(
                 "Retriever failed during async semantic search.",
                 stage="retriever",
@@ -401,6 +421,7 @@ class AsyncQueryPipeline:
         try:
             reranked = await self._reranker.async_rerank(query, chunks, top_n)
         except Exception as e:
+            await self._emit_failed(pipeline_id, "reranker", t, e)
             raise PipelineError(
                 "Reranker failed to re-score chunks.",
                 stage="reranker",
@@ -424,9 +445,10 @@ class AsyncQueryPipeline:
         t = time.monotonic()
         try:
             prompt = self._prompt_builder.build(query, chunks)
-        except PromptError:
-            raise
         except Exception as e:
+            await self._emit_failed(pipeline_id, "prompt_builder", t, e)
+            if isinstance(e, PromptError):
+                raise
             raise PipelineError(
                 "PromptBuilder failed while assembling the prompt.",
                 stage="prompt_builder",
@@ -444,9 +466,10 @@ class AsyncQueryPipeline:
         t = time.monotonic()
         try:
             answer, token_usage = await self._llm.async_generate(prompt)
-        except LLMError:
-            raise
         except Exception as e:
+            await self._emit_failed(pipeline_id, "llm", t, e)
+            if isinstance(e, LLMError):
+                raise
             raise PipelineError(
                 "LLM failed to generate a response.",
                 stage="llm",
@@ -551,6 +574,22 @@ class AsyncQueryPipeline:
             metadata=metadata or {},
         )
         await self._observer.async_emit(event)
+
+    async def _emit_failed(
+        self,
+        pipeline_id: str,
+        stage: str,
+        started: float | None,
+        exc: BaseException,
+    ) -> None:
+        """Emit a terminal 'failed' event for a stage, with error context."""
+        await self._emit(
+            pipeline_id,
+            stage,
+            "failed",
+            started,
+            {"error_type": type(exc).__name__, "message": str(exc)},
+        )
 
     def _assert_no_running_loop(self) -> None:
         try:

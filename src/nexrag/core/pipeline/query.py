@@ -152,9 +152,10 @@ class QueryPipeline:
             t = time.monotonic()
             answer, token_usage = self._run_llm(prompt, pipeline_id)
             stage_latencies["llm"] = (time.monotonic() - t) * 1000
-        except PipelineError:
-            raise
         except Exception as e:
+            self._emit_failed(pipeline_id, "pipeline", started_at, e)
+            if isinstance(e, PipelineError):
+                raise
             raise PipelineError(
                 f"Unexpected error during query pipeline: {e}",
                 stage="pipeline",
@@ -246,9 +247,10 @@ class QueryPipeline:
             t = time.monotonic()
             prompt = self._run_prompt_builder(query, chunks, pipeline_id)
             stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
-        except PipelineError:
-            raise
         except Exception as e:
+            self._emit_failed(pipeline_id, "pipeline", started_at, e)
+            if isinstance(e, PipelineError):
+                raise
             raise PipelineError(
                 f"Unexpected error during streaming pipeline: {e}",
                 stage="pipeline",
@@ -259,14 +261,19 @@ class QueryPipeline:
 
         self._emit(pipeline_id, "llm", "started")
         t = time.monotonic()
-        llm_failed = False
+        # Do NOT yield inside a finally/except: yielding while an exception is in
+        # flight suspends it at the yield, so a consumer that breaks after the
+        # metrics object never sees the error, and yielding during GeneratorExit
+        # raises "generator ignored GeneratorExit". RunMetrics is therefore yielded
+        # only on the success path; failure-path metrics travel via the failed event.
         try:
             yield from self._llm.stream(prompt)
-        except (LLMError, PipelineError):
-            llm_failed = True
-            raise
         except Exception as e:
-            llm_failed = True
+            stage_latencies["llm"] = (time.monotonic() - t) * 1000
+            self._emit_failed(pipeline_id, "llm", t, e)
+            self._emit_failed(pipeline_id, "pipeline", started_at, e)
+            if isinstance(e, (LLMError, PipelineError)):
+                raise
             raise PipelineError(
                 "LLM failed during streaming.",
                 stage="llm",
@@ -274,18 +281,18 @@ class QueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
-        finally:
-            stage_latencies["llm"] = (time.monotonic() - t) * 1000
-            self._emit(pipeline_id, "llm", "failed" if llm_failed else "completed", t)
-            latency_ms = (time.monotonic() - started_at) * 1000
-            yield RunMetrics(
-                pipeline_id=pipeline_id,
-                total_latency_ms=latency_ms,
-                stage_latencies=stage_latencies,
-                token_usage=None,
-                model=getattr(self._llm, "_model", None),
-                chunks_retrieved=len(chunks),
-            )
+
+        stage_latencies["llm"] = (time.monotonic() - t) * 1000
+        self._emit(pipeline_id, "llm", "completed", t)
+        latency_ms = (time.monotonic() - started_at) * 1000
+        yield RunMetrics(
+            pipeline_id=pipeline_id,
+            total_latency_ms=latency_ms,
+            stage_latencies=stage_latencies,
+            token_usage=None,
+            model=getattr(self._llm, "_model", None),
+            chunks_retrieved=len(chunks),
+        )
 
     # Stage runners
 
@@ -294,9 +301,10 @@ class QueryPipeline:
         t = time.monotonic()
         try:
             embedding = self._embedder.embed_query(query)
-        except EmbedderError:
-            raise
         except Exception as e:
+            self._emit_failed(pipeline_id, "embedder", t, e)
+            if isinstance(e, EmbedderError):
+                raise
             raise PipelineError(
                 "Embedder failed while embedding the query.",
                 stage="embedder",
@@ -334,9 +342,10 @@ class QueryPipeline:
                 score_threshold=score_threshold,
                 filters=metadata_filter,
             )
-        except RetrieverError:
-            raise
         except Exception as e:
+            self._emit_failed(pipeline_id, "retriever", t, e)
+            if isinstance(e, RetrieverError):
+                raise
             raise PipelineError(
                 "Retriever failed during semantic search.",
                 stage="retriever",
@@ -367,6 +376,7 @@ class QueryPipeline:
         try:
             reranked = self._reranker.rerank(query, chunks, top_n)
         except Exception as e:
+            self._emit_failed(pipeline_id, "reranker", t, e)
             raise PipelineError(
                 "Reranker failed to re-score chunks.",
                 stage="reranker",
@@ -388,9 +398,10 @@ class QueryPipeline:
         t = time.monotonic()
         try:
             prompt = self._prompt_builder.build(query, chunks)
-        except PromptError:
-            raise
         except Exception as e:
+            self._emit_failed(pipeline_id, "prompt_builder", t, e)
+            if isinstance(e, PromptError):
+                raise
             raise PipelineError(
                 "PromptBuilder failed while assembling the prompt.",
                 stage="prompt_builder",
@@ -412,9 +423,10 @@ class QueryPipeline:
         t = time.monotonic()
         try:
             answer, token_usage = self._llm.generate(prompt)
-        except LLMError:
-            raise
         except Exception as e:
+            self._emit_failed(pipeline_id, "llm", t, e)
+            if isinstance(e, LLMError):
+                raise
             raise PipelineError(
                 "LLM failed to generate a response.",
                 stage="llm",
@@ -529,3 +541,19 @@ class QueryPipeline:
             metadata=metadata or {},
         )
         self._observer.emit(event)
+
+    def _emit_failed(
+        self,
+        pipeline_id: str,
+        stage: str,
+        started: float | None,
+        exc: BaseException,
+    ) -> None:
+        """Emit a terminal 'failed' event for a stage, with error context."""
+        self._emit(
+            pipeline_id,
+            stage,
+            "failed",
+            started,
+            {"error_type": type(exc).__name__, "message": str(exc)},
+        )

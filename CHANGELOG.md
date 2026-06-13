@@ -7,6 +7,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.3.3] - 2026-06-12
+
+Hardening pass from an external code review — idempotency correctness, observability
+coverage, and a leaner dependency footprint.
+
+### Fixed
+
+- **Per-source idempotency.** `on_conflict` (`skip` / `overwrite`) decisions are now made independently per `metadata["source"]` instead of across the whole batch. A brand-new document is no longer dropped just because it shares an `ingest_documents()` / `ingest_batch()` call with an already-ingested one (`skip`), and an unchanged document is no longer deleted-and-rewritten just because another document in the same call changed (`overwrite`).
+- **Idempotency lookup failures are isolated.** A `VectorDBError` while looking up one source no longer wipes the deduplication state collected for the other sources; the affected source is written and a `failed` event is emitted for it.
+- **Cross-document chunk-ID collisions.** Vector-DB row IDs are now derived from `sha256(parent_doc_id:content_hash)` (`Chunk.row_id`) instead of the bare `content_hash`. Two documents containing identical text (shared boilerplate, disclaimers) now keep separate rows with correct `parent_doc_id`/`source`, and overwriting one document can no longer delete another's chunk.
+- **Streaming no longer hides in-flight errors.** `stream_query()` / `astream_query()` no longer `yield` the final `RunMetrics` from a `finally` block. An LLM error mid-stream now propagates promptly to the consumer (instead of being suspended behind a metrics object), and abandoning the iterator early no longer risks `generator ignored GeneratorExit`. `RunMetrics` is yielded only on success; failure-path metrics travel via the `failed` event.
+- **Embedder fingerprint check** does a best-effort compare-and-set (re-read after write) so a racing first-ingest with a different embedder raises `EmbedderMismatchError` instead of silently producing a mixed-model collection.
+
+### Added
+
+- **`failed` pipeline events on every stage.** Previously only the streaming LLM stage emitted `status="failed"`. Now every stage runner (loader, sanitizer, chunker, embedder, fingerprint, idempotency, retriever, reranker, prompt builder, LLM, index writer) emits exactly one `failed` event with `error_type` + `message` before raising, plus a pipeline-level `failed` event — observers see a terminal event for every run, in both sync and async pipelines.
+- **`BM25Retriever` disk-persisted index.** The built index is cached to disk under `.nexrag/bm25` (L2) in addition to memory (L1), so a cold process — or the first query after an L1 invalidation — reloads the prebuilt index instead of re-tokenising the full corpus. On-disk entries are trusted only while the collection's document count is unchanged and the TTL has not expired. Corpus fetch is paginated (`get_all` now accepts `limit`/`offset`) to avoid a single unbounded read.
+
+### Changed
+
+- **Packaging (breaking).** `chromadb` and `openai` are no longer core dependencies — `pip install nexrag` now installs only `pydantic` + `pyyaml`. Install the default stack with `pip install "nexrag[openai,chromadb]"`. Dependency version floors now live solely in the extras (single source of truth).
+- **`BM25Retriever` `cache_ttl` now defaults to `300` seconds** (was `None`/no expiry) so multi-worker deployments don't serve indefinitely-stale keyword results by default. Note: cache invalidation remains single-process; see the retriever docstring.
+
+---
+
 ## [0.3.1] - 2026-06-10
 
 ### Added

@@ -32,7 +32,7 @@ Every stage — loading, chunking, embedding, retrieval, generation — is a cle
 ## Quickstart
 
 ```bash
-pip install "nexrag[openai,pdf]"
+pip install "nexrag[openai,chromadb,pdf]"
 export OPENAI_API_KEY=sk-...
 cp nexrag.example.yaml nexrag.yaml   # edit to taste
 ```
@@ -94,11 +94,15 @@ See [docs/](docs/) for the full documentation site.
 ## Installation
 
 ```bash
-# Core only
+# Core only — pydantic + pyyaml. No provider SDKs; add the extras you use below.
 pip install nexrag
+
+# Default getting-started stack (OpenAI embedder/LLM + ChromaDB vector store)
+pip install "nexrag[openai,chromadb]"
 
 # Provider extras — install only what you use
 pip install "nexrag[openai]"         # OpenAI embedder + LLM
+pip install "nexrag[chromadb]"       # ChromaDB vector store
 pip install "nexrag[anthropic]"      # Anthropic (Claude) LLM
 pip install "nexrag[ollama]"         # Ollama local LLM + embedder
 pip install "nexrag[huggingface]"    # HuggingFace embedder
