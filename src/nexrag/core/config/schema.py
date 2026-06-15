@@ -38,7 +38,7 @@ _COLLECTION_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,510}[a-zA-Z0-9]$
 
 
 class EmbedderConfig(BaseModel):
-    provider: Literal["openai", "huggingface", "ollama", "custom"]
+    provider: Literal["openai", "huggingface", "gemini", "ollama", "custom"]
     model: str
     api_key: str | None = None
     base_url: str | None = None

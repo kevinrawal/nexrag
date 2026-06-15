@@ -198,8 +198,20 @@ def _build_embedder(config: EmbedderConfig) -> BaseEmbedder:
             batch_size=config.batch_size,
         )
 
+    if config.provider == "gemini":
+        from nexrag.adapters.embedders.gemini import GeminiEmbedder
+
+        return GeminiEmbedder(
+            model=config.model,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            batch_size=config.batch_size,
+            max_retries=config.max_retries,
+        )
+
     raise ConfigError(
-        f"Unknown embedder provider: {config.provider!r}. Supported: openai, huggingface, ollama, custom",
+        f"Unknown embedder provider: {config.provider!r}. "
+        "Supported: openai, huggingface, gemini, ollama, custom",
         stage="config",
         component="embedder",
     )
