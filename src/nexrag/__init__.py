@@ -16,6 +16,8 @@ from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
 
+from nexrag._factory import wire
+from nexrag.core.config.loader import load_config
 from nexrag.core.interfaces.loader import BaseLoader
 from nexrag.core.models.metrics import RunMetrics
 from nexrag.core.models.result import PipelineResult
@@ -23,15 +25,17 @@ from nexrag.core.pipeline.async_ingestion import AsyncIngestionPipeline
 from nexrag.core.pipeline.async_query import AsyncQueryPipeline
 from nexrag.core.pipeline.ingestion import IngestionPipeline, IngestionResult
 from nexrag.core.pipeline.query import QueryPipeline
-from nexrag.exceptions import NexRAGError
+from nexrag.exceptions import GuardrailBlockedError, GuardrailError, NexRAGError
 
-__version__ = "0.3.3"
+__version__ = "0.4.0"
 __all__ = [
     "NexRAG",
     "PipelineResult",
     "IngestionResult",
     "RunMetrics",
     "NexRAGError",
+    "GuardrailError",
+    "GuardrailBlockedError",
     "__version__",
 ]
 
@@ -72,8 +76,6 @@ class NexRAG:
             ConfigError:          If the YAML is missing, invalid, or fails validation.
             ClassResolutionError: If a custom class_path cannot be imported.
         """
-        from nexrag._factory import wire
-        from nexrag.core.config.loader import load_config
 
         config = load_config(path)
         ingestion, query, retriever = wire(config)
@@ -181,6 +183,7 @@ class NexRAG:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
+        auth_context: dict[str, Any] | None = None,
     ) -> PipelineResult:
         """
         Run the full query pipeline: embed → retrieve → prompt → LLM → result.
@@ -191,9 +194,14 @@ class NexRAG:
             top_k:            Override the top_k retrieval count.
             score_threshold:  Override the minimum similarity score.
             metadata_filter:  Optional key-value metadata filters, e.g. {"year": 2024}.
+            auth_context:     Per-request principal info (e.g. {"tenant": "acme"}) for the
+                              access-control guard, which turns it into a retrieval filter.
 
         Returns:
             PipelineResult with answer, sources, scores, and latency.
+
+        Raises:
+            GuardrailBlockedError: If an input or output guard blocks the request.
         """
         return self._query.run(
             text,
@@ -201,6 +209,7 @@ class NexRAG:
             top_k=top_k,
             score_threshold=score_threshold,
             metadata_filter=metadata_filter,
+            auth_context=auth_context,
         )
 
     def stream_query(
@@ -211,6 +220,7 @@ class NexRAG:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
+        auth_context: dict[str, Any] | None = None,
     ) -> Iterator[str | RunMetrics]:
         """
         Stream the LLM response token by token (sync).
@@ -219,12 +229,17 @@ class NexRAG:
         from the LLM. The final item yielded is always a RunMetrics object with
         full per-stage latencies and chunk count.
 
+        Note: when an output guard chain is configured, tokens are buffered and the
+        guarded answer is emitted as a single chunk (output guards cannot edit a
+        stream that has already been sent).
+
         Args:
             text:             The user's question.
             collection:       Override the default collection.
             top_k:            Override the top_k retrieval count.
             score_threshold:  Override the minimum similarity score.
             metadata_filter:  Optional metadata filters.
+            auth_context:     Per-request principal info for the access-control guard.
 
         Yields:
             Response text tokens followed by a final RunMetrics object.
@@ -236,6 +251,7 @@ class NexRAG:
             top_k=top_k,
             score_threshold=score_threshold,
             metadata_filter=metadata_filter,
+            auth_context=auth_context,
         )
 
     async def astream_query(
@@ -246,6 +262,7 @@ class NexRAG:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
+        auth_context: dict[str, Any] | None = None,
     ) -> AsyncIterator[str | RunMetrics]:
         """
         Stream the LLM response token by token (async).
@@ -278,6 +295,7 @@ class NexRAG:
                 top_k=top_k,
                 score_threshold=score_threshold,
                 metadata_filter=metadata_filter,
+                auth_context=auth_context,
             ):
                 yield token
         else:
@@ -289,6 +307,7 @@ class NexRAG:
                     top_k=top_k,
                     score_threshold=score_threshold,
                     metadata_filter=metadata_filter,
+                    auth_context=auth_context,
                 ),
             )
             for token in tokens:
@@ -302,6 +321,7 @@ class NexRAG:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
+        auth_context: dict[str, Any] | None = None,
     ) -> PipelineResult:
         """
         Async variant of query(). Use inside async frameworks (FastAPI, Starlette).
@@ -320,6 +340,7 @@ class NexRAG:
                 top_k=top_k,
                 score_threshold=score_threshold,
                 metadata_filter=metadata_filter,
+                auth_context=auth_context,
             )
 
         return await asyncio.to_thread(
@@ -329,6 +350,7 @@ class NexRAG:
             top_k=top_k,
             score_threshold=score_threshold,
             metadata_filter=metadata_filter,
+            auth_context=auth_context,
         )
 
     async def async_ingest(

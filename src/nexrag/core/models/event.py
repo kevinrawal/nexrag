@@ -26,6 +26,7 @@ StageName = Literal[
     "prompt_builder",
     "llm",
     "response_builder",
+    "guardrail",
     "pipeline",
 ]
 

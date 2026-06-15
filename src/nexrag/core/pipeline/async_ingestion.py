@@ -24,6 +24,8 @@ import uuid
 from collections import defaultdict
 from typing import Any
 
+from nexrag.core.guards.apply import apply_ingestion_guards
+from nexrag.core.guards.chain import GuardChain
 from nexrag.core.interfaces.chunker import BaseChunker
 from nexrag.core.interfaces.embedder import BaseEmbedder
 from nexrag.core.interfaces.loader import BaseLoader
@@ -78,6 +80,7 @@ class AsyncIngestionPipeline:
         observer: BaseObserver | None = None,
         embed_batch_size: int = _DEFAULT_EMBED_BATCH_SIZE,
         valid_collections: frozenset[str] | None = None,
+        ingestion_guards: GuardChain | None = None,
     ) -> None:
         self._loader = loader
         self._sanitizer = sanitizer or PassthroughSanitizer()
@@ -91,6 +94,7 @@ class AsyncIngestionPipeline:
         self._valid_collections: frozenset[str] = (
             valid_collections if valid_collections is not None else frozenset([collection])
         )
+        self._ingestion_guards = ingestion_guards
         # Per-collection locks: serializes only the DB read-check + write sequence.
         self._collection_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
@@ -340,6 +344,10 @@ class AsyncIngestionPipeline:
                     cause=e,
                 ) from e
             await self._emit(pipeline_id, "sanitizer", "completed", t)
+
+            clean_doc = apply_ingestion_guards(
+                self._ingestion_guards, clean_doc, pipeline_id=pipeline_id
+            )
 
             await self._emit(pipeline_id, "chunker", "started")
             t = time.monotonic()

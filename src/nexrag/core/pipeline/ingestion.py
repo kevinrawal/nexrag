@@ -30,6 +30,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from nexrag.core.guards.apply import apply_ingestion_guards
+from nexrag.core.guards.chain import GuardChain
 from nexrag.core.interfaces.chunker import BaseChunker
 from nexrag.core.interfaces.embedder import BaseEmbedder
 from nexrag.core.interfaces.loader import BaseLoader
@@ -78,6 +80,7 @@ class IngestionPipeline:
         on_conflict: str = "overwrite",
         observer: BaseObserver | None = None,
         valid_collections: frozenset[str] | None = None,
+        ingestion_guards: GuardChain | None = None,
     ) -> None:
         self._loader = loader
         self._sanitizer = sanitizer or PassthroughSanitizer()
@@ -90,6 +93,7 @@ class IngestionPipeline:
         self._valid_collections: frozenset[str] = (
             valid_collections if valid_collections is not None else frozenset([collection])
         )
+        self._ingestion_guards = ingestion_guards
 
     # Public API
 
@@ -340,6 +344,12 @@ class IngestionPipeline:
                     cause=e,
                 ) from e
             self._emit(pipeline_id, "sanitizer", "completed", t)
+
+            # Ingestion guard chain (e.g. PII redaction) runs on the sanitized
+            # document text before chunking. REDACT rewrites content; BLOCK raises.
+            clean_doc = apply_ingestion_guards(
+                self._ingestion_guards, clean_doc, pipeline_id=pipeline_id
+            )
 
             self._emit(pipeline_id, "chunker", "started")
             t = time.monotonic()
@@ -614,6 +624,7 @@ class IngestionPipeline:
                 "Add it to vector_db.collections in nexrag.yaml.",
                 stage="config",
                 component="ingestion",
+                pipeline_id=pipeline_id,
             )
         return collection
 

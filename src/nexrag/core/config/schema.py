@@ -31,6 +31,46 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # invalid name fails fast at config load instead of crashing at the first DB call.
 _COLLECTION_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,510}[a-zA-Z0-9]$")
 
+# Shared component configs
+# Defined first because they are reused across ingestion, query, AND as nested
+# sub-configs inside a chunker block (semantic/proposition chunkers resolve their
+# own embedder/LLM, independent of the pipeline's main models).
+
+
+class EmbedderConfig(BaseModel):
+    provider: Literal["openai", "huggingface", "ollama", "custom"]
+    model: str
+    api_key: str | None = None
+    base_url: str | None = None
+    batch_size: int = 100
+    max_retries: int = 2
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    def __repr__(self) -> str:
+        return f"EmbedderConfig(provider={self.provider!r}, model={self.model!r}, api_key=***)"
+
+
+class LLMConfig(BaseModel):
+    provider: Literal["openai", "anthropic", "gemini", "ollama", "custom"]
+    model: str
+    api_key: str | None = None
+    base_url: str | None = None
+    temperature: float = 0.2
+    max_tokens: int = 1024
+    timeout: int = 30
+    max_retries: int = 2
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    def __repr__(self) -> str:
+        return f"LLMConfig(provider={self.provider!r}, model={self.model!r}, api_key=***)"
+
+
 # Ingestion sub-configs
 
 
@@ -68,40 +108,51 @@ class SanitizerConfig(BaseModel):
 
 
 class ChunkerConfig(BaseModel):
-    strategy: Literal["recursive", "custom"] = "recursive"
+    strategy: Literal[
+        "recursive",
+        "fixed",
+        "token",
+        "sentence",
+        "sentence_window",
+        "markdown",
+        "code",
+        "semantic",
+        "proposition",
+        "custom",
+    ] = "recursive"
     chunk_size: int = 512
     chunk_overlap: int = 64
     min_chunk_size: int = 50
     separator: str = "\n\n"
+    # Nested component sub-configs, resolved INDEPENDENTLY of the pipeline's main
+    # embedder/LLM. semantic chunking needs an embedder; proposition chunking needs
+    # an LLM. This lets a user run a cheap model for chunking and a strong one for
+    # generation. Custom chunkers may declare either and receive it as a kwarg.
+    embedder: EmbedderConfig | None = None
+    llm: LLMConfig | None = None
     class_path: str | None = Field(default=None, alias="class")
     params: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
 
     @model_validator(mode="after")
-    def class_required_for_custom(self) -> ChunkerConfig:
+    def validate_strategy_requirements(self) -> ChunkerConfig:
         if self.strategy == "custom" and not self.class_path:
             raise ValueError(
                 "chunker.class is required when chunker.strategy is 'custom'. "
                 "Provide a dotted class path: myproject.chunkers.MyChunker"
             )
+        if self.strategy == "semantic" and self.embedder is None:
+            raise ValueError(
+                "chunker.embedder is required when chunker.strategy is 'semantic'. "
+                "Provide a nested embedder block (resolved independently of the pipeline embedder)."
+            )
+        if self.strategy == "proposition" and self.llm is None:
+            raise ValueError(
+                "chunker.llm is required when chunker.strategy is 'proposition'. "
+                "Provide a nested llm block (resolved independently of the query LLM)."
+            )
         return self
-
-
-class EmbedderConfig(BaseModel):
-    provider: Literal["openai", "huggingface", "ollama", "custom"]
-    model: str
-    api_key: str | None = None
-    base_url: str | None = None
-    batch_size: int = 100
-    max_retries: int = 2
-    class_path: str | None = Field(default=None, alias="class")
-    params: dict[str, Any] = Field(default_factory=dict)
-
-    model_config = {"populate_by_name": True}
-
-    def __repr__(self) -> str:
-        return f"EmbedderConfig(provider={self.provider!r}, model={self.model!r}, api_key=***)"
 
 
 class CollectionConfig(BaseModel):
@@ -114,7 +165,7 @@ class CollectionConfig(BaseModel):
 
 
 class VectorDBConfig(BaseModel):
-    provider: Literal["chroma", "custom"] = "chroma"
+    provider: Literal["chroma", "pinecone", "custom"] = "chroma"
     default_collection: str
     collections: dict[str, CollectionConfig]
     on_conflict: Literal["overwrite", "skip", "append"] = "overwrite"
@@ -215,24 +266,6 @@ class PromptConfig(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class LLMConfig(BaseModel):
-    provider: Literal["openai", "anthropic", "ollama", "custom"]
-    model: str
-    api_key: str | None = None
-    base_url: str | None = None
-    temperature: float = 0.2
-    max_tokens: int = 1024
-    timeout: int = 30
-    max_retries: int = 2
-    class_path: str | None = Field(default=None, alias="class")
-    params: dict[str, Any] = Field(default_factory=dict)
-
-    model_config = {"populate_by_name": True}
-
-    def __repr__(self) -> str:
-        return f"LLMConfig(provider={self.provider!r}, model={self.model!r}, api_key=***)"
-
-
 class RerankerConfig(BaseModel):
     provider: Literal["cohere", "cross_encoder", "custom"]
     model: str
@@ -277,6 +310,65 @@ class ObservabilityConfig(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+# Guardrails
+
+
+class GuardConfig(BaseModel):
+    type: Literal[
+        "pii",
+        "access_control",
+        "prompt_injection",
+        "groundedness",
+        "topic",
+        "model",
+        "custom",
+    ]
+    enabled: bool = True
+    # Nested LLM sub-config for the 'model' guard (Llama-Guard-style), resolved
+    # independently of the pipeline LLM — same nesting pattern as chunker.llm.
+    llm: LLMConfig | None = None
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def validate_guard(self) -> GuardConfig:
+        if self.type == "custom" and not self.class_path:
+            raise ValueError(
+                "guard.class is required when guard.type is 'custom'. "
+                "Provide a dotted class path: myproject.guards.MyGuard"
+            )
+        if self.type == "model" and self.llm is None and not self.class_path:
+            raise ValueError(
+                "guard.llm is required when guard.type is 'model' "
+                "(the moderation model is resolved from a nested llm block)."
+            )
+        return self
+
+
+class GuardChainConfig(BaseModel):
+    enabled: bool = False
+    # fail_open: a broken guard is treated as ALLOW. fail_closed: as BLOCK.
+    policy: Literal["fail_open", "fail_closed"] = "fail_open"
+    guards: list[GuardConfig] = Field(default_factory=list)
+
+
+class GuardrailsConfig(BaseModel):
+    """
+    Four ordered guard chains, each bound to a pipeline phase:
+        ingestion — runs on document text after the sanitizer, before chunking.
+        input     — runs on the user query at the start of the query pipeline.
+        retrieved — runs on each retrieved chunk before it enters the prompt.
+        output    — runs on the LLM answer before it is returned/streamed.
+    """
+
+    ingestion: GuardChainConfig = Field(default_factory=GuardChainConfig)
+    input: GuardChainConfig = Field(default_factory=GuardChainConfig)
+    retrieved: GuardChainConfig = Field(default_factory=GuardChainConfig)
+    output: GuardChainConfig = Field(default_factory=GuardChainConfig)
+
+
 # Root config
 
 
@@ -290,4 +382,5 @@ class NexRAGConfig(BaseModel):
     mode: Literal["sync", "async"] = "sync"
     ingestion: IngestionConfig
     query: QueryConfig
+    guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)

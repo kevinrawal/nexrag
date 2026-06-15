@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "nexrag"
-version = "0.3.3"
+version = "0.4.0"
 description = "Framework-agnostic RAG pipeline SDK. Plug in any component, swap any stage, configure everything in YAML"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -51,6 +51,9 @@ openai = [
 anthropic = [
     "anthropic>=0.20",
 ]
+gemini = [
+    "google-genai>=1.0",
+]
 ollama = [
     "ollama>=0.1",
     "httpx>=0.27",
@@ -58,8 +61,26 @@ ollama = [
 chromadb = [
     "chromadb>=1.5.9",
 ]
+pinecone = [
+    "pinecone>=5.0",
+]
 huggingface = [
     "huggingface-hub>=0.20",
+]
+
+# Chunking strategy extras
+tiktoken = [
+    "tiktoken>=0.7",
+]
+code = [
+    "tree-sitter>=0.21",
+    "tree-sitter-language-pack>=0.2",
+]
+
+# Guardrail extras
+pii = [
+    "presidio-analyzer>=2.2",
+    "presidio-anonymizer>=2.2",
 ]
 
 # Document loaders
@@ -90,9 +111,18 @@ cross-encoder = [
 all-providers = [
     "nexrag[openai]",
     "nexrag[anthropic]",
+    "nexrag[gemini]",
     "nexrag[ollama]",
     "nexrag[chromadb]",
+    "nexrag[pinecone]",
     "nexrag[huggingface]",
+]
+all-chunkers = [
+    "nexrag[tiktoken]",
+    "nexrag[code]",
+]
+all-guards = [
+    "nexrag[pii]",
 ]
 all-loaders = [
     "nexrag[pdf]",
@@ -116,6 +146,8 @@ all = [
     "nexrag[all-providers]",
     "nexrag[all-loaders]",
     "nexrag[all-retrieval]",
+    "nexrag[all-chunkers]",
+    "nexrag[all-guards]",
 ]
 
 # Dev dependencies
@@ -175,12 +207,20 @@ module = [
     "chromadb",
     "openai",
     "anthropic",
+    "google.genai",
+    "google.genai.*",
     "ollama",
     "httpx",
     "huggingface_hub",
     "cohere",
     "sentence_transformers",
     "pypdf",
+    "pinecone",
+    "tiktoken",
+    "tree_sitter",
+    "tree_sitter_language_pack",
+    "presidio_analyzer",
+    "presidio_anonymizer",
 ]
 ignore_missing_imports = true
 

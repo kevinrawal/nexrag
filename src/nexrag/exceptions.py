@@ -133,6 +133,21 @@ class LLMRateLimitError(LLMError):
     """LLM provider rate limit hit."""
 
 
+# Guardrails
+
+
+class GuardrailError(NexRAGError):
+    """A guard or guard chain failed (e.g. a fail-closed chain whose guard errored)."""
+
+
+class GuardrailBlockedError(GuardrailError):
+    """A guard blocked the input, retrieved content, or output."""
+
+    def __init__(self, message: str, *, guard: str | None = None, **kwargs: object) -> None:
+        self.guard = guard
+        super().__init__(message, **kwargs)  # type: ignore[arg-type]
+
+
 # Pipeline orchestration
 
 
