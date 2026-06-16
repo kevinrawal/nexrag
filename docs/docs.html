@@ -349,6 +349,9 @@
         <option value="#rerankers">Rerankers</option>
         <option value="#llms">LLMs</option>
       </optgroup>
+      <optgroup label="Security">
+        <option value="#guardrails">Guardrails</option>
+      </optgroup>
       <optgroup label="Reference">
         <option value="#api">API reference</option>
         <option value="#changelog">Changelog</option>
@@ -434,15 +437,17 @@
         <div class="sidebar-item" data-section="chunkers">
           <a href="#chunkers" class="sidebar-link">Chunkers</a>
           <div class="sidebar-sub">
-            <a href="#chunker-recursive" class="sidebar-sub-link">Recursive</a>
-            <a href="#chunker-fixed"     class="sidebar-sub-link">Fixed</a>
-            <a href="#chunker-custom"    class="sidebar-sub-link">Custom chunker</a>
+            <a href="#chunker-recursive"  class="sidebar-sub-link">Recursive</a>
+            <a href="#chunker-fixed"      class="sidebar-sub-link">Fixed</a>
+            <a href="#chunker-production" class="sidebar-sub-link">Production strategies</a>
+            <a href="#chunker-custom"     class="sidebar-sub-link">Custom chunker</a>
           </div>
         </div>
         <div class="sidebar-item" data-section="embedders">
           <a href="#embedders" class="sidebar-link">Embedders</a>
           <div class="sidebar-sub">
             <a href="#embedder-openai"       class="sidebar-sub-link">OpenAI</a>
+            <a href="#embedder-gemini"       class="sidebar-sub-link">Gemini</a>
             <a href="#embedder-huggingface"  class="sidebar-sub-link">HuggingFace</a>
             <a href="#embedder-ollama"       class="sidebar-sub-link">Ollama</a>
             <a href="#embedder-custom"       class="sidebar-sub-link">Custom embedder</a>
@@ -451,8 +456,9 @@
         <div class="sidebar-item" data-section="vector-dbs">
           <a href="#vector-dbs" class="sidebar-link">Vector DB</a>
           <div class="sidebar-sub">
-            <a href="#vdb-chroma" class="sidebar-sub-link">ChromaDB</a>
-            <a href="#vdb-custom" class="sidebar-sub-link">Custom vector DB</a>
+            <a href="#vdb-chroma"   class="sidebar-sub-link">ChromaDB</a>
+            <a href="#vdb-pinecone" class="sidebar-sub-link">Pinecone</a>
+            <a href="#vdb-custom"   class="sidebar-sub-link">Custom vector DB</a>
           </div>
         </div>
         <div class="sidebar-item" data-section="retrievers">
@@ -477,10 +483,15 @@
           <div class="sidebar-sub">
             <a href="#llm-openai"    class="sidebar-sub-link">OpenAI</a>
             <a href="#llm-anthropic" class="sidebar-sub-link">Anthropic</a>
+            <a href="#llm-gemini"    class="sidebar-sub-link">Gemini</a>
             <a href="#llm-ollama"    class="sidebar-sub-link">Ollama</a>
             <a href="#llm-custom"    class="sidebar-sub-link">Custom LLM</a>
           </div>
         </div>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Security</div>
+        <a href="#guardrails" class="sidebar-link">Guardrails</a>
       </div>
       <div class="sidebar-group">
         <div class="sidebar-group-label">Reference</div>
@@ -519,19 +530,26 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
         <div class="extras-grid">
           <div class="extra-cell"><div class="extra-name">openai</div><div class="extra-desc">OpenAI embeddings &amp; LLM</div></div>
           <div class="extra-cell"><div class="extra-name">anthropic</div><div class="extra-desc">Claude models via Anthropic API</div></div>
+          <div class="extra-cell"><div class="extra-name">gemini</div><div class="extra-desc">Google Gemini LLM &amp; embeddings (google-genai)</div></div>
           <div class="extra-cell"><div class="extra-name">ollama</div><div class="extra-desc">Local Ollama LLM &amp; embeddings</div></div>
           <div class="extra-cell"><div class="extra-name">huggingface</div><div class="extra-desc">HuggingFace Inference API embeddings</div></div>
           <div class="extra-cell"><div class="extra-name">chromadb</div><div class="extra-desc">Default vector store</div></div>
+          <div class="extra-cell"><div class="extra-name">pinecone</div><div class="extra-desc">Pinecone serverless vector store</div></div>
           <div class="extra-cell"><div class="extra-name">pdf</div><div class="extra-desc">PDF ingestion via pypdf</div></div>
+          <div class="extra-cell"><div class="extra-name">tiktoken</div><div class="extra-desc">Token-aware chunking (token strategy)</div></div>
+          <div class="extra-cell"><div class="extra-name">code</div><div class="extra-desc">Code-aware chunking (tree-sitter)</div></div>
+          <div class="extra-cell"><div class="extra-name">pii</div><div class="extra-desc">PII guard via Microsoft Presidio</div></div>
           <div class="extra-cell"><div class="extra-name">bm25</div><div class="extra-desc">BM25 keyword retrieval (rank-bm25)</div></div>
           <div class="extra-cell"><div class="extra-name">cohere</div><div class="extra-desc">Cohere Rerank API</div></div>
           <div class="extra-cell"><div class="extra-name">cross-encoder</div><div class="extra-desc">CrossEncoder reranker (sentence-transformers)</div></div>
-          <div class="extra-cell"><div class="extra-name">all-providers</div><div class="extra-desc">All embedder &amp; LLM providers</div></div>
+          <div class="extra-cell"><div class="extra-name">all-providers</div><div class="extra-desc">All embedder &amp; LLM providers + vector DBs</div></div>
+          <div class="extra-cell"><div class="extra-name">all-chunkers</div><div class="extra-desc">tiktoken + code chunking backends</div></div>
+          <div class="extra-cell"><div class="extra-name">all-guards</div><div class="extra-desc">Guardrail backends (Presidio)</div></div>
           <div class="extra-cell"><div class="extra-name">all-loaders</div><div class="extra-desc">All document loaders (PDF, Word, HTML, Excel)</div></div>
           <div class="extra-cell"><div class="extra-name">all-sparse</div><div class="extra-desc">BM25 sparse retrieval bundle (rank-bm25)</div></div>
           <div class="extra-cell"><div class="extra-name">all-rerankers</div><div class="extra-desc">All reranker backends (Cohere + sentence-transformers)</div></div>
           <div class="extra-cell"><div class="extra-name">all-retrieval</div><div class="extra-desc">all-sparse + all-rerankers</div></div>
-          <div class="extra-cell"><div class="extra-name">all</div><div class="extra-desc">Everything — all-providers + all-loaders + all-retrieval. Dev/CI only: pulls PyTorch via sentence-transformers.</div></div>
+          <div class="extra-cell"><div class="extra-name">all</div><div class="extra-desc">Everything — providers + loaders + retrieval + chunkers + guards. Dev/CI only: pulls PyTorch via sentence-transformers.</div></div>
         </div>
 
         <div class="callout">
@@ -547,7 +565,7 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
         <p class="doc-lead">NexRAG is configured entirely through a YAML file — by default <code>nexrag.yaml</code> in your working directory.</p>
 
         <div id="config-reference" data-sub-anchor="config-reference" style="scroll-margin-top:80px"></div>
-        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — full config reference (v0.3.2)</span>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — full config reference (v0.4.0)</span>
 
 <span class="key">mode:</span> <span class="val">sync</span>             <span class="yml-cmt"># sync (default) | async — enables native async pipeline</span>
 
@@ -558,21 +576,25 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
     <span class="yml-cmt"># metadata_fields: [title, author, creation_date]  # whitelist — omit for all 8</span>
 
   <span class="key">chunker:</span>
-    <span class="key">strategy:</span> <span class="val">recursive</span>   <span class="yml-cmt"># recursive | fixed | custom</span>
+    <span class="key">strategy:</span> <span class="val">recursive</span>   <span class="yml-cmt"># recursive | fixed | token | sentence | sentence_window | markdown | code | semantic | proposition | custom</span>
     <span class="key">chunk_size:</span> <span class="val">512</span>
     <span class="key">chunk_overlap:</span> <span class="val">64</span>
     <span class="key">min_chunk_size:</span> <span class="val">50</span>
     <span class="yml-cmt"># separator: "\n\n"  # top-level split character (default: double newline)</span>
+    <span class="yml-cmt"># semantic / proposition take their OWN nested component, resolved</span>
+    <span class="yml-cmt"># independently of the pipeline models (cheap model for chunking):</span>
+    <span class="yml-cmt"># embedder: { provider: ollama, model: nomic-embed-text }   # semantic</span>
+    <span class="yml-cmt"># llm:      { provider: gemini, model: gemini-2.5-flash }    # proposition</span>
 
   <span class="key">embedder:</span>
-    <span class="key">provider:</span> <span class="val">openai</span>
+    <span class="key">provider:</span> <span class="val">openai</span>      <span class="yml-cmt"># openai | gemini | huggingface | ollama | custom</span>
     <span class="key">model:</span> <span class="val">text-embedding-3-small</span>
     <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
     <span class="yml-cmt"># base_url: https://...  # override API base URL (OpenAI-compatible endpoints)</span>
     <span class="yml-cmt"># max_retries: 2         # embedding API retry attempts (default: 2)</span>
 
   <span class="key">vector_db:</span>
-    <span class="key">provider:</span> <span class="val">chroma</span>
+    <span class="key">provider:</span> <span class="val">chroma</span>           <span class="yml-cmt"># chroma | pinecone | custom</span>
     <span class="key">default_collection:</span> <span class="val">documents</span>
     <span class="key">on_conflict:</span> <span class="val">overwrite</span>       <span class="yml-cmt"># overwrite | skip | append</span>
     <span class="key">upsert_batch_size:</span> <span class="val">500</span>        <span class="yml-cmt"># max chunks per ChromaDB upsert call</span>
@@ -603,7 +625,7 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
   <span class="yml-cmt">#   top_n: 5                       # chunks passed to LLM after reranking</span>
   <span class="yml-cmt"># max_query_length: 8000           # reject queries longer than this (chars); 0 = disabled</span>
   <span class="key">llm:</span>
-    <span class="key">provider:</span> <span class="val">openai</span>
+    <span class="key">provider:</span> <span class="val">openai</span>          <span class="yml-cmt"># openai | anthropic | gemini | ollama | custom</span>
     <span class="key">model:</span> <span class="val">gpt-4o</span>
     <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
     <span class="yml-cmt"># base_url: https://...  # override API base URL</span>
@@ -617,6 +639,26 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
       <span class="val">the provided context. If unknown, say so.</span>
     <span class="yml-cmt"># context_format: numbered  # numbered | labeled | plain (how chunks are presented)</span>
     <span class="yml-cmt"># template: default          # default | qa | summarize | custom</span>
+
+<span class="key">guardrails:</span>                  <span class="yml-cmt"># optional security layer — every chain is disabled by default</span>
+  <span class="key">input:</span>                       <span class="yml-cmt"># runs on the user query</span>
+    <span class="key">enabled:</span> <span class="val">true</span>
+    <span class="key">policy:</span> <span class="val">fail_closed</span>        <span class="yml-cmt"># fail_open (default) | fail_closed</span>
+    <span class="key">guards:</span>
+      <span class="key">- type:</span> <span class="val">access_control</span>   <span class="yml-cmt"># per-request retrieval filter from auth_context</span>
+        <span class="key">params:</span> { <span class="key">mapping:</span> { <span class="key">tenant:</span> <span class="val">tenant</span> } }
+      <span class="key">- type:</span> <span class="val">prompt_injection</span>  <span class="yml-cmt"># heuristic injection/jailbreak detection</span>
+  <span class="key">retrieved:</span>                   <span class="yml-cmt"># runs on each retrieved chunk (an injection vector)</span>
+    <span class="key">enabled:</span> <span class="val">true</span>
+    <span class="key">guards:</span>
+      <span class="key">- type:</span> <span class="val">pii</span>               <span class="yml-cmt"># redact PII before it reaches the prompt</span>
+  <span class="key">output:</span>                      <span class="yml-cmt"># runs on the LLM answer (buffers when streaming)</span>
+    <span class="key">enabled:</span> <span class="val">true</span>
+    <span class="key">guards:</span>
+      <span class="key">- type:</span> <span class="val">groundedness</span>      <span class="yml-cmt"># cheap lexical-overlap check vs context</span>
+  <span class="yml-cmt"># ingestion:                  # runs on document text before chunking</span>
+  <span class="yml-cmt">#   enabled: true</span>
+  <span class="yml-cmt">#   guards: [ { type: pii, params: { mode: redact } } ]</span>
 
 <span class="key">observability:</span>
   <span class="key">enabled:</span> <span class="val">true</span>
@@ -1195,7 +1237,7 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
         <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
 <span class="key">ingestion:</span>
   <span class="key">chunker:</span>
-    <span class="key">strategy:</span> <span class="val">recursive</span>   <span class="yml-cmt"># only valid built-in strategy</span>
+    <span class="key">strategy:</span> <span class="val">recursive</span>   <span class="yml-cmt"># the default; see all strategies below</span>
     <span class="key">chunk_size:</span> <span class="val">512</span>       <span class="yml-cmt"># max characters per chunk</span>
     <span class="key">chunk_overlap:</span> <span class="val">64</span>    <span class="yml-cmt"># overlap between consecutive chunks</span>
     <span class="key">min_chunk_size:</span> <span class="val">50</span>   <span class="yml-cmt"># discard chunks shorter than this</span></code></pre>
@@ -1213,6 +1255,37 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
     <span class="key">chunk_size:</span> <span class="val">512</span>        <span class="yml-cmt"># characters per chunk</span>
     <span class="key">chunk_overlap:</span> <span class="val">64</span>     <span class="yml-cmt"># overlap between consecutive chunks</span>
     <span class="key">min_chunk_size:</span> <span class="val">50</span>    <span class="yml-cmt"># discard chunks shorter than this</span></code></pre>
+
+        <div id="chunker-production" data-sub-anchor="chunker-production" class="doc-h2">Production strategies</div>
+        <p class="doc-p">v0.4.0 ships a full suite of structure- and meaning-aware chunkers. All accept the common <code>chunk_size</code> / <code>chunk_overlap</code> / <code>min_chunk_size</code> knobs; strategy-specific options go under <code>params</code>.</p>
+        <table class="doc-table">
+          <thead><tr><th>strategy</th><th>What it does</th><th>Extra</th></tr></thead>
+          <tbody>
+            <tr><td><code>token</code></td><td>Tokenizer-aware fixed windows (tiktoken) — counts in tokens, not characters.</td><td><code>nexrag[tiktoken]</code></td></tr>
+            <tr><td><code>sentence</code></td><td>Packs whole sentences up to <code>chunk_size</code>, never splitting mid-sentence.</td><td>—</td></tr>
+            <tr><td><code>sentence_window</code></td><td>One chunk per sentence, expanded with <code>params.window_size</code> neighbours for context.</td><td>—</td></tr>
+            <tr><td><code>markdown</code></td><td>Splits on heading hierarchy; records the header path in <code>metadata["header_path"]</code>.</td><td>—</td></tr>
+            <tr><td><code>code</code></td><td>Language-aware splitting on function/class boundaries (tree-sitter, regex fallback).</td><td><code>nexrag[code]</code></td></tr>
+            <tr><td><code>semantic</code></td><td>Splits where adjacent-sentence embedding similarity drops. Needs an embedder.</td><td>nested <code>embedder</code></td></tr>
+            <tr><td><code>proposition</code></td><td>An LLM rewrites text into atomic, self-contained propositions. Highest cost. Needs an LLM.</td><td>nested <code>llm</code></td></tr>
+          </tbody>
+        </table>
+
+        <p class="doc-p"><strong>Nested component configs.</strong> The <code>semantic</code> and <code>proposition</code> chunkers resolve their <em>own</em> embedder/LLM — a full component block, resolved <strong>independently</strong> of the pipeline's main models. Run a cheap model for chunking and a strong one for generation:</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — semantic chunking with an independent (cheap) embedder</span>
+<span class="key">ingestion:</span>
+  <span class="key">chunker:</span>
+    <span class="key">strategy:</span> <span class="val">semantic</span>
+    <span class="key">embedder:</span>                        <span class="yml-cmt"># resolved independently of ingestion.embedder</span>
+      <span class="key">provider:</span> <span class="val">ollama</span>
+      <span class="key">model:</span> <span class="val">nomic-embed-text</span>
+    <span class="key">params:</span>
+      <span class="key">threshold:</span> <span class="val">0.5</span>               <span class="yml-cmt"># or omit for percentile-based breakpoints</span>
+      <span class="key">buffer_size:</span> <span class="val">1</span>
+
+<span class="yml-cmt"># proposition chunking uses a nested `llm:` block instead:</span>
+<span class="yml-cmt">#   strategy: proposition</span>
+<span class="yml-cmt">#   llm: { provider: gemini, model: gemini-2.5-flash, api_key: ${GOOGLE_API_KEY} }</span></code></pre>
 
         <div id="chunker-custom" data-sub-anchor="chunker-custom" class="doc-h2">Custom chunker</div>
         <p class="doc-p">Implement <code>BaseChunker</code> for semantic chunking, fixed-size chunking, or any domain-specific splitting strategy (e.g. split legal contracts by clause, code files by function).</p>
@@ -1255,6 +1328,15 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
     <span class="key">model:</span> <span class="val">text-embedding-3-small</span>   <span class="yml-cmt"># or text-embedding-3-large, text-embedding-ada-002</span>
     <span class="key">api_key:</span> <span class="val">${OPENAI_API_KEY}</span>
     <span class="key">batch_size:</span> <span class="val">100</span>                <span class="yml-cmt"># texts per API call (default 100)</span></code></pre>
+
+        <div id="embedder-gemini" data-sub-anchor="embedder-gemini" class="doc-h2">Gemini</div>
+        <p class="doc-p">Google Gemini embeddings via the unified <code>google-genai</code> SDK. Dimensionality is detected lazily. Requires <code>pip install "nexrag[gemini]"</code>. Reads <code>GOOGLE_API_KEY</code> / <code>GEMINI_API_KEY</code> if <code>api_key</code> is omitted.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">embedder:</span>
+    <span class="key">provider:</span> <span class="val">gemini</span>
+    <span class="key">model:</span> <span class="val">gemini-embedding-001</span>     <span class="yml-cmt"># or text-embedding-004</span>
+    <span class="key">api_key:</span> <span class="val">${GOOGLE_API_KEY}</span></code></pre>
 
         <div id="embedder-huggingface" data-sub-anchor="embedder-huggingface" class="doc-h2">HuggingFace</div>
         <p class="doc-p">Calls the HuggingFace Inference API. Works with both the free Inference API and dedicated endpoints. Requires <code>pip install "nexrag[huggingface]"</code>.</p>
@@ -1352,7 +1434,25 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
 
         <div class="callout">
           <div class="callout-icon">→</div>
-          <p>Each collection with distinct <code>mode</code>, <code>path</code>, <code>host</code>, or <code>port</code> settings gets its own ChromaDB client. This enables mixing persistent and in-memory collections in the same pipeline, or pointing different collections at separate disk paths. Pinecone and Weaviate support are planned for v1.</p>
+          <p>Each collection with distinct <code>mode</code>, <code>path</code>, <code>host</code>, or <code>port</code> settings gets its own ChromaDB client. This enables mixing persistent and in-memory collections in the same pipeline, or pointing different collections at separate disk paths.</p>
+        </div>
+
+        <div id="vdb-pinecone" data-sub-anchor="vdb-pinecone" class="doc-h2">Pinecone</div>
+        <p class="doc-p">Managed serverless vector store. Each NexRAG <strong>collection maps to a Pinecone namespace</strong> inside a single index; the index is created lazily on first upsert from the embedder's dimension. Pinecone settings go under <code>params</code>. Requires <code>pip install "nexrag[pinecone]"</code>.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">ingestion:</span>
+  <span class="key">vector_db:</span>
+    <span class="key">provider:</span> <span class="val">pinecone</span>
+    <span class="key">default_collection:</span> <span class="val">documents</span>
+    <span class="key">collections:</span> { <span class="key">documents:</span> {} }   <span class="yml-cmt"># collection names = Pinecone namespaces</span>
+    <span class="key">params:</span>
+      <span class="key">index_name:</span> <span class="val">nexrag</span>
+      <span class="key">api_key:</span> <span class="val">${PINECONE_API_KEY}</span>
+      <span class="key">cloud:</span> <span class="val">aws</span>                  <span class="yml-cmt"># cloud / region / metric optional</span>
+      <span class="key">region:</span> <span class="val">us-east-1</span></code></pre>
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p>Pinecone caps metadata at ~40&nbsp;KB per vector and chunk text is stored in metadata — prefer smaller chunks with Pinecone.</p>
         </div>
 
         <div id="vdb-custom" data-sub-anchor="vdb-custom" class="doc-h2">Custom vector DB</div>
@@ -1563,35 +1663,110 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
     <span class="key">max_tokens:</span> <span class="val">1024</span>
     <span class="yml-cmt"># max_retries: 2    # async retry attempts on transient failures (default: 2)</span></code></pre>
 
+        <div id="llm-gemini" data-sub-anchor="llm-gemini" class="doc-h2">Gemini</div>
+        <p class="doc-p">Google Gemini via the unified <code>google-genai</code> SDK — supports <code>generate</code>, <code>stream</code>, and native async. Requires <code>pip install "nexrag[gemini]"</code>. Reads <code>GOOGLE_API_KEY</code> / <code>GEMINI_API_KEY</code> if <code>api_key</code> is omitted.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">query:</span>
+  <span class="key">llm:</span>
+    <span class="key">provider:</span> <span class="val">gemini</span>
+    <span class="key">model:</span> <span class="val">gemini-2.5-flash</span>     <span class="yml-cmt"># or gemini-2.5-pro</span>
+    <span class="key">api_key:</span> <span class="val">${GOOGLE_API_KEY}</span>
+    <span class="key">temperature:</span> <span class="val">0.2</span>
+    <span class="key">max_tokens:</span> <span class="val">1024</span></code></pre>
+
         <div id="llm-custom" data-sub-anchor="llm-custom" class="doc-h2">Custom LLM</div>
-        <p class="doc-p">Implement <code>BaseLLM</code> to call any model API not covered above — Gemini, Mistral, Groq, a local vLLM server, etc. Implement <code>stream()</code> for <code>stream_query()</code> support.</p>
+        <p class="doc-p">Implement <code>BaseLLM</code> to call any model API not covered above — Mistral, Groq, a local vLLM server, etc. <code>generate()</code> returns <code>(text, TokenUsage | None)</code>; implement <code>stream()</code> for <code>stream_query()</code> support.</p>
+        <div class="callout">
+          <div class="callout-icon">→</div>
+          <p><strong>Gemini is now built-in</strong> — use <code>provider: gemini</code> (LLM and embeddings) instead of a custom adapter. Install <code>nexrag[gemini]</code>.</p>
+        </div>
         <pre class="doc-code"><code><span class="kw">from</span> nexrag.core.interfaces.llm <span class="kw">import</span> BaseLLM
+<span class="kw">from</span> nexrag.core.models.metrics <span class="kw">import</span> TokenUsage
 <span class="kw">from</span> collections.abc <span class="kw">import</span> Iterator
 
-<span class="kw">class</span> <span class="fn">GeminiLLM</span>(BaseLLM):
-    <span class="kw">def</span> <span class="fn">__init__</span>(self, api_key: str, model: str = <span class="str">"gemini-1.5-flash"</span>) -> <span class="kw">None</span>:
-        <span class="kw">import</span> google.generativeai <span class="kw">as</span> genai
-        genai.configure(api_key=api_key)
-        self._model = genai.GenerativeModel(model)
-        self._model_name = model
+<span class="kw">class</span> <span class="fn">GroqLLM</span>(BaseLLM):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, api_key: str, model: str = <span class="str">"llama-3.3-70b-versatile"</span>) -> <span class="kw">None</span>:
+        <span class="kw">from</span> groq <span class="kw">import</span> Groq
+        self._client = Groq(api_key=api_key)
+        self._model = model   <span class="cmt"># BaseLLM.model_name reads self._model</span>
 
-    <span class="kw">@property</span>
-    <span class="kw">def</span> <span class="fn">model_name</span>(self) -> str: <span class="kw">return</span> self._model_name
-
-    <span class="kw">def</span> <span class="fn">generate</span>(self, prompt: str) -> str:
-        <span class="kw">return</span> self._model.generate_content(prompt).text
+    <span class="kw">def</span> <span class="fn">generate</span>(self, prompt: str) -> tuple[str, TokenUsage | <span class="kw">None</span>]:
+        r = self._client.chat.completions.create(
+            model=self._model, messages=[{<span class="str">"role"</span>: <span class="str">"user"</span>, <span class="str">"content"</span>: prompt}])
+        <span class="kw">return</span> r.choices[<span class="num">0</span>].message.content, <span class="kw">None</span>
 
     <span class="kw">def</span> <span class="fn">stream</span>(self, prompt: str) -> Iterator[str]:
-        <span class="kw">for</span> chunk <span class="kw">in</span> self._model.generate_content(prompt, stream=<span class="kw">True</span>):
-            <span class="kw">yield</span> chunk.text</code></pre>
+        stream = self._client.chat.completions.create(
+            model=self._model, messages=[{<span class="str">"role"</span>: <span class="str">"user"</span>, <span class="str">"content"</span>: prompt}], stream=<span class="kw">True</span>)
+        <span class="kw">for</span> chunk <span class="kw">in</span> stream:
+            <span class="kw">if</span> chunk.choices[<span class="num">0</span>].delta.content:
+                <span class="kw">yield</span> chunk.choices[<span class="num">0</span>].delta.content</code></pre>
         <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
 <span class="key">query:</span>
   <span class="key">llm:</span>
     <span class="key">provider:</span> <span class="val">custom</span>
-    <span class="key">class:</span> <span class="val">myapp.llms.GeminiLLM</span>
+    <span class="key">class:</span> <span class="val">myapp.llms.GroqLLM</span>
     <span class="key">params:</span>
-      <span class="key">api_key:</span> <span class="val">${GEMINI_API_KEY}</span>
-      <span class="key">model:</span>   <span class="val">gemini-1.5-flash</span></code></pre>
+      <span class="key">api_key:</span> <span class="val">${GROQ_API_KEY}</span>
+      <span class="key">model:</span>   <span class="val">llama-3.3-70b-versatile</span></code></pre>
+      </div>
+
+      <!-- ── Guardrails ─────────────────────── -->
+      <div class="doc-section" id="guardrails">
+        <div class="doc-label">Security</div>
+        <h1 class="doc-h1">Guardrails</h1>
+        <p class="doc-lead">A pluggable security layer. Guards inspect text at four points in the pipeline and return a verdict — <strong>ALLOW</strong>, <strong>BLOCK</strong>, or <strong>REDACT</strong>. They compose into ordered chains under a top-level <code>guardrails:</code> block. Every chain is disabled by default. See the full threat model in <a href="https://github.com/kevinrawal/nexrag/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+
+        <div class="doc-h2">The four chains</div>
+        <table class="doc-table">
+          <thead><tr><th>chain</th><th>Runs on</th></tr></thead>
+          <tbody>
+            <tr><td><code>ingestion</code></td><td>document text, after the sanitizer, before chunking</td></tr>
+            <tr><td><code>input</code></td><td>the user query, before retrieval</td></tr>
+            <tr><td><code>retrieved</code></td><td>each retrieved chunk, before the prompt (an injection vector)</td></tr>
+            <tr><td><code>output</code></td><td>the LLM answer, before it is returned/streamed</td></tr>
+          </tbody>
+        </table>
+        <p class="doc-p">Each chain takes a <code>policy</code>: <code>fail_open</code> (default — a broken guard is treated as ALLOW) or <code>fail_closed</code> (treated as BLOCK). Every guard firing emits a <code>PipelineEvent(stage="guardrail", …)</code> for auditing and overhead measurement.</p>
+
+        <div class="doc-h2">Shipped guards</div>
+        <table class="doc-table">
+          <thead><tr><th><code>type</code></th><th>Defends against</th><th>Overhead</th></tr></thead>
+          <tbody>
+            <tr><td><code>access_control</code></td><td>Cross-tenant retrieval. Turns <code>auth_context</code> into a retrieval metadata filter (deny-by-default).</td><td>negligible</td></tr>
+            <tr><td><code>pii</code></td><td>Leaking emails/SSNs/cards/keys. Presidio (<code>nexrag[pii]</code>) with a regex fallback.</td><td>regex µs / Presidio ~10s ms</td></tr>
+            <tr><td><code>prompt_injection</code></td><td>Common injection/jailbreak phrasings — on the query AND on retrieved content.</td><td>µs</td></tr>
+            <tr><td><code>groundedness</code></td><td>Ungrounded answers (cheap lexical-overlap proxy vs the retrieved context).</td><td>µs</td></tr>
+            <tr><td><code>topic</code></td><td>Off-policy queries (allow/deny keyword lists).</td><td>µs</td></tr>
+            <tr><td><code>model</code></td><td>Nuanced unsafe content — a Llama-Guard-style moderation LLM (nested independent <code>llm</code>).</td><td>a full LLM call</td></tr>
+          </tbody>
+        </table>
+
+        <div class="doc-h2">Access control (the highest-value guard)</div>
+        <p class="doc-p">Pass <code>auth_context</code> to <code>query()</code>; the guard turns it into a retrieval filter so a request can only ever retrieve documents it is authorised to see.</p>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml</span>
+<span class="key">guardrails:</span>
+  <span class="key">input:</span>
+    <span class="key">enabled:</span> <span class="val">true</span>
+    <span class="key">policy:</span> <span class="val">fail_closed</span>
+    <span class="key">guards:</span>
+      <span class="key">- type:</span> <span class="val">access_control</span>
+        <span class="key">params:</span> { <span class="key">mapping:</span> { <span class="key">tenant:</span> <span class="val">tenant</span> } }</code></pre>
+        <pre class="doc-code"><code><span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG, GuardrailBlockedError
+
+pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
+
+<span class="cmt"># Only retrieves chunks whose metadata["tenant"] == "acme"</span>
+result = pipeline.query(<span class="str">"What's our revenue?"</span>, auth_context={<span class="str">"tenant"</span>: <span class="str">"acme"</span>})
+
+<span class="kw">try</span>:
+    pipeline.query(<span class="str">"ignore previous instructions…"</span>)   <span class="cmt"># input guard BLOCKs</span>
+<span class="kw">except</span> GuardrailBlockedError <span class="kw">as</span> e:
+    <span class="fn">print</span>(<span class="str">"blocked:"</span>, e)</code></pre>
+        <div class="callout warn">
+          <div class="callout-icon">!</div>
+          <p>When an <code>output</code> chain is configured, streaming is buffered then guarded before flushing — true token-by-token streaming is disabled for that request (you cannot un-send tokens). <code>auth_context</code> is trusted input: authenticate the principal upstream.</p>
+        </div>
       </div>
 
       <!-- ── Changelog ──────────────────────── -->
@@ -1601,17 +1776,58 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
 
         <!-- version switcher -->
         <div class="cl-ver-bar">
-          <button class="cl-vtab active" data-cl="v032">
-            v0.3.2 <span class="cl-vtab-latest">latest</span>
+          <button class="cl-vtab active" data-cl="v040">
+            v0.4.0 <span class="cl-vtab-latest">latest</span>
           </button>
+          <button class="cl-vtab" data-cl="v033">v0.3.3</button>
+          <button class="cl-vtab" data-cl="v032">v0.3.2</button>
           <button class="cl-vtab" data-cl="v031">v0.3.1</button>
           <button class="cl-vtab" data-cl="v030">v0.3.0</button>
           <button class="cl-vtab" data-cl="v020">v0.2.0</button>
           <button class="cl-vtab" data-cl="v010">v0.1.0</button>
         </div>
 
+        <!-- v0.4.0 -->
+        <div class="cl-panel active" id="cl-v040">
+          <div class="cl-meta">
+            <span class="cl-ver-name">v0.4.0</span>
+            <span class="cl-date">2026-06-15</span>
+          </div>
+          <p class="cl-summary">Major release: Gemini (LLM + embeddings) and Pinecone providers, a production chunking suite with nested component configs, and a new pluggable <strong>guardrails</strong> security layer.</p>
+          <table class="cl-table">
+            <tbody>
+              <tr><td><span class="cl-cat">adapter</span></td><td><code>GeminiLLM</code> (<code>llm.provider: gemini</code>) and <code>GeminiEmbedder</code> (<code>embedder.provider: gemini</code>) via the unified <code>google-genai</code> SDK. Install <code>nexrag[gemini]</code>. Default models <code>gemini-2.5-flash</code> / <code>gemini-embedding-001</code>.</td></tr>
+              <tr><td><span class="cl-cat">adapter</span></td><td><code>PineconeVectorDB</code> (<code>vector_db.provider: pinecone</code>) — each NexRAG collection is a Pinecone namespace in one serverless index, created lazily on first upsert. Install <code>nexrag[pinecone]</code>.</td></tr>
+              <tr><td><span class="cl-cat">chunkers</span></td><td>New strategies: <code>token</code> (tiktoken), <code>sentence</code>, <code>sentence_window</code>, <code>markdown</code> (header path), <code>code</code> (tree-sitter), <code>semantic</code>, <code>proposition</code>. <code>fixed</code> is now wired. New extras <code>nexrag[tiktoken]</code>, <code>nexrag[code]</code>.</td></tr>
+              <tr><td><span class="cl-cat">config</span></td><td><code>ChunkerConfig</code> gains nested <code>embedder</code> / <code>llm</code> sub-configs, resolved <strong>independently</strong> of the pipeline's main models. <code>semantic</code> requires <code>chunker.embedder</code>; <code>proposition</code> requires <code>chunker.llm</code>.</td></tr>
+              <tr><td><span class="cl-cat">security</span></td><td>New guardrails pillar: a <code>BaseGuard</code> (verdict ALLOW · BLOCK · REDACT) composed into <code>ingestion</code> / <code>input</code> / <code>retrieved</code> / <code>output</code> chains under a top-level <code>guardrails:</code> block, each with a <code>policy: fail_open|fail_closed</code>. Shipped guards: <code>pii</code> (<code>nexrag[pii]</code>), <code>access_control</code>, <code>prompt_injection</code>, <code>groundedness</code>, <code>topic</code>, <code>model</code>. See <a href="https://github.com/kevinrawal/nexrag/blob/main/SECURITY.md">SECURITY.md</a>.</td></tr>
+              <tr><td><span class="cl-cat">API</span></td><td>Facade methods <code>query</code> / <code>async_query</code> / <code>stream_query</code> / <code>astream_query</code> gain an optional <code>auth_context</code> param (per-request principal for the access-control guard). New <code>GuardrailError</code> / <code>GuardrailBlockedError</code>, exported from the top-level package.</td></tr>
+              <tr><td><span class="cl-cat">observability</span></td><td>Every guard firing emits a <code>PipelineEvent(stage="guardrail", metadata={guard, verdict, latency_ms})</code>. When an output chain is configured, streaming buffers then guards before flushing.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- v0.3.3 -->
+        <div class="cl-panel" id="cl-v033">
+          <div class="cl-meta">
+            <span class="cl-ver-name">v0.3.3</span>
+            <span class="cl-date">2026-06-13</span>
+          </div>
+          <p class="cl-summary">Correctness and safety hardening across ingestion, retrieval, and observability.</p>
+          <table class="cl-table">
+            <tbody>
+              <tr><td><span class="cl-cat">pipeline</span></td><td>Composite chunk row IDs — vector-DB rows are keyed by <code>Chunk.row_id</code> = <code>sha256(parent_doc_id:content_hash)</code>, so two documents with identical text keep separate rows. <code>delete()</code> callers must use <code>chunk.row_id</code>.</td></tr>
+              <tr><td><span class="cl-cat">pipeline</span></td><td><code>on_conflict</code> (<code>skip</code>/<code>overwrite</code>) is now applied independently per <code>metadata["source"]</code>; one source's lookup failure no longer wipes another's dedup state.</td></tr>
+              <tr><td><span class="cl-cat">fixed</span></td><td><code>HybridRetriever</code> now applies <code>metadata_filter</code> to BOTH the dense and sparse paths — closes a cross-tenant leak where a sparse-only match could bypass the filter.</td></tr>
+              <tr><td><span class="cl-cat">observability</span></td><td>Every stage now emits exactly one <code>PipelineEvent(status="failed", …)</code> before raising, plus a pipeline-level <code>failed</code> event (sync and async).</td></tr>
+              <tr><td><span class="cl-cat">adapter</span></td><td><code>OpenAILLM.async_stream()</code> fixed to use <code>create(..., stream=True)</code>; live token streaming via <code>astream_query()</code> with <code>mode: async</code> + OpenAI now works.</td></tr>
+              <tr><td><span class="cl-cat">config</span></td><td><code>loader.type</code> restricted to wired types (<code>auto | pdf | txt | text | custom</code>); collection-name validation aligned to ChromaDB ≥1.5 rules (3–512 chars, dots allowed).</td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <!-- v0.3.2 -->
-        <div class="cl-panel active" id="cl-v032">
+        <div class="cl-panel" id="cl-v032">
           <div class="cl-meta">
             <span class="cl-ver-name">v0.3.2</span>
             <span class="cl-date">2026-06-12</span>
@@ -1718,7 +1934,7 @@ result = pipeline.ingest((<span class="str">"NexRAG is a RAG pipeline SDK."</spa
 
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.3.2</div>
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.4.0</div>
       <div class="footer-links">
         <a href="index.html">Home</a>
         <a href="story.html">Story</a>

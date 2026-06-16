@@ -330,9 +330,9 @@
 
           <div class="story-section" id="roadmap">
             <div class="story-section-num">05 — What's coming</div>
-            <h2 class="story-section-title">v0.3.0 expands retrieval. v1 is the platform.</h2>
+            <h2 class="story-section-title">v0.4.0 adds breadth and security. v1 is the platform.</h2>
             <p>
-              v0.3.0 adds hybrid BM25+dense retrieval, an optional reranking stage, multi-collection routing, and per-run observability metrics on top of the complete async pipeline shipped in v0.2.0. Everything NexRAG promises is working. What comes next is breadth: more vector databases, more LLM providers, and the tooling to run NexRAG at production scale.
+              v0.4.0 adds the Gemini and Pinecone providers, a production chunking suite (token, sentence-window, markdown, code, semantic, proposition) with independently-resolved nested component configs, and a pluggable <strong>guardrails</strong> security layer — on top of the hybrid retrieval, reranking, and async streaming shipped earlier. Everything NexRAG promises is working. What comes next is more remote vector stores, more loaders, and production-grade observability exporters.
             </p>
             <div class="roadmap">
               <div class="roadmap-item">
@@ -341,7 +341,7 @@
               </div>
               <div class="roadmap-item">
                 <span class="roadmap-tag done">shipped</span>
-                <div class="roadmap-text"><strong>OpenAI, Ollama, Anthropic, HuggingFace, ChromaDB.</strong> mypy strict, ruff clean.</div>
+                <div class="roadmap-text"><strong>OpenAI, Gemini, Ollama, Anthropic, HuggingFace, ChromaDB, Pinecone.</strong> mypy strict, ruff clean.</div>
               </div>
               <div class="roadmap-item">
                 <span class="roadmap-tag done">shipped</span>
@@ -360,8 +360,16 @@
                 <div class="roadmap-text"><strong>Hybrid retrieval.</strong> Dense + BM25 (sparse) fusion with configurable <code>alpha</code>. Retrieve large candidate sets with BM25; rerank precisely with dense. Requires <code>nexrag[bm25]</code>.</div>
               </div>
               <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>Production chunking suite.</strong> Token, sentence, sentence-window, markdown, code (tree-sitter), semantic, and proposition strategies — plus nested <code>chunker.embedder</code> / <code>chunker.llm</code> sub-configs resolved independently of the pipeline models (cheap model for chunking, strong model for generation).</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>Guardrails.</strong> A pluggable security layer — ingestion / input / retrieved / output guard chains with ALLOW · BLOCK · REDACT verdicts and fail-open/fail-closed policies. PII, access control, prompt-injection, groundedness, topic, and model guards. See <a href="https://github.com/kevinrawal/nexrag/blob/main/SECURITY.md">SECURITY.md</a>.</div>
+              </div>
+              <div class="roadmap-item">
                 <span class="roadmap-tag soon">v1</span>
-                <div class="roadmap-text"><strong>Remote vector databases.</strong> Pinecone, Weaviate — for teams running at scale. ChromaDB server mode is already available.</div>
+                <div class="roadmap-text"><strong>More remote vector databases.</strong> Weaviate, Qdrant — for teams running at scale. Pinecone serverless and ChromaDB server mode are already available.</div>
               </div>
               <div class="roadmap-item">
                 <span class="roadmap-tag soon">v1</span>
@@ -381,7 +389,7 @@
 
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.3.2</div>
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.4.0</div>
       <div class="footer-links">
         <a href="index.html">Home</a>
         <a href="showcase.html">Showcase</a>
