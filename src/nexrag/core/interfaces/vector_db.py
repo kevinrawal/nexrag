@@ -95,25 +95,15 @@ class BaseVectorDB(ABC):
     def count(self, collection_name: str) -> int:
         """Return the number of chunks stored in the collection."""
 
+    # TODO: rename to get_nexrag_metadata — only reads NexRAG's internal fingerprint data, not all vendor collection metadata
     @abstractmethod
     def get_collection_metadata(self, collection_name: str) -> dict[str, Any]:
-        """
-        Retrieve metadata stored at the collection level.
+        """Return NexRAG's internal fingerprint metadata for the collection (embedding model info). Does not expose raw vendor-level collection metadata."""
 
-        Used by the fingerprint check to read the embedding model info
-        that was stored on first ingestion.
-
-        Returns:
-            Dict of collection-level metadata. Empty dict if none stored.
-        """
-
+    # TODO: rename to set_nexrag_metadata — only writes NexRAG's internal fingerprint data, not arbitrary vendor collection metadata
     @abstractmethod
     def set_collection_metadata(self, collection_name: str, metadata: dict[str, Any]) -> None:
-        """
-        Store metadata at the collection level.
-
-        Called on first ingestion to persist the embedding model fingerprint.
-        """
+        """Persist NexRAG's internal fingerprint metadata (e.g. embedding model) for the collection. Called on first ingestion."""
 
     def get_ids_by_metadata(self, filters: dict[str, Any], collection_name: str) -> list[str]:
         """

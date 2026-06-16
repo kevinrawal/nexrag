@@ -12,6 +12,8 @@ from nexrag.core.config.resolver import resolve_class
 from nexrag.core.config.schema import (
     ChunkerConfig,
     EmbedderConfig,
+    GuardChainConfig,
+    GuardConfig,
     LLMConfig,
     LoaderConfig,
     NexRAGConfig,
@@ -23,8 +25,10 @@ from nexrag.core.config.schema import (
     SparseConfig,
     VectorDBConfig,
 )
+from nexrag.core.guards.chain import GuardChain
 from nexrag.core.interfaces.chunker import BaseChunker
 from nexrag.core.interfaces.embedder import BaseEmbedder
+from nexrag.core.interfaces.guard import BaseGuard
 from nexrag.core.interfaces.llm import BaseLLM
 from nexrag.core.interfaces.loader import BaseLoader
 from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
@@ -81,6 +85,12 @@ def wire(
     llm = _build_llm(config.query.llm)
     valid_collections = frozenset(config.ingestion.vector_db.collections.keys())
 
+    # Guardrail chains (None when a chain is disabled or has no enabled guards).
+    ingestion_guards = _build_guard_chain(config.guardrails.ingestion, observer, "ingestion")
+    input_guards = _build_guard_chain(config.guardrails.input, observer, "input")
+    retrieved_guards = _build_guard_chain(config.guardrails.retrieved, observer, "retrieved")
+    output_guards = _build_guard_chain(config.guardrails.output, observer, "output")
+
     ingestion_pipeline: IngestionPipeline | AsyncIngestionPipeline
     query_pipeline: QueryPipeline | AsyncQueryPipeline
 
@@ -96,6 +106,7 @@ def wire(
             observer=observer,
             embed_batch_size=config.ingestion.embedder.batch_size,
             valid_collections=valid_collections,
+            ingestion_guards=ingestion_guards,
         )
         query_pipeline = AsyncQueryPipeline(
             embedder=query_embedder,
@@ -108,6 +119,9 @@ def wire(
             observer=observer,
             reranker=reranker,
             max_query_length=config.query.max_query_length,
+            input_guards=input_guards,
+            retrieved_guards=retrieved_guards,
+            output_guards=output_guards,
         )
     else:
         ingestion_pipeline = IngestionPipeline(
@@ -120,6 +134,7 @@ def wire(
             on_conflict=config.ingestion.vector_db.on_conflict,
             observer=observer,
             valid_collections=valid_collections,
+            ingestion_guards=ingestion_guards,
         )
         query_pipeline = QueryPipeline(
             embedder=query_embedder,
@@ -132,6 +147,9 @@ def wire(
             observer=observer,
             reranker=reranker,
             max_query_length=config.query.max_query_length,
+            input_guards=input_guards,
+            retrieved_guards=retrieved_guards,
+            output_guards=output_guards,
         )
 
     return ingestion_pipeline, query_pipeline, retriever
@@ -180,14 +198,32 @@ def _build_embedder(config: EmbedderConfig) -> BaseEmbedder:
             batch_size=config.batch_size,
         )
 
+    if config.provider == "gemini":
+        from nexrag.adapters.embedders.gemini import GeminiEmbedder
+
+        return GeminiEmbedder(
+            model=config.model,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            batch_size=config.batch_size,
+            max_retries=config.max_retries,
+        )
+
     raise ConfigError(
-        f"Unknown embedder provider: {config.provider!r}. Supported: openai, huggingface, ollama, custom",
+        f"Unknown embedder provider: {config.provider!r}. "
+        "Supported: openai, huggingface, gemini, ollama, custom",
         stage="config",
         component="embedder",
     )
 
 
 def _build_chunker(config: ChunkerConfig) -> BaseChunker:
+    # Resolve nested component sub-configs INDEPENDENTLY of the pipeline's main
+    # embedder/LLM. semantic needs an embedder; proposition needs an LLM; custom
+    # chunkers may declare either and receive it as a constructor kwarg.
+    chunker_embedder = _build_embedder(config.embedder) if config.embedder is not None else None
+    chunker_llm = _build_llm(config.llm) if config.llm is not None else None
+
     if config.strategy == "custom":
         if not config.class_path:
             raise ConfigError(
@@ -195,7 +231,12 @@ def _build_chunker(config: ChunkerConfig) -> BaseChunker:
                 stage="config",
                 component="chunker",
             )
-        return resolve_class(config.class_path, BaseChunker, config.params, stage="chunker")  # type: ignore[type-abstract]
+        params = dict(config.params)
+        if chunker_embedder is not None:
+            params["embedder"] = chunker_embedder
+        if chunker_llm is not None:
+            params["llm"] = chunker_llm
+        return resolve_class(config.class_path, BaseChunker, params, stage="chunker")  # type: ignore[type-abstract]
 
     if config.strategy == "recursive":
         from nexrag.chunkers.recursive import RecursiveChunker
@@ -206,17 +247,83 @@ def _build_chunker(config: ChunkerConfig) -> BaseChunker:
             min_chunk_size=config.min_chunk_size,
         )
 
-    # TODO: yet to implement in chunkers/
-    # if config.strategy == "fixed":
-    #     from nexrag.chunkers.fixed import FixedChunker  # type: ignore[attr-defined]
-    #     return FixedChunker(  # type: ignore[no-any-return]
-    #         chunk_size=config.chunk_size,
-    #         chunk_overlap=config.chunk_overlap,
-    #         **config.params,
-    #     )
+    if config.strategy == "fixed":
+        from nexrag.chunkers.fixed import FixedChunker
+
+        return FixedChunker(
+            chunk_size=config.chunk_size,
+            chunk_overlap=config.chunk_overlap,
+            min_chunk_size=config.min_chunk_size,
+        )
+
+    if config.strategy == "token":
+        from nexrag.chunkers.token import TokenChunker
+
+        return TokenChunker(
+            chunk_size=config.chunk_size,
+            chunk_overlap=config.chunk_overlap,
+            min_chunk_size=config.min_chunk_size,
+            **config.params,
+        )
+
+    if config.strategy == "sentence":
+        from nexrag.chunkers.sentence import SentenceChunker
+
+        return SentenceChunker(
+            chunk_size=config.chunk_size,
+            chunk_overlap=config.chunk_overlap,
+            min_chunk_size=config.min_chunk_size,
+            **config.params,
+        )
+
+    if config.strategy == "sentence_window":
+        from nexrag.chunkers.sentence import SentenceWindowChunker
+
+        return SentenceWindowChunker(min_chunk_size=config.min_chunk_size, **config.params)
+
+    if config.strategy == "markdown":
+        from nexrag.chunkers.markdown import MarkdownChunker
+
+        return MarkdownChunker(
+            chunk_size=config.chunk_size, min_chunk_size=config.min_chunk_size, **config.params
+        )
+
+    if config.strategy == "code":
+        from nexrag.chunkers.code import CodeChunker
+
+        return CodeChunker(
+            chunk_size=config.chunk_size, min_chunk_size=config.min_chunk_size, **config.params
+        )
+
+    if config.strategy == "semantic":
+        from nexrag.chunkers.semantic import SemanticChunker
+
+        if chunker_embedder is None:
+            raise ConfigError(
+                "chunker.embedder is required when chunker.strategy is 'semantic'.",
+                stage="config",
+                component="chunker",
+            )
+        return SemanticChunker(
+            embedder=chunker_embedder, min_chunk_size=config.min_chunk_size, **config.params
+        )
+
+    if config.strategy == "proposition":
+        from nexrag.chunkers.proposition import PropositionChunker
+
+        if chunker_llm is None:
+            raise ConfigError(
+                "chunker.llm is required when chunker.strategy is 'proposition'.",
+                stage="config",
+                component="chunker",
+            )
+        return PropositionChunker(
+            llm=chunker_llm, min_chunk_size=config.min_chunk_size, **config.params
+        )
 
     raise ConfigError(
-        f"Unknown chunker strategy: {config.strategy!r}. " f"Supported: recursive, custom",
+        f"Unknown chunker strategy: {config.strategy!r}. Supported: recursive, fixed, token, "
+        "sentence, sentence_window, markdown, code, semantic, proposition, custom",
         stage="config",
         component="chunker",
     )
@@ -330,8 +437,31 @@ def _build_vector_db(config: VectorDBConfig) -> BaseVectorDB:
             default_adapter=default_adapter, collection_adapters=collection_adapters
         )
 
+    if config.provider == "pinecone":
+        from nexrag.adapters.vector_dbs.pinecone import PineconeVectorDB
+
+        params = config.params
+        index_name = params.get("index_name") or params.get("index")
+        if not index_name:
+            raise ConfigError(
+                "vector_db.params.index_name is required for the 'pinecone' provider.",
+                stage="config",
+                component="vector_db",
+            )
+        return PineconeVectorDB(
+            index_name=index_name,
+            api_key=params.get("api_key"),
+            cloud=params.get("cloud", "aws"),
+            region=params.get("region", "us-east-1"),
+            metric=params.get("metric", "cosine"),
+            upsert_batch_size=config.upsert_batch_size,
+            query_batch_size=config.query_batch_size,
+            max_retries=config.max_retries,
+            retry_delay=config.retry_delay,
+        )
+
     raise ConfigError(
-        f"Unknown vector_db provider: {config.provider!r}. Supported: chroma, custom",
+        f"Unknown vector_db provider: {config.provider!r}. Supported: chroma, pinecone, custom",
         stage="config",
         component="vector_db",
     )
@@ -466,8 +596,22 @@ def _build_llm(config: LLMConfig) -> BaseLLM:
             max_retries=config.max_retries,
         )
 
+    if config.provider == "gemini":
+        from nexrag.adapters.llms.gemini import GeminiLLM
+
+        return GeminiLLM(
+            model=config.model,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            timeout=config.timeout,
+            max_retries=config.max_retries,
+        )
+
     raise ConfigError(
-        f"Unknown LLM provider: {config.provider!r}. Supported: openai, ollama, anthropic, custom",
+        f"Unknown LLM provider: {config.provider!r}. "
+        "Supported: openai, anthropic, gemini, ollama, custom",
         stage="config",
         component="llm",
     )
@@ -536,3 +680,75 @@ def _build_observer(config: ObservabilityConfig) -> BaseObserver:
         stage="config",
         component="observer",
     )
+
+
+# Guardrails
+
+
+def _build_guard(config: GuardConfig) -> BaseGuard:
+    if config.type == "custom":
+        if not config.class_path:
+            raise ConfigError(
+                "guard.class is required when guard.type is 'custom'.",
+                stage="config",
+                component="guard",
+            )
+        params = dict(config.params)
+        if config.llm is not None:
+            params["llm"] = _build_llm(config.llm)
+        return resolve_class(config.class_path, BaseGuard, params, stage="guard")  # type: ignore[type-abstract]
+
+    if config.type == "pii":
+        from nexrag.guards.pii import PIIGuard
+
+        return PIIGuard(**config.params)
+
+    if config.type == "access_control":
+        from nexrag.guards.access_control import AccessControlGuard
+
+        return AccessControlGuard(**config.params)
+
+    if config.type == "prompt_injection":
+        from nexrag.guards.prompt_injection import PromptInjectionGuard
+
+        return PromptInjectionGuard(**config.params)
+
+    if config.type == "groundedness":
+        from nexrag.guards.groundedness import CitationGuard
+
+        return CitationGuard(**config.params)
+
+    if config.type == "topic":
+        from nexrag.guards.topic import TopicGuard
+
+        return TopicGuard(**config.params)
+
+    if config.type == "model":
+        from nexrag.guards.model_guard import ModelGuard
+
+        if config.llm is None:
+            raise ConfigError(
+                "guard.llm is required when guard.type is 'model'.",
+                stage="config",
+                component="guard",
+            )
+        return ModelGuard(llm=_build_llm(config.llm), **config.params)
+
+    raise ConfigError(
+        f"Unknown guard type: {config.type!r}. Supported: pii, access_control, "
+        "prompt_injection, groundedness, topic, model, custom",
+        stage="config",
+        component="guard",
+    )
+
+
+def _build_guard_chain(
+    config: GuardChainConfig, observer: BaseObserver, name: str
+) -> GuardChain | None:
+    """Build a GuardChain, or None when the chain is disabled or has no enabled guards."""
+    if not config.enabled:
+        return None
+    guards = [_build_guard(g) for g in config.guards if g.enabled]
+    if not guards:
+        return None
+    return GuardChain(guards, policy=config.policy, observer=observer, name=name)

@@ -253,7 +253,9 @@ class ChromaDBAdapter(BaseVectorDB):
                 cause=e,
             ) from e
 
+    # TODO: rename to get_nexrag_metadata — only reads NexRAG's internal key, not all ChromaDB collection metadata
     def get_collection_metadata(self, collection_name: str) -> dict[str, Any]:
+        """Return only NexRAG's internal metadata (stored under _NEXRAG_META_KEY), not the full ChromaDB collection metadata."""
         collection = self._get_or_create(collection_name)
         meta = collection.metadata or {}
         raw = meta.get(_NEXRAG_META_KEY, "")
@@ -266,7 +268,9 @@ class ChromaDBAdapter(BaseVectorDB):
         except Exception:
             return {}
 
+    # TODO: rename to set_nexrag_metadata — only writes NexRAG's internal key, not arbitrary ChromaDB collection metadata
     def set_collection_metadata(self, collection_name: str, metadata: dict[str, Any]) -> None:
+        """Store metadata under NexRAG's internal key (_NEXRAG_META_KEY), merging with existing ChromaDB metadata (excluding hnsw: keys)."""
         collection = self._get_or_create(collection_name)
         try:
             import json
@@ -464,10 +468,14 @@ class _MultiChromaAdapter(BaseVectorDB):
     ) -> list[Chunk]:
         return self._for(collection_name).get_all(collection_name, limit, offset)
 
+    # TODO: rename to get_nexrag_metadata — delegates to the shard's get_collection_metadata which reads only NexRAG's internal key
     def get_collection_metadata(self, collection_name: str) -> dict[str, Any]:
+        """Delegate to the appropriate shard; returns only NexRAG's internal fingerprint metadata, not all ChromaDB collection metadata."""
         return self._for(collection_name).get_collection_metadata(collection_name)
 
+    # TODO: rename to set_nexrag_metadata — delegates to the shard's set_collection_metadata which writes only NexRAG's internal key
     def set_collection_metadata(self, collection_name: str, metadata: dict[str, Any]) -> None:
+        """Delegate to the appropriate shard; writes only NexRAG's internal fingerprint metadata, not arbitrary ChromaDB collection metadata."""
         self._for(collection_name).set_collection_metadata(collection_name, metadata)
 
     def list_collections(self) -> list[str]:

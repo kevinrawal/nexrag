@@ -16,6 +16,12 @@ import uuid
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
+from nexrag.core.guards.apply import (
+    apply_input_guards,
+    apply_output_guards,
+    apply_retrieved_guards,
+)
+from nexrag.core.guards.chain import GuardChain
 from nexrag.core.interfaces.embedder import BaseEmbedder
 from nexrag.core.interfaces.llm import BaseLLM
 from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
@@ -70,6 +76,9 @@ class AsyncQueryPipeline:
         observer: BaseObserver | None = None,
         reranker: BaseReranker | None = None,
         max_query_length: int = 8000,
+        input_guards: GuardChain | None = None,
+        retrieved_guards: GuardChain | None = None,
+        output_guards: GuardChain | None = None,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
@@ -81,6 +90,9 @@ class AsyncQueryPipeline:
         self._observer = observer or NoOpObserver()
         self._reranker = reranker
         self._max_query_length = max_query_length
+        self._input_guards = input_guards
+        self._retrieved_guards = retrieved_guards
+        self._output_guards = output_guards
 
     def run(
         self,
@@ -90,6 +102,7 @@ class AsyncQueryPipeline:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
+        auth_context: dict[str, Any] | None = None,
     ) -> PipelineResult:
         """
         Sync entry point — wraps arun() in asyncio.run() for non-async callers.
@@ -105,6 +118,7 @@ class AsyncQueryPipeline:
                 top_k=top_k,
                 score_threshold=score_threshold,
                 metadata_filter=metadata_filter,
+                auth_context=auth_context,
             )
         )
 
@@ -116,6 +130,7 @@ class AsyncQueryPipeline:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
+        auth_context: dict[str, Any] | None = None,
     ) -> Iterator[str | RunMetrics]:
         """
         Sync streaming — collects tokens and final RunMetrics from astream() via asyncio.run().
@@ -135,6 +150,7 @@ class AsyncQueryPipeline:
                     top_k=top_k,
                     score_threshold=score_threshold,
                     metadata_filter=metadata_filter,
+                    auth_context=auth_context,
                 )
             ]
 
@@ -148,6 +164,7 @@ class AsyncQueryPipeline:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
+        auth_context: dict[str, Any] | None = None,
     ) -> PipelineResult:
         """
         Run the full async query pipeline for a user query.
@@ -158,12 +175,14 @@ class AsyncQueryPipeline:
             top_k:           Override default top_k for this query.
             score_threshold: Override default score_threshold for this query.
             metadata_filter: Optional metadata filters applied during retrieval.
+            auth_context:    Per-request principal info for the access-control guard.
 
         Returns:
             PipelineResult with answer, sources, scores, and latency.
 
         Raises:
-            PipelineError: Wraps any stage-level error with full context.
+            PipelineError:          Wraps any stage-level error with full context.
+            GuardrailBlockedError:  If an input or output guard blocks the request.
         """
         if self._max_query_length and len(query) > self._max_query_length:
             raise PipelineError(
@@ -178,6 +197,14 @@ class AsyncQueryPipeline:
         active_collection = collection or self._collection
         active_top_k = top_k if top_k is not None else self._top_k
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
+
+        query, metadata_filter = apply_input_guards(
+            self._input_guards,
+            query,
+            metadata_filter,
+            pipeline_id=pipeline_id,
+            auth_context=auth_context,
+        )
 
         stage_latencies: dict[str, float] = {}
         try:
@@ -202,6 +229,10 @@ class AsyncQueryPipeline:
                 chunks = await self._run_reranker(query, chunks, pipeline_id)
                 stage_latencies["reranker"] = (time.monotonic() - t) * 1000
 
+            chunks = apply_retrieved_guards(
+                self._retrieved_guards, chunks, pipeline_id=pipeline_id, query=query
+            )
+
             t = time.monotonic()
             prompt = await self._run_prompt_builder(query, chunks, pipeline_id)
             stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
@@ -220,6 +251,14 @@ class AsyncQueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
+
+        answer = apply_output_guards(
+            self._output_guards,
+            answer,
+            pipeline_id=pipeline_id,
+            query=query,
+            sources=[sc.chunk.text for sc in chunks],
+        )
 
         latency_ms = (time.monotonic() - started_at) * 1000
         return await self._build_result(
@@ -241,11 +280,15 @@ class AsyncQueryPipeline:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
+        auth_context: dict[str, Any] | None = None,
     ) -> AsyncIterator[str | RunMetrics]:
         """
         Async streaming variant. Pre-LLM stages run via async ABCs and are timed
         identically to arun(). Tokens are yielded live from llm.async_stream().
         The final item yielded is always a RunMetrics object.
+
+        When an output guard chain is configured, tokens are buffered, guarded, then
+        emitted as one chunk — output guards cannot operate on already-sent tokens.
 
         Yields:
             Response text tokens as they arrive from the LLM, followed by a
@@ -263,6 +306,14 @@ class AsyncQueryPipeline:
         active_collection = collection or self._collection
         active_top_k = top_k if top_k is not None else self._top_k
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
+
+        query, metadata_filter = apply_input_guards(
+            self._input_guards,
+            query,
+            metadata_filter,
+            pipeline_id=pipeline_id,
+            auth_context=auth_context,
+        )
 
         stage_latencies: dict[str, float] = {}
 
@@ -287,6 +338,10 @@ class AsyncQueryPipeline:
                 t = time.monotonic()
                 chunks = await self._run_reranker(query, chunks, pipeline_id)
                 stage_latencies["reranker"] = (time.monotonic() - t) * 1000
+
+            chunks = apply_retrieved_guards(
+                self._retrieved_guards, chunks, pipeline_id=pipeline_id, query=query
+            )
 
             t = time.monotonic()
             prompt = await self._run_prompt_builder(query, chunks, pipeline_id)
@@ -310,9 +365,14 @@ class AsyncQueryPipeline:
         # never sees the error, and yielding during GeneratorExit raises
         # "async generator ignored GeneratorExit". RunMetrics is yielded only on
         # the success path; failure-path metrics travel via the failed event.
+        buffer_output = self._output_guards is not None
+        buffered: list[str] = []
         try:
             async for token in self._llm.async_stream(prompt):
-                yield token
+                if buffer_output:
+                    buffered.append(token)
+                else:
+                    yield token
         except Exception as e:
             stage_latencies["llm"] = (time.monotonic() - t) * 1000
             await self._emit_failed(pipeline_id, "llm", t, e)
@@ -326,6 +386,16 @@ class AsyncQueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
+
+        if buffer_output:
+            guarded = apply_output_guards(
+                self._output_guards,
+                "".join(buffered),
+                pipeline_id=pipeline_id,
+                query=query,
+                sources=[sc.chunk.text for sc in chunks],
+            )
+            yield guarded
 
         stage_latencies["llm"] = (time.monotonic() - t) * 1000
         await self._emit(pipeline_id, "llm", "completed", t)

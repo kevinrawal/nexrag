@@ -11,6 +11,12 @@ import uuid
 from collections.abc import Iterator
 from typing import Any
 
+from nexrag.core.guards.apply import (
+    apply_input_guards,
+    apply_output_guards,
+    apply_retrieved_guards,
+)
+from nexrag.core.guards.chain import GuardChain
 from nexrag.core.interfaces.embedder import BaseEmbedder
 from nexrag.core.interfaces.llm import BaseLLM
 from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
@@ -68,6 +74,9 @@ class QueryPipeline:
         observer: BaseObserver | None = None,
         reranker: BaseReranker | None = None,
         max_query_length: int = 8000,
+        input_guards: GuardChain | None = None,
+        retrieved_guards: GuardChain | None = None,
+        output_guards: GuardChain | None = None,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
@@ -79,6 +88,9 @@ class QueryPipeline:
         self._observer = observer or NoOpObserver()
         self._reranker = reranker
         self._max_query_length = max_query_length
+        self._input_guards = input_guards
+        self._retrieved_guards = retrieved_guards
+        self._output_guards = output_guards
 
     # Public API
 
@@ -90,6 +102,7 @@ class QueryPipeline:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
+        auth_context: dict[str, Any] | None = None,
     ) -> PipelineResult:
         """
         Run the full query pipeline for a user query.
@@ -101,12 +114,14 @@ class QueryPipeline:
             score_threshold: Override default score_threshold for this query.
             metadata_filter: Optional metadata filters applied during retrieval.
                              e.g. {"vendor": "Acme", "year": 2024}
+            auth_context:    Per-request principal info for the access-control guard.
 
         Returns:
             PipelineResult with answer, sources, scores, and latency.
 
         Raises:
-            PipelineError: Wraps any stage-level error with full context.
+            PipelineError:          Wraps any stage-level error with full context.
+            GuardrailBlockedError:  If an input or output guard blocks the request.
         """
         if self._max_query_length and len(query) > self._max_query_length:
             raise PipelineError(
@@ -121,6 +136,17 @@ class QueryPipeline:
         active_collection = collection or self._collection
         active_top_k = top_k if top_k is not None else self._top_k
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
+
+        # Input guard chain (raises GuardrailBlockedError on BLOCK; may redact the
+        # query and contribute an access-control metadata filter) — run before the
+        # try so a block propagates without being wrapped as a PipelineError.
+        query, metadata_filter = apply_input_guards(
+            self._input_guards,
+            query,
+            metadata_filter,
+            pipeline_id=pipeline_id,
+            auth_context=auth_context,
+        )
 
         stage_latencies: dict[str, float] = {}
         try:
@@ -145,6 +171,11 @@ class QueryPipeline:
                 chunks = self._run_reranker(query, chunks, pipeline_id)
                 stage_latencies["reranker"] = (time.monotonic() - t) * 1000
 
+            # Retrieved-content guard chain — retrieved chunks are an injection vector.
+            chunks = apply_retrieved_guards(
+                self._retrieved_guards, chunks, pipeline_id=pipeline_id, query=query
+            )
+
             t = time.monotonic()
             prompt = self._run_prompt_builder(query, chunks, pipeline_id)
             stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
@@ -163,6 +194,15 @@ class QueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
+
+        # Output guard chain — after the try so a BLOCK surfaces as GuardrailBlockedError.
+        answer = apply_output_guards(
+            self._output_guards,
+            answer,
+            pipeline_id=pipeline_id,
+            query=query,
+            sources=[sc.chunk.text for sc in chunks],
+        )
 
         latency_ms = (time.monotonic() - started_at) * 1000
 
@@ -185,9 +225,14 @@ class QueryPipeline:
         top_k: int | None = None,
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
+        auth_context: dict[str, Any] | None = None,
     ) -> Iterator[str | RunMetrics]:
         """
         Run the query pipeline and stream LLM response tokens as they arrive.
+
+        When an output guard chain is configured, tokens are buffered, guarded, then
+        emitted as a single chunk — output guards (BLOCK/REDACT) cannot operate on an
+        already-sent token stream, so true token streaming is disabled for that case.
 
         All stages before the LLM (embed, retrieve, rerank, prompt_builder) run
         synchronously and are timed identically to run(). Tokens are yielded as they
@@ -221,6 +266,14 @@ class QueryPipeline:
         active_top_k = top_k if top_k is not None else self._top_k
         active_threshold = score_threshold if score_threshold is not None else self._score_threshold
 
+        query, metadata_filter = apply_input_guards(
+            self._input_guards,
+            query,
+            metadata_filter,
+            pipeline_id=pipeline_id,
+            auth_context=auth_context,
+        )
+
         stage_latencies: dict[str, float] = {}
         try:
             t = time.monotonic()
@@ -244,6 +297,10 @@ class QueryPipeline:
                 chunks = self._run_reranker(query, chunks, pipeline_id)
                 stage_latencies["reranker"] = (time.monotonic() - t) * 1000
 
+            chunks = apply_retrieved_guards(
+                self._retrieved_guards, chunks, pipeline_id=pipeline_id, query=query
+            )
+
             t = time.monotonic()
             prompt = self._run_prompt_builder(query, chunks, pipeline_id)
             stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
@@ -266,8 +323,14 @@ class QueryPipeline:
         # metrics object never sees the error, and yielding during GeneratorExit
         # raises "generator ignored GeneratorExit". RunMetrics is therefore yielded
         # only on the success path; failure-path metrics travel via the failed event.
+        buffer_output = self._output_guards is not None
+        buffered: list[str] = []
         try:
-            yield from self._llm.stream(prompt)
+            for token in self._llm.stream(prompt):
+                if buffer_output:
+                    buffered.append(token)
+                else:
+                    yield token
         except Exception as e:
             stage_latencies["llm"] = (time.monotonic() - t) * 1000
             self._emit_failed(pipeline_id, "llm", t, e)
@@ -281,6 +344,17 @@ class QueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
+
+        if buffer_output:
+            # Guard the full answer, then emit it as one chunk (raises on BLOCK).
+            guarded = apply_output_guards(
+                self._output_guards,
+                "".join(buffered),
+                pipeline_id=pipeline_id,
+                query=query,
+                sources=[sc.chunk.text for sc in chunks],
+            )
+            yield guarded
 
         stage_latencies["llm"] = (time.monotonic() - t) * 1000
         self._emit(pipeline_id, "llm", "completed", t)
