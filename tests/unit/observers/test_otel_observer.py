@@ -341,8 +341,6 @@ class TestEvaluationRunner:
         from nexrag.core.interfaces.observer import NoOpObserver
         from nexrag.core.observability.runner import EvaluationRunner
 
-        results: list[MetricValue] = []
-
         class FakeEval(BaseEvaluator):
             @property
             def metric_names(self) -> list[str]:

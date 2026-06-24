@@ -31,9 +31,7 @@ def build_providers(config: ObservabilityConfig) -> tuple[Any, Any, Any]:
     try:
         from opentelemetry import metrics as otel_metrics
         from opentelemetry import trace as otel_trace
-        from opentelemetry.sdk.metrics import MeterProvider
         from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
     except ImportError as e:
         from nexrag.exceptions import ConfigError
 
