@@ -332,7 +332,7 @@
             <div class="story-section-num">05 — What's coming</div>
             <h2 class="story-section-title">v0.4.0 adds breadth and security. v1 is the platform.</h2>
             <p>
-              v0.4.0 adds the Gemini and Pinecone providers, a production chunking suite (token, sentence-window, markdown, code, semantic, proposition) with independently-resolved nested component configs, and a pluggable <strong>guardrails</strong> security layer — on top of the hybrid retrieval, reranking, and async streaming shipped earlier. Everything NexRAG promises is working. What comes next is more remote vector stores, more loaders, and production-grade observability exporters.
+              v0.4.0 adds the Gemini and Pinecone providers, a production chunking suite (token, sentence-window, markdown, code, semantic, proposition) with independently-resolved nested component configs, a pluggable <strong>guardrails</strong> security layer, and <strong>full OpenTelemetry observability</strong> — metrics, traces, and logs with Prometheus pull, OTLP push, and LLM-as-judge evaluators — on top of the hybrid retrieval, reranking, and async streaming shipped earlier. What comes next is more remote vector stores and more loaders.
             </p>
             <div class="roadmap">
               <div class="roadmap-item">
@@ -376,8 +376,8 @@
                 <div class="roadmap-text"><strong>More loaders.</strong> Word (.docx), HTML, Excel — so you can point NexRAG at any document source.</div>
               </div>
               <div class="roadmap-item">
-                <span class="roadmap-tag soon">v1</span>
-                <div class="roadmap-text"><strong>OpenTelemetry observability.</strong> Traces and metrics exportable to any OTEL-compatible backend.</div>
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>OpenTelemetry observability.</strong> Full metrics + traces + logs via OTel. Prometheus pull endpoint (<code>/metrics</code>) and OTLP push to any collector. LLM-as-judge evaluators (faithfulness, relevance, completeness, coherence, context diversity) with per-metric model selection. Configure everything under <code>observability:</code> in YAML. Install <code>nexrag[observability]</code>.</div>
               </div>
             </div>
           </div>

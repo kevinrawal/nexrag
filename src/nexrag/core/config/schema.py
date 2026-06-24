@@ -287,6 +287,106 @@ class RerankerConfig(BaseModel):
         return self
 
 
+class CacheConfig(BaseModel):
+    """
+    Query-result cache config (facade-level).
+
+    backend: "memory" uses the built-in InMemoryQueryCache; "custom" resolves
+             ``class``. (For Redis/distributed caches, set backend to custom and
+             point ``class`` at your backend — an official Redis adapter is a
+             follow-up.)
+    strategy: "exact" matches identical queries+params (zero false positives, the
+              safe default). "semantic" returns cached answers for embedding-near
+              queries — opt-in and risky; the built-in memory backend does not
+              implement it, so it requires a custom ``class``.
+    """
+
+    enabled: bool = False
+    backend: Literal["memory", "custom"] = "memory"
+    strategy: Literal["exact", "semantic"] = "exact"
+    similarity_threshold: float = 0.97  # semantic only
+    max_size: int = 1000  # memory only
+    ttl_seconds: int = 300
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def validate_cache(self) -> CacheConfig:
+        if self.backend == "custom" and not self.class_path:
+            raise ValueError(
+                "query.cache.class is required when query.cache.backend is 'custom'. "
+                "Provide a dotted class path: myproject.caches.MyQueryCache"
+            )
+        if self.strategy == "semantic" and self.backend != "custom":
+            raise ValueError(
+                "query.cache.strategy 'semantic' requires backend 'custom' with a "
+                "class implementing semantic lookup. The built-in memory cache is "
+                "exact-match only (semantic caching can serve wrong answers for "
+                "similar-but-different questions)."
+            )
+        return self
+
+
+class ContextStrategyConfig(BaseModel):
+    """How much conversation history to send to the LLM each turn."""
+
+    type: Literal["window", "token_budget", "custom"] = "window"
+    max_history_turns: int = 6  # window
+    max_tokens: int = 2000  # token_budget
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def validate_context_strategy(self) -> ContextStrategyConfig:
+        if self.type == "custom" and not self.class_path:
+            raise ValueError(
+                "query.session.context_strategy.class is required when type is 'custom'. "
+                "Provide a dotted class path: myproject.context.MyStrategy"
+            )
+        return self
+
+
+class SessionConfig(BaseModel):
+    """
+    Multi-turn conversation session config (facade-level).
+
+    backend: "memory" uses InMemorySessionStore; "custom" resolves ``class``
+             (e.g. a Redis-backed store for shared/long-lived history).
+    persist: When false, history is never written beyond the request (privacy mode).
+    """
+
+    enabled: bool = False
+    backend: Literal["memory", "custom"] = "memory"
+    session_ttl_seconds: int = 1800
+    persist: bool = True
+    context_strategy: ContextStrategyConfig = Field(default_factory=ContextStrategyConfig)
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def validate_session(self) -> SessionConfig:
+        if self.backend == "custom" and not self.class_path:
+            raise ValueError(
+                "query.session.class is required when query.session.backend is 'custom'. "
+                "Provide a dotted class path: myproject.sessions.MySessionStore"
+            )
+        return self
+
+
+class RateLimitConfig(BaseModel):
+    """Client-side request throttle for the query path (facade-level)."""
+
+    enabled: bool = False
+    requests_per_minute: int = 60
+    burst: int = 10
+
+
 class QueryConfig(BaseModel):
     embedder: EmbedderConfig | Literal["inherit"] = "inherit"
     retriever: RetrieverConfig = Field(default_factory=RetrieverConfig)
@@ -294,16 +394,139 @@ class QueryConfig(BaseModel):
     prompt: PromptConfig = Field(default_factory=PromptConfig)
     llm: LLMConfig
     max_query_length: int = 8000
+    cache: CacheConfig = Field(default_factory=CacheConfig)
+    session: SessionConfig = Field(default_factory=SessionConfig)
+    rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
 
 
 # Observability
 
 
-class ObservabilityConfig(BaseModel):
+class OTelSignalsConfig(BaseModel):
+    metrics: bool = True
+    traces: bool = True
+    logs: bool = True
+
+
+class PrometheusExporterConfig(BaseModel):
+    enabled: bool = False
+    host: str = "0.0.0.0"
+    port: int = 9464
+
+
+class OTLPExporterConfig(BaseModel):
+    enabled: bool = False
+    endpoint: str = "http://localhost:4317"
+    protocol: Literal["grpc", "http"] = "grpc"
+    headers: dict[str, str] = Field(default_factory=dict)
+    insecure: bool = True
+
+
+class ConsoleExporterConfig(BaseModel):
+    enabled: bool = False
+
+
+class ExportersConfig(BaseModel):
+    prometheus: PrometheusExporterConfig = Field(default_factory=PrometheusExporterConfig)
+    otlp: OTLPExporterConfig = Field(default_factory=OTLPExporterConfig)
+    console: ConsoleExporterConfig = Field(default_factory=ConsoleExporterConfig)
+
+
+class PricingConfig(BaseModel):
+    """Per-model token pricing in USD per 1K tokens. Used to compute llm.cost_per_query_usd."""
+
+    input: float = 0.0
+    output: float = 0.0
+
+
+class MetricsConfig(BaseModel):
+    retrieval: bool = True
+    llm: bool = True
+    cost: bool = True
+    embedding: bool = True
+    ingestion: bool = True
+    pipeline: bool = True
+    pricing: dict[str, PricingConfig] = Field(default_factory=dict)
+
+
+class EvaluatorConfig(BaseModel):
+    """Per-metric evaluator config. LLM/embedder are resolved independently per evaluator."""
+
+    enabled: bool = False
+    sample_rate: float | None = None
+    llm: LLMConfig | None = None
+    embedder: EmbedderConfig | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class CustomEvaluatorConfig(BaseModel):
+    """
+    Config entry for a user-defined evaluator class.
+
+    The class must subclass ``nexrag.core.interfaces.evaluator.BaseEvaluator``.
+    It is instantiated with ``**params`` as keyword arguments — inject your own
+    LLM or embedder there::
+
+        observability:
+          evaluations:
+            enabled: true
+            custom:
+              - class: myapp.evals.DomainAccuracyEvaluator
+                sample_rate: 0.5
+                params:
+                  threshold: 0.8
+    """
+
     enabled: bool = True
-    observer: Literal["console", "custom"] = "console"
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    format: Literal["json", "text"] = "json"
+    class_path: str = Field(alias="class")
+    sample_rate: float | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+
+class EvaluationsConfig(BaseModel):
+    """
+    Optional LLM-as-judge evaluation tier.
+
+    Runs asynchronously on a sampled fraction of queries — never on the response
+    path. Results are exported as OTel metrics/spans under the 'evaluation' stage.
+    """
+
+    enabled: bool = False
+    sample_rate: float = 0.1
+    max_concurrency: int = 4
+    faithfulness: EvaluatorConfig = Field(default_factory=EvaluatorConfig)
+    answer_relevance: EvaluatorConfig = Field(default_factory=EvaluatorConfig)
+    answer_completeness: EvaluatorConfig = Field(default_factory=EvaluatorConfig)
+    answer_coherence: EvaluatorConfig = Field(default_factory=EvaluatorConfig)
+    context_diversity: EvaluatorConfig = Field(default_factory=EvaluatorConfig)
+    custom: list[CustomEvaluatorConfig] = Field(default_factory=list)
+
+
+class ObservabilityConfig(BaseModel):
+    """
+    Full OpenTelemetry observability config.
+
+    NexRAG emits metrics, traces, and structured logs for every pipeline stage.
+    Users can export to Prometheus (pull /metrics scrape) and/or any OTLP
+    endpoint (push to Grafana Alloy, Jaeger, Loki, etc.).
+
+    Data retention is fully managed by the user's backend — NexRAG stores nothing.
+
+    Optional LLM-as-judge evaluations (faithfulness, relevance, etc.) run off the
+    response path on a configurable sample of queries.
+    """
+
+    enabled: bool = True
+    service_name: str = "nexrag"
+    resource_attributes: dict[str, str] = Field(default_factory=dict)
+    signals: OTelSignalsConfig = Field(default_factory=OTelSignalsConfig)
+    exporters: ExportersConfig = Field(default_factory=ExportersConfig)
+    metrics: MetricsConfig = Field(default_factory=MetricsConfig)
+    evaluations: EvaluationsConfig = Field(default_factory=EvaluationsConfig)
+
+    # Escape hatch: bring your own BaseObserver subclass
     class_path: str | None = Field(default=None, alias="class")
     params: dict[str, Any] = Field(default_factory=dict)
 

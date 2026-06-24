@@ -23,15 +23,18 @@ from nexrag.core.guards.apply import (
 )
 from nexrag.core.guards.chain import GuardChain
 from nexrag.core.interfaces.embedder import BaseEmbedder
+from nexrag.core.interfaces.evaluator import EvalSample
 from nexrag.core.interfaces.llm import BaseLLM
 from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
 from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
 from nexrag.core.interfaces.reranker import BaseReranker
 from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.models.chunk import ScoredChunk
+from nexrag.core.models.conversation import ConversationTurn
 from nexrag.core.models.event import PipelineEvent
 from nexrag.core.models.metrics import RunMetrics, TokenUsage
 from nexrag.core.models.result import PipelineResult, Source
+from nexrag.core.observability.runner import EvaluationRunner, NoOpEvaluationRunner
 from nexrag.exceptions import (
     EmbedderError,
     LLMError,
@@ -79,6 +82,7 @@ class AsyncQueryPipeline:
         input_guards: GuardChain | None = None,
         retrieved_guards: GuardChain | None = None,
         output_guards: GuardChain | None = None,
+        evaluation_runner: EvaluationRunner | NoOpEvaluationRunner | None = None,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
@@ -93,6 +97,14 @@ class AsyncQueryPipeline:
         self._input_guards = input_guards
         self._retrieved_guards = retrieved_guards
         self._output_guards = output_guards
+        self._evaluation_runner: EvaluationRunner | NoOpEvaluationRunner = (
+            evaluation_runner or NoOpEvaluationRunner()
+        )
+
+    @property
+    def default_collection(self) -> str:
+        """The collection this pipeline queries when none is specified per-call."""
+        return self._collection
 
     def run(
         self,
@@ -103,6 +115,7 @@ class AsyncQueryPipeline:
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
         auth_context: dict[str, Any] | None = None,
+        history: list[ConversationTurn] | None = None,
     ) -> PipelineResult:
         """
         Sync entry point — wraps arun() in asyncio.run() for non-async callers.
@@ -119,6 +132,7 @@ class AsyncQueryPipeline:
                 score_threshold=score_threshold,
                 metadata_filter=metadata_filter,
                 auth_context=auth_context,
+                history=history,
             )
         )
 
@@ -165,6 +179,7 @@ class AsyncQueryPipeline:
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
         auth_context: dict[str, Any] | None = None,
+        history: list[ConversationTurn] | None = None,
     ) -> PipelineResult:
         """
         Run the full async query pipeline for a user query.
@@ -176,6 +191,8 @@ class AsyncQueryPipeline:
             score_threshold: Override default score_threshold for this query.
             metadata_filter: Optional metadata filters applied during retrieval.
             auth_context:    Per-request principal info for the access-control guard.
+            history:         Optional prior conversation turns (already trimmed) to
+                             include in the prompt. Retrieval uses only the current query.
 
         Returns:
             PipelineResult with answer, sources, scores, and latency.
@@ -234,7 +251,7 @@ class AsyncQueryPipeline:
             )
 
             t = time.monotonic()
-            prompt = await self._run_prompt_builder(query, chunks, pipeline_id)
+            prompt = await self._run_prompt_builder(query, chunks, pipeline_id, history)
             stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
 
             t = time.monotonic()
@@ -468,12 +485,22 @@ class AsyncQueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
+        scores = [sc.score for sc in chunks]
+        retrieval_meta: dict[str, Any] = {
+            "chunks_retrieved": len(chunks),
+            "collection": collection,
+        }
+        if scores:
+            retrieval_meta["top_score"] = scores[0]
+            retrieval_meta["avg_score"] = sum(scores) / len(scores)
+            retrieval_meta["bottom_score"] = scores[-1]
+            retrieval_meta["score_spread"] = scores[0] - scores[-1]
         await self._emit(
             pipeline_id,
             "retriever",
             "completed",
             t,
-            {"chunks_retrieved": len(chunks), "collection": collection},
+            retrieval_meta,
         )
         return chunks
 
@@ -509,12 +536,16 @@ class AsyncQueryPipeline:
         return reranked
 
     async def _run_prompt_builder(
-        self, query: str, chunks: list[ScoredChunk], pipeline_id: str
+        self,
+        query: str,
+        chunks: list[ScoredChunk],
+        pipeline_id: str,
+        history: list[ConversationTurn] | None = None,
     ) -> str:
         await self._emit(pipeline_id, "prompt_builder", "started")
         t = time.monotonic()
         try:
-            prompt = self._prompt_builder.build(query, chunks)
+            prompt = self._prompt_builder.build(query, chunks, history)
         except Exception as e:
             await self._emit_failed(pipeline_id, "prompt_builder", t, e)
             if isinstance(e, PromptError):
@@ -527,7 +558,15 @@ class AsyncQueryPipeline:
                 cause=e,
             ) from e
         await self._emit(
-            pipeline_id, "prompt_builder", "completed", t, {"prompt_length": len(prompt)}
+            pipeline_id,
+            "prompt_builder",
+            "completed",
+            t,
+            {
+                "prompt_length": len(prompt),
+                "chunks_sent": len(chunks),
+                "estimated_tokens": len(prompt) // 4,
+            },
         )
         return prompt
 
@@ -622,7 +661,14 @@ class AsyncQueryPipeline:
             token_usage=token_usage,
             metrics=metrics,
         )
-
+        await self._evaluation_runner.async_dispatch(
+            EvalSample(
+                query=query,
+                answer=answer,
+                context=[sc.chunk.text for sc in chunks],
+                pipeline_id=pipeline_id,
+            )
+        )
         return result
 
     # Helpers

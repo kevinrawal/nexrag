@@ -1,6 +1,7 @@
 import pytest
 
 from nexrag.core.models.chunk import Chunk, ScoredChunk
+from nexrag.core.models.conversation import ConversationTurn
 from nexrag.defaults.prompt_builder import DefaultPromptBuilder
 from nexrag.exceptions import PromptError
 
@@ -85,3 +86,47 @@ class TestDefaultPromptBuilder:
         result = builder.build("q", chunks)
         for i in range(5):
             assert f"chunk {i}" in result
+
+
+class TestBuildWithHistory:
+    def test_includes_history_turns(self):
+        builder = DefaultPromptBuilder()
+        history = [
+            ConversationTurn(role="user", content="What is the capital of France?"),
+            ConversationTurn(role="assistant", content="Paris."),
+        ]
+        result = builder.build("And of Italy?", [_scored("ctx")], history)
+        assert "What is the capital of France?" in result
+        assert "Paris." in result
+        assert "And of Italy?" in result
+
+    def test_history_uses_role_labels(self):
+        builder = DefaultPromptBuilder()
+        history = [ConversationTurn(role="user", content="hi")]
+        result = builder.build("q", [_scored("ctx")], history)
+        assert "User: hi" in result
+
+    def test_empty_history_matches_no_history(self):
+        builder = DefaultPromptBuilder()
+        with_empty = builder.build("q", [_scored("ctx")], [])
+        plain = builder.build("q", [_scored("ctx")])
+        assert with_empty == plain
+
+    def test_none_history_matches_no_history(self):
+        builder = DefaultPromptBuilder()
+        with_none = builder.build("q", [_scored("ctx")], None)
+        plain = builder.build("q", [_scored("ctx")])
+        assert with_none == plain
+
+    def test_still_contains_context_and_question(self):
+        builder = DefaultPromptBuilder()
+        history = [ConversationTurn(role="user", content="earlier")]
+        result = builder.build("current?", [_scored("the context")], history)
+        assert "the context" in result
+        assert "Question: current?" in result
+
+    def test_empty_query_raises_even_with_history(self):
+        builder = DefaultPromptBuilder()
+        history = [ConversationTurn(role="user", content="x")]
+        with pytest.raises(PromptError):
+            builder.build("", [_scored("ctx")], history)

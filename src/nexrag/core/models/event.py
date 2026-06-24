@@ -27,6 +27,7 @@ StageName = Literal[
     "llm",
     "response_builder",
     "guardrail",
+    "evaluation",
     "pipeline",
 ]
 

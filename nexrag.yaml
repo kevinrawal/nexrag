@@ -85,11 +85,102 @@ query:
     # base_url: http://localhost:11434
 
 # OBSERVABILITY
+# NexRAG emits metrics, traces, and logs via OpenTelemetry.
+# Requires: pip install nexrag[observability]
+# Data retention is fully managed by your backend (Prometheus TSDB, Tempo, Loki).
 
 observability:
   enabled: true
-  observer: console       # console (V1) | custom
-  log_level: INFO
-  format: json
-  # observer: custom
+  service_name: nexrag
+  # resource_attributes:
+  #   deployment.environment: production
+  #   service.version: "0.4.0"
+
+  signals:
+    metrics: true
+    traces: true
+    logs: true
+
+  exporters:
+    # Prometheus pull — exposes GET /metrics for Prometheus to scrape.
+    prometheus:
+      enabled: true
+      host: 0.0.0.0
+      port: 9464
+
+    # OTLP push — sends to an OTel Collector / Grafana Alloy (metrics + traces + logs).
+    otlp:
+      enabled: false
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
+      protocol: grpc          # grpc | http
+      # headers:
+      #   Authorization: Bearer ${GRAFANA_CLOUD_TOKEN}
+      insecure: true
+
+    # Console exporter (debug only — structured JSON to stdout, not raw print).
+    console:
+      enabled: false
+
+  metrics:
+    retrieval: true
+    llm: true
+    cost: true
+    embedding: true
+    ingestion: true
+    pipeline: true
+    # Model pricing table for llm.cost_per_query_usd (USD per 1K tokens).
+    # pricing:
+    #   gpt-4o:      { input: 0.0025,  output: 0.01 }
+    #   gpt-4o-mini: { input: 0.00015, output: 0.0006 }
+    #   claude-haiku-4-5-20251001: { input: 0.00025, output: 0.00125 }
+
+  # Optional LLM-as-judge evaluations — runs off the response path on a sample.
+  # Requires: pip install nexrag[observability] + provider extras for each model.
+  evaluations:
+    enabled: false
+    sample_rate: 0.1        # global default: evaluate 10% of queries
+    max_concurrency: 4
+
+    faithfulness:
+      enabled: false
+      # sample_rate: 0.2    # per-metric override
+      # llm:
+      #   provider: anthropic
+      #   model: claude-haiku-4-5-20251001
+      #   api_key: ${ANTHROPIC_API_KEY}
+
+    answer_relevance:
+      enabled: false
+      # llm:
+      #   provider: openai
+      #   model: gpt-4o-mini
+      #   api_key: ${OPENAI_API_KEY}
+      # embedder:
+      #   provider: openai
+      #   model: text-embedding-3-small
+      #   api_key: ${OPENAI_API_KEY}
+
+    answer_completeness:
+      enabled: false
+      # llm:
+      #   provider: openai
+      #   model: gpt-4o-mini
+      #   api_key: ${OPENAI_API_KEY}
+
+    answer_coherence:
+      enabled: false
+      # llm:
+      #   provider: openai
+      #   model: gpt-4o-mini
+      #   api_key: ${OPENAI_API_KEY}
+
+    context_diversity:
+      enabled: false
+      # embedder:
+      #   provider: openai
+      #   model: text-embedding-3-small
+      #   api_key: ${OPENAI_API_KEY}
+
+  # Escape hatch — bring your own BaseObserver subclass.
   # class: myproject.observers.DatadogObserver
+  # params: {}

@@ -121,6 +121,17 @@ class AsyncIngestionPipeline:
         self._assert_no_running_loop()
         return asyncio.run(self.aingest_documents(documents, collection))
 
+    def ingest_batch(
+        self,
+        sources: list[Any],
+        loader: BaseLoader | None = None,
+        metadata: dict[str, Any] | None = None,
+        collection: str | None = None,
+    ) -> list[IngestionResult]:
+        """Sync entry point for batched ingestion — wraps aingest_batch()."""
+        self._assert_no_running_loop()
+        return asyncio.run(self.aingest_batch(sources, loader, metadata, collection))
+
     async def aingest(
         self,
         data: Any,
@@ -210,6 +221,93 @@ class AsyncIngestionPipeline:
                 raise
             raise PipelineError(
                 f"Unexpected error during async ingestion: {e}",
+                stage="pipeline",
+                component="async_ingestion",
+                pipeline_id=pipeline_id,
+                cause=e,
+            ) from e
+
+    async def aingest_batch(
+        self,
+        sources: list[Any],
+        loader: BaseLoader | None = None,
+        metadata: dict[str, Any] | None = None,
+        collection: str | None = None,
+    ) -> list[IngestionResult]:
+        """
+        Async batched ingestion: load + chunk every source, embed all chunks across
+        the batch in parallel batches (one shared embed phase), then run the DB
+        sequence (fingerprint once, idempotency + write per source) under the
+        per-collection lock. See IngestionPipeline.ingest_batch for the contract.
+        """
+        if not sources:
+            return []
+
+        pipeline_id = str(uuid.uuid4())
+        started_at = time.monotonic()
+        active_collection = self._resolve_collection(collection, pipeline_id)
+
+        active_loader = loader or self._loader
+        if active_loader is None:
+            raise PipelineError(
+                "No loader configured. Pass a loader to aingest_batch() or set one "
+                "at pipeline construction. Use aingest_documents() to skip the loader stage.",
+                stage="loader",
+                component="async_ingestion",
+                pipeline_id=pipeline_id,
+            )
+
+        try:
+            per_source_documents: list[list[Document]] = []
+            for data in sources:
+                documents = await self._run_loader(active_loader, data, pipeline_id)
+                if metadata:
+                    documents = [doc.with_metadata(metadata) for doc in documents]
+                per_source_documents.append(_stabilise_doc_ids(documents))
+
+            all_chunks: list[Chunk] = []
+            slices: list[tuple[int, int]] = []
+            for documents in per_source_documents:
+                start = len(all_chunks)
+                chunks = await self._run_sanitizer_and_chunker(documents, pipeline_id)
+                all_chunks.extend(chunks)
+                slices.append((start, len(all_chunks)))
+
+            # Single shared (parallel-batched) embed phase across the whole batch.
+            all_embeddings = await self._run_embedder(all_chunks, pipeline_id)
+
+            # DB sequence serialized per collection, exactly like _run_from_documents.
+            results: list[IngestionResult] = []
+            async with self._collection_locks[active_collection]:
+                await self._run_fingerprint_check(active_collection, pipeline_id)
+
+                latency_ms = (time.monotonic() - started_at) * 1000
+                for documents, (start, end) in zip(per_source_documents, slices, strict=True):
+                    src_chunks = all_chunks[start:end]
+                    src_embeddings = all_embeddings[start:end]
+                    chunks_to_write, embeddings_to_write = await self._run_idempotency_check(
+                        src_chunks, src_embeddings, documents, active_collection, pipeline_id
+                    )
+                    written = await self._run_vector_db_write(
+                        chunks_to_write, embeddings_to_write, active_collection, pipeline_id
+                    )
+                    results.append(
+                        IngestionResult(
+                            pipeline_id=pipeline_id,
+                            documents_loaded=len(documents),
+                            chunks_produced=len(src_chunks),
+                            chunks_written=written,
+                            latency_ms=latency_ms,
+                            collection_used=active_collection,
+                        )
+                    )
+            return results
+        except Exception as e:
+            await self._emit_failed(pipeline_id, "pipeline", started_at, e)
+            if isinstance(e, PipelineError):
+                raise
+            raise PipelineError(
+                f"Unexpected error during async batch ingestion: {e}",
                 stage="pipeline",
                 component="async_ingestion",
                 pipeline_id=pipeline_id,

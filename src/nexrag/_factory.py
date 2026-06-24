@@ -6,11 +6,14 @@ Not part of the public API. Import from nexrag, not from here.
 
 from __future__ import annotations
 
+import logging
 from typing import TypedDict
 
 from nexrag.core.config.resolver import resolve_class
 from nexrag.core.config.schema import (
+    CacheConfig,
     ChunkerConfig,
+    ContextStrategyConfig,
     EmbedderConfig,
     GuardChainConfig,
     GuardConfig,
@@ -19,31 +22,41 @@ from nexrag.core.config.schema import (
     NexRAGConfig,
     ObservabilityConfig,
     PromptConfig,
+    RateLimitConfig,
     RerankerConfig,
     RetrieverConfig,
     SanitizerConfig,
+    SessionConfig,
     SparseConfig,
     VectorDBConfig,
 )
 from nexrag.core.guards.chain import GuardChain
 from nexrag.core.interfaces.chunker import BaseChunker
+from nexrag.core.interfaces.context_strategy import BaseContextStrategy
 from nexrag.core.interfaces.embedder import BaseEmbedder
 from nexrag.core.interfaces.guard import BaseGuard
 from nexrag.core.interfaces.llm import BaseLLM
 from nexrag.core.interfaces.loader import BaseLoader
 from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
 from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
+from nexrag.core.interfaces.query_cache import BaseQueryCache
 from nexrag.core.interfaces.reranker import BaseReranker
 from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.interfaces.sanitizer import BaseSanitizer
+from nexrag.core.interfaces.session_store import BaseSessionStore
 from nexrag.core.interfaces.sparse_retriever import BaseSparseRetriever
 from nexrag.core.interfaces.vector_db import BaseVectorDB
+from nexrag.core.observability.runner import EvaluationRunner, NoOpEvaluationRunner
 from nexrag.core.pipeline.async_ingestion import AsyncIngestionPipeline
 from nexrag.core.pipeline.async_query import AsyncQueryPipeline
 from nexrag.core.pipeline.ingestion import IngestionPipeline
 from nexrag.core.pipeline.query import QueryPipeline
+from nexrag.core.runtime import QueryRuntime
+from nexrag.defaults.rate_limiter import TokenBucketRateLimiter
 from nexrag.exceptions import ConfigError
 from nexrag.loaders.auto import AutoLoader
+
+_log = logging.getLogger("nexrag")
 
 
 def wire(
@@ -52,6 +65,8 @@ def wire(
     IngestionPipeline | AsyncIngestionPipeline,
     QueryPipeline | AsyncQueryPipeline,
     BaseRetriever,
+    EvaluationRunner | NoOpEvaluationRunner,
+    QueryRuntime,
 ]:
     """
     Instantiate all components from config and wire them into pipelines.
@@ -59,8 +74,10 @@ def wire(
     When config.mode is "async", returns AsyncIngestionPipeline + AsyncQueryPipeline.
     When config.mode is "sync" (default), returns the standard sync pipelines.
 
-    Returns a (ingestion_pipeline, query_pipeline, retriever) tuple so the caller
-    (NexRAG.from_config) can store the retriever for post-ingest cache invalidation.
+    Returns a (ingestion_pipeline, query_pipeline, retriever, eval_runner, runtime)
+    tuple so the caller (NexRAG.from_config) can store retriever for cache
+    invalidation, eval_runner for post-query sampling, and the QueryRuntime
+    (cache / rate limiter / session store / context strategy) for the facade.
     """
     observer = _build_observer(config.observability)
 
@@ -90,6 +107,26 @@ def wire(
     input_guards = _build_guard_chain(config.guardrails.input, observer, "input")
     retrieved_guards = _build_guard_chain(config.guardrails.retrieved, observer, "retrieved")
     output_guards = _build_guard_chain(config.guardrails.output, observer, "output")
+
+    # Evaluation runner (off-path, optional).
+    eval_runner = _build_evaluation_runner(config.observability, observer)
+
+    # Facade-level query runtime (cache / rate limit / sessions). All optional.
+    runtime = _build_query_runtime(
+        config.query.cache, config.query.session, config.query.rate_limit
+    )
+
+    # Streaming + output guards are incompatible by design: output guards must see
+    # the full answer, so streaming buffers it and emits one chunk (no live tokens).
+    # Warn once at construction so this is never a silent surprise in production.
+    if output_guards is not None:
+        _log.warning(
+            "Output guards are enabled: stream_query()/astream_query() will buffer "
+            "the full response and emit it as a single chunk (output guards cannot "
+            "edit an already-sent token stream). Use query()/async_query() for the "
+            "same guaranteed guarding, or disable the output guard chain for true "
+            "live token streaming."
+        )
 
     ingestion_pipeline: IngestionPipeline | AsyncIngestionPipeline
     query_pipeline: QueryPipeline | AsyncQueryPipeline
@@ -122,6 +159,7 @@ def wire(
             input_guards=input_guards,
             retrieved_guards=retrieved_guards,
             output_guards=output_guards,
+            evaluation_runner=eval_runner,
         )
     else:
         ingestion_pipeline = IngestionPipeline(
@@ -150,9 +188,92 @@ def wire(
             input_guards=input_guards,
             retrieved_guards=retrieved_guards,
             output_guards=output_guards,
+            evaluation_runner=eval_runner,
         )
 
-    return ingestion_pipeline, query_pipeline, retriever
+    return ingestion_pipeline, query_pipeline, retriever, eval_runner, runtime
+
+
+# Facade-level query runtime builders
+
+
+def _build_query_runtime(
+    cache_cfg: CacheConfig,
+    session_cfg: SessionConfig,
+    rate_cfg: RateLimitConfig,
+) -> QueryRuntime:
+    cache = _build_query_cache(cache_cfg) if cache_cfg.enabled else None
+    rate_limiter = (
+        TokenBucketRateLimiter(
+            requests_per_minute=rate_cfg.requests_per_minute, burst=rate_cfg.burst
+        )
+        if rate_cfg.enabled
+        else None
+    )
+    session_store = _build_session_store(session_cfg) if session_cfg.enabled else None
+    context_strategy = (
+        _build_context_strategy(session_cfg.context_strategy) if session_cfg.enabled else None
+    )
+    return QueryRuntime(
+        cache=cache,
+        rate_limiter=rate_limiter,
+        session_store=session_store,
+        context_strategy=context_strategy,
+    )
+
+
+def _build_query_cache(config: CacheConfig) -> BaseQueryCache:
+    if config.backend == "custom":
+        return resolve_class(
+            config.class_path,  # type: ignore[arg-type]
+            BaseQueryCache,  # type: ignore[type-abstract]
+            config.params,
+            stage="query_cache",
+        )
+
+    from nexrag.defaults.query_cache import InMemoryQueryCache
+
+    return InMemoryQueryCache(max_size=config.max_size, ttl_seconds=config.ttl_seconds)
+
+
+def _build_session_store(config: SessionConfig) -> BaseSessionStore:
+    if config.backend == "custom":
+        return resolve_class(
+            config.class_path,  # type: ignore[arg-type]
+            BaseSessionStore,  # type: ignore[type-abstract]
+            config.params,
+            stage="session_store",
+        )
+
+    from nexrag.defaults.session_store import InMemorySessionStore
+
+    return InMemorySessionStore(ttl_seconds=config.session_ttl_seconds, persist=config.persist)
+
+
+def _build_context_strategy(config: ContextStrategyConfig) -> BaseContextStrategy:
+    if config.type == "custom":
+        return resolve_class(
+            config.class_path,  # type: ignore[arg-type]
+            BaseContextStrategy,  # type: ignore[type-abstract]
+            config.params,
+            stage="context_strategy",
+        )
+
+    if config.type == "window":
+        from nexrag.defaults.context_strategy import WindowStrategy
+
+        return WindowStrategy(max_turns=config.max_history_turns)
+
+    if config.type == "token_budget":
+        from nexrag.defaults.context_strategy import TokenBudgetStrategy
+
+        return TokenBudgetStrategy(max_tokens=config.max_tokens)
+
+    raise ConfigError(
+        f"Unknown context strategy type: {config.type!r}. Supported: window, token_budget, custom",
+        stage="config",
+        component="context_strategy",
+    )
 
 
 # Component builders
@@ -357,7 +478,7 @@ def _build_loader(config: LoaderConfig) -> BaseLoader | None:
         return RawTextLoader(**config.params)
 
     raise ConfigError(
-        f"Unknown loader type: {config.type!r}. " f"Supported: auto, pdf, txt, custom",
+        f"Unknown loader type: {config.type!r}. Supported: auto, pdf, txt, custom",
         stage="config",
         component="loader",
     )
@@ -656,18 +777,8 @@ def _build_observer(config: ObservabilityConfig) -> BaseObserver:
     if not config.enabled:
         return NoOpObserver()
 
-    if config.observer == "console":
-        from nexrag.observers.console import ConsoleObserver
-
-        return ConsoleObserver(log_level=config.log_level, format=config.format)
-
-    if config.observer == "custom":
-        if not config.class_path:
-            raise ConfigError(
-                "observability.class is required when observability.observer is 'custom'.",
-                stage="config",
-                component="observer",
-            )
+    # Custom observer escape hatch — takes priority over OTel when class_path is set.
+    if config.class_path:
         return resolve_class(
             config.class_path,
             BaseObserver,  # type: ignore[type-abstract]
@@ -675,10 +786,107 @@ def _build_observer(config: ObservabilityConfig) -> BaseObserver:
             stage="observer",
         )
 
-    raise ConfigError(
-        f"Unknown observer: {config.observer!r}. Supported: console, custom",
-        stage="config",
-        component="observer",
+    # Default: OpenTelemetry observer.
+    from nexrag.core.observability.pricing import build_pricing_table
+    from nexrag.observers.otel import OpenTelemetryObserver
+
+    pricing_table = build_pricing_table(dict(config.metrics.pricing))
+    return OpenTelemetryObserver(config=config, pricing_table=pricing_table)
+
+
+def _build_evaluation_runner(
+    config: ObservabilityConfig,
+    observer: BaseObserver,
+) -> EvaluationRunner | NoOpEvaluationRunner:
+    if not config.enabled or not config.evaluations.enabled:
+        return NoOpEvaluationRunner()
+
+    ev_cfg = config.evaluations
+    evaluators: list[tuple[object, float]] = []
+
+    def _rate(per_metric: float | None) -> float:
+        return per_metric if per_metric is not None else ev_cfg.sample_rate
+
+    if ev_cfg.faithfulness.enabled and ev_cfg.faithfulness.llm is not None:
+        from nexrag.evaluators.faithfulness import FaithfulnessEvaluator
+
+        llm = _build_llm(ev_cfg.faithfulness.llm)
+        evaluators.append(
+            (
+                FaithfulnessEvaluator(llm=llm, **ev_cfg.faithfulness.params),
+                _rate(ev_cfg.faithfulness.sample_rate),
+            )
+        )
+
+    if ev_cfg.answer_relevance.enabled and ev_cfg.answer_relevance.llm is not None:
+        from nexrag.evaluators.answer_relevance import AnswerRelevanceEvaluator
+
+        llm = _build_llm(ev_cfg.answer_relevance.llm)
+        embedder = (
+            _build_embedder(ev_cfg.answer_relevance.embedder)
+            if ev_cfg.answer_relevance.embedder is not None
+            else None
+        )
+        evaluators.append(
+            (
+                AnswerRelevanceEvaluator(
+                    llm=llm, embedder=embedder, **ev_cfg.answer_relevance.params
+                ),
+                _rate(ev_cfg.answer_relevance.sample_rate),
+            )
+        )
+
+    if ev_cfg.answer_completeness.enabled and ev_cfg.answer_completeness.llm is not None:
+        from nexrag.evaluators.answer_completeness import AnswerCompletenessEvaluator
+
+        llm = _build_llm(ev_cfg.answer_completeness.llm)
+        evaluators.append(
+            (
+                AnswerCompletenessEvaluator(llm=llm, **ev_cfg.answer_completeness.params),
+                _rate(ev_cfg.answer_completeness.sample_rate),
+            )
+        )
+
+    if ev_cfg.answer_coherence.enabled and ev_cfg.answer_coherence.llm is not None:
+        from nexrag.evaluators.answer_coherence import AnswerCoherenceEvaluator
+
+        llm = _build_llm(ev_cfg.answer_coherence.llm)
+        evaluators.append(
+            (
+                AnswerCoherenceEvaluator(llm=llm, **ev_cfg.answer_coherence.params),
+                _rate(ev_cfg.answer_coherence.sample_rate),
+            )
+        )
+
+    if ev_cfg.context_diversity.enabled and ev_cfg.context_diversity.embedder is not None:
+        from nexrag.evaluators.context_diversity import ContextDiversityEvaluator
+
+        embedder = _build_embedder(ev_cfg.context_diversity.embedder)
+        evaluators.append(
+            (
+                ContextDiversityEvaluator(embedder=embedder, **ev_cfg.context_diversity.params),
+                _rate(ev_cfg.context_diversity.sample_rate),
+            )
+        )
+
+    for custom_cfg in ev_cfg.custom:
+        if not custom_cfg.enabled:
+            continue
+        from nexrag.core.interfaces.evaluator import BaseEvaluator
+
+        ev = resolve_class(
+            custom_cfg.class_path,
+            BaseEvaluator,  # type: ignore[type-abstract]
+            custom_cfg.params,
+            stage="evaluator",
+        )
+        evaluators.append((ev, _rate(custom_cfg.sample_rate)))
+
+    return EvaluationRunner(
+        evaluators=evaluators,  # type: ignore[arg-type]
+        global_sample_rate=ev_cfg.sample_rate,
+        max_concurrency=ev_cfg.max_concurrency,
+        observer=observer,
     )
 
 
