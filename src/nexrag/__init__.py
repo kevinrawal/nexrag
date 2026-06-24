@@ -21,6 +21,7 @@ from nexrag.core.config.loader import load_config
 from nexrag.core.interfaces.loader import BaseLoader
 from nexrag.core.models.metrics import RunMetrics
 from nexrag.core.models.result import PipelineResult
+from nexrag.core.observability.runner import EvaluationRunner, NoOpEvaluationRunner
 from nexrag.core.pipeline.async_ingestion import AsyncIngestionPipeline
 from nexrag.core.pipeline.async_query import AsyncQueryPipeline
 from nexrag.core.pipeline.ingestion import IngestionPipeline, IngestionResult
@@ -56,10 +57,12 @@ class NexRAG:
         ingestion: IngestionPipeline | AsyncIngestionPipeline,
         query: QueryPipeline | AsyncQueryPipeline,
         retriever: Any | None = None,
+        evaluation_runner: EvaluationRunner | NoOpEvaluationRunner | None = None,
     ) -> None:
         self._ingestion = ingestion
         self._query = query
         self._retriever = retriever
+        self._evaluation_runner = evaluation_runner
 
     @classmethod
     def from_config(cls, path: str | Path = "nexrag.yaml") -> NexRAG:
@@ -78,13 +81,56 @@ class NexRAG:
         """
 
         config = load_config(path)
-        ingestion, query, retriever = wire(config)
-        return cls(ingestion=ingestion, query=query, retriever=retriever)
+        ingestion, query, retriever, eval_runner = wire(config)
+        return cls(
+            ingestion=ingestion, query=query, retriever=retriever, evaluation_runner=eval_runner
+        )
 
     def _notify_ingest(self, collection: str) -> None:
         """Notify the retriever to invalidate cache for this collection, if supported."""
         if self._retriever is not None and hasattr(self._retriever, "invalidate_cache"):
             self._retriever.invalidate_cache(collection)
+
+    # Evaluation
+
+    @property
+    def evaluation_runner(self) -> EvaluationRunner | NoOpEvaluationRunner | None:
+        """The active evaluation runner (may be NoOpEvaluationRunner when disabled)."""
+        return self._evaluation_runner
+
+    def add_evaluator(
+        self,
+        evaluator: Any,
+        sample_rate: float = 1.0,
+    ) -> None:
+        """
+        Attach a custom evaluator at runtime.
+
+        The evaluator is added to the active runner and will fire on future
+        ``query()`` / ``async_query()`` calls at the given sample rate.
+
+        Requires ``observability.evaluations.enabled: true`` in config (so the
+        pipeline starts with a real ``EvaluationRunner``).  If evaluations are
+        disabled (the default), call this after enabling them via YAML, or
+        upgrade to a real runner by enabling evaluations and reloading config.
+
+        Args:
+            evaluator:   Instance of a :class:`~nexrag.core.interfaces.evaluator.BaseEvaluator`
+                         subclass.
+            sample_rate: Fraction of queries on which to run this evaluator (0.0–1.0).
+                         Defaults to 1.0 (every query).
+
+        Raises:
+            RuntimeError: If evaluations are disabled (``evaluation_runner`` is a
+                          ``NoOpEvaluationRunner``).
+        """
+        runner = self._evaluation_runner
+        if runner is None or isinstance(runner, NoOpEvaluationRunner):
+            raise RuntimeError(
+                "Evaluations are disabled. Set observability.evaluations.enabled: true "
+                "in your config, then call NexRAG.from_config() again."
+            )
+        runner.add(evaluator, sample_rate)
 
     # Public pipeline methods
 

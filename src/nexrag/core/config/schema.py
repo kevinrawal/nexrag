@@ -299,11 +299,131 @@ class QueryConfig(BaseModel):
 # Observability
 
 
-class ObservabilityConfig(BaseModel):
+class OTelSignalsConfig(BaseModel):
+    metrics: bool = True
+    traces: bool = True
+    logs: bool = True
+
+
+class PrometheusExporterConfig(BaseModel):
+    enabled: bool = False
+    host: str = "0.0.0.0"
+    port: int = 9464
+
+
+class OTLPExporterConfig(BaseModel):
+    enabled: bool = False
+    endpoint: str = "http://localhost:4317"
+    protocol: Literal["grpc", "http"] = "grpc"
+    headers: dict[str, str] = Field(default_factory=dict)
+    insecure: bool = True
+
+
+class ConsoleExporterConfig(BaseModel):
+    enabled: bool = False
+
+
+class ExportersConfig(BaseModel):
+    prometheus: PrometheusExporterConfig = Field(default_factory=PrometheusExporterConfig)
+    otlp: OTLPExporterConfig = Field(default_factory=OTLPExporterConfig)
+    console: ConsoleExporterConfig = Field(default_factory=ConsoleExporterConfig)
+
+
+class PricingConfig(BaseModel):
+    """Per-model token pricing in USD per 1K tokens. Used to compute llm.cost_per_query_usd."""
+
+    input: float = 0.0
+    output: float = 0.0
+
+
+class MetricsConfig(BaseModel):
+    retrieval: bool = True
+    llm: bool = True
+    cost: bool = True
+    embedding: bool = True
+    ingestion: bool = True
+    pipeline: bool = True
+    pricing: dict[str, PricingConfig] = Field(default_factory=dict)
+
+
+class EvaluatorConfig(BaseModel):
+    """Per-metric evaluator config. LLM/embedder are resolved independently per evaluator."""
+
+    enabled: bool = False
+    sample_rate: float | None = None
+    llm: LLMConfig | None = None
+    embedder: EmbedderConfig | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class CustomEvaluatorConfig(BaseModel):
+    """
+    Config entry for a user-defined evaluator class.
+
+    The class must subclass ``nexrag.core.interfaces.evaluator.BaseEvaluator``.
+    It is instantiated with ``**params`` as keyword arguments — inject your own
+    LLM or embedder there::
+
+        observability:
+          evaluations:
+            enabled: true
+            custom:
+              - class: myapp.evals.DomainAccuracyEvaluator
+                sample_rate: 0.5
+                params:
+                  threshold: 0.8
+    """
+
     enabled: bool = True
-    observer: Literal["console", "custom"] = "console"
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    format: Literal["json", "text"] = "json"
+    class_path: str = Field(alias="class")
+    sample_rate: float | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+
+class EvaluationsConfig(BaseModel):
+    """
+    Optional LLM-as-judge evaluation tier.
+
+    Runs asynchronously on a sampled fraction of queries — never on the response
+    path. Results are exported as OTel metrics/spans under the 'evaluation' stage.
+    """
+
+    enabled: bool = False
+    sample_rate: float = 0.1
+    max_concurrency: int = 4
+    faithfulness: EvaluatorConfig = Field(default_factory=EvaluatorConfig)
+    answer_relevance: EvaluatorConfig = Field(default_factory=EvaluatorConfig)
+    answer_completeness: EvaluatorConfig = Field(default_factory=EvaluatorConfig)
+    answer_coherence: EvaluatorConfig = Field(default_factory=EvaluatorConfig)
+    context_diversity: EvaluatorConfig = Field(default_factory=EvaluatorConfig)
+    custom: list[CustomEvaluatorConfig] = Field(default_factory=list)
+
+
+class ObservabilityConfig(BaseModel):
+    """
+    Full OpenTelemetry observability config.
+
+    NexRAG emits metrics, traces, and structured logs for every pipeline stage.
+    Users can export to Prometheus (pull /metrics scrape) and/or any OTLP
+    endpoint (push to Grafana Alloy, Jaeger, Loki, etc.).
+
+    Data retention is fully managed by the user's backend — NexRAG stores nothing.
+
+    Optional LLM-as-judge evaluations (faithfulness, relevance, etc.) run off the
+    response path on a configurable sample of queries.
+    """
+
+    enabled: bool = True
+    service_name: str = "nexrag"
+    resource_attributes: dict[str, str] = Field(default_factory=dict)
+    signals: OTelSignalsConfig = Field(default_factory=OTelSignalsConfig)
+    exporters: ExportersConfig = Field(default_factory=ExportersConfig)
+    metrics: MetricsConfig = Field(default_factory=MetricsConfig)
+    evaluations: EvaluationsConfig = Field(default_factory=EvaluationsConfig)
+
+    # Escape hatch: bring your own BaseObserver subclass
     class_path: str | None = Field(default=None, alias="class")
     params: dict[str, Any] = Field(default_factory=dict)
 

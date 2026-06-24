@@ -117,6 +117,9 @@ pip install "nexrag[bm25]"           # BM25Retriever keyword search (rank-bm25)
 pip install "nexrag[cohere]"         # CohereReranker
 pip install "nexrag[cross-encoder]"  # CrossEncoderReranker (sentence-transformers)
 
+# Observability
+pip install "nexrag[observability]"  # OpenTelemetry metrics + traces + logs (Prometheus / OTLP)
+
 # Convenience bundles
 pip install "nexrag[all-sparse]"     # all sparse retrievers (bm25)
 pip install "nexrag[all-rerankers]"  # all rerankers (cohere + cross-encoder)
@@ -159,13 +162,45 @@ See [Architecture Documentation](docs/) for full pipeline diagrams.
 
 | Category | Providers |
 |---|---|
-| Embedders | OpenAI, Ollama, HuggingFace |
-| Vector DBs | ChromaDB (in-memory, persistent, remote server) |
-| LLMs | OpenAI, Ollama, Anthropic |
+| Embedders | OpenAI, Gemini, Ollama, HuggingFace |
+| Vector DBs | ChromaDB (in-memory, persistent, server), Pinecone |
+| LLMs | OpenAI, Anthropic, Gemini, Ollama |
 | Loaders | PDF, plain text, Word, HTML, Excel |
-| Chunkers | Recursive (separator-aware) |
+| Chunkers | Recursive, token, sentence, sentence-window, markdown, code, semantic, proposition |
 | Retrievers | Dense (cosine similarity), BM25 (keyword), Hybrid (dense + BM25) |
 | Rerankers | Cohere, CrossEncoder (sentence-transformers) |
+| Observability | OpenTelemetry — Prometheus pull, OTLP push (Grafana Alloy, Jaeger, etc.) |
+
+---
+
+## Observability
+
+Connect Prometheus + Grafana with two YAML lines:
+
+```bash
+pip install "nexrag[observability]"
+```
+
+```yaml
+# nexrag.yaml
+observability:
+  enabled: true
+  service_name: my-rag-app
+  exporters:
+    prometheus:
+      enabled: true    # exposes GET http://host:9464/metrics
+      port: 9464
+    otlp:
+      enabled: false   # push to OTel Collector / Grafana Alloy
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
+      protocol: grpc
+  signals:
+    metrics: true
+    traces: true
+    logs: true
+```
+
+Always-on metrics cover every pipeline stage — latency, token counts, retrieval scores, ingestion stats, and cost. Optional LLM-as-judge evaluators (faithfulness, answer relevance, completeness, coherence, context diversity) run off the response path at a configurable sample rate, each with its own model and embedder.
 
 ---
 

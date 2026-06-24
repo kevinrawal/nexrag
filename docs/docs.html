@@ -662,9 +662,35 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
 
 <span class="key">observability:</span>
   <span class="key">enabled:</span> <span class="val">true</span>
-  <span class="key">observer:</span> <span class="val">console</span>
-  <span class="key">log_level:</span> <span class="val">INFO</span>
-  <span class="key">format:</span> <span class="val">json</span></code></pre>
+  <span class="key">service_name:</span> <span class="val">my-rag-app</span>
+  <span class="key">signals:</span>
+    <span class="key">metrics:</span> <span class="val">true</span>
+    <span class="key">traces:</span>  <span class="val">true</span>
+    <span class="key">logs:</span>    <span class="val">true</span>
+  <span class="key">exporters:</span>
+    <span class="key">prometheus:</span>
+      <span class="key">enabled:</span> <span class="val">true</span>      <span class="yml-cmt"># pull → GET http://host:9464/metrics</span>
+      <span class="key">port:</span>    <span class="val">9464</span>
+    <span class="key">otlp:</span>
+      <span class="key">enabled:</span>   <span class="val">false</span>     <span class="yml-cmt"># push → OTel Collector / Grafana Alloy</span>
+      <span class="key">endpoint:</span>  <span class="val">${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}</span>
+      <span class="key">protocol:</span>  <span class="val">grpc</span>      <span class="yml-cmt"># grpc | http</span>
+      <span class="key">insecure:</span>  <span class="val">true</span>
+    <span class="key">console:</span>
+      <span class="key">enabled:</span> <span class="val">false</span>      <span class="yml-cmt"># debug exporter</span>
+  <span class="key">metrics:</span>
+    <span class="key">pricing:</span>             <span class="yml-cmt"># for nexrag.llm.cost_per_query_usd</span>
+      <span class="key">gpt-4o:</span>      <span class="val">{ input: 0.0025,  output: 0.01   }</span>
+      <span class="key">gpt-4o-mini:</span> <span class="val">{ input: 0.00015, output: 0.0006 }</span>
+  <span class="key">evaluations:</span>           <span class="yml-cmt"># optional LLM-as-judge tier — off by default</span>
+    <span class="key">enabled:</span>      <span class="val">false</span>
+    <span class="key">sample_rate:</span>  <span class="val">0.1</span>
+    <span class="key">faithfulness:</span>
+      <span class="key">enabled:</span> <span class="val">true</span>
+      <span class="key">llm:</span>
+        <span class="key">provider:</span> <span class="val">openai</span>
+        <span class="key">model:</span>    <span class="val">gpt-4o-mini</span>
+        <span class="key">api_key:</span>  <span class="val">${OPENAI_API_KEY}</span></code></pre>
 
         <div class="callout warn">
           <div class="callout-icon">!</div>
@@ -1037,7 +1063,7 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
     <span class="key">params:</span>
       <span class="key">model:</span>  <span class="val">all-MiniLM-L6-v2</span></code></pre>
 
-        <p class="doc-p">The same pattern works for every stage: <code>loader</code>, <code>chunker</code>, <code>sanitizer</code>, <code>vector_db</code>, <code>retriever</code>, <code>reranker</code>, <code>prompt_builder</code>, <code>llm</code>, and <code>observer</code>.</p>
+        <p class="doc-p">The same pattern works for every stage: <code>loader</code>, <code>chunker</code>, <code>sanitizer</code>, <code>vector_db</code>, <code>retriever</code>, <code>reranker</code>, <code>prompt_builder</code>, <code>llm</code>, <code>observer</code>, and <code>evaluator</code>. For a custom observer use the <code>class_path</code> key under <code>observability</code>.</p>
 
         <div id="custom-interfaces" data-sub-anchor="custom-interfaces" class="doc-h2">Available interfaces</div>
         <table class="doc-table">
@@ -1054,6 +1080,7 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
             <tr><td>BasePromptBuilder</td><td>nexrag.core.interfaces.prompt_builder</td></tr>
             <tr><td>BaseLLM</td><td>nexrag.core.interfaces.llm</td></tr>
             <tr><td>BaseObserver</td><td>nexrag.core.interfaces.observer</td></tr>
+            <tr><td>BaseEvaluator</td><td>nexrag.core.interfaces.evaluator</td></tr>
           </tbody>
         </table>
       </div>
@@ -1803,6 +1830,9 @@ result = pipeline.query(<span class="str">"What's our revenue?"</span>, auth_con
               <tr><td><span class="cl-cat">security</span></td><td>New guardrails pillar: a <code>BaseGuard</code> (verdict ALLOW · BLOCK · REDACT) composed into <code>ingestion</code> / <code>input</code> / <code>retrieved</code> / <code>output</code> chains under a top-level <code>guardrails:</code> block, each with a <code>policy: fail_open|fail_closed</code>. Shipped guards: <code>pii</code> (<code>nexrag[pii]</code>), <code>access_control</code>, <code>prompt_injection</code>, <code>groundedness</code>, <code>topic</code>, <code>model</code>. See <a href="https://github.com/kevinrawal/nexrag/blob/main/SECURITY.md">SECURITY.md</a>.</td></tr>
               <tr><td><span class="cl-cat">API</span></td><td>Facade methods <code>query</code> / <code>async_query</code> / <code>stream_query</code> / <code>astream_query</code> gain an optional <code>auth_context</code> param (per-request principal for the access-control guard). New <code>GuardrailError</code> / <code>GuardrailBlockedError</code>, exported from the top-level package.</td></tr>
               <tr><td><span class="cl-cat">observability</span></td><td>Every guard firing emits a <code>PipelineEvent(stage="guardrail", metadata={guard, verdict, latency_ms})</code>. When an output chain is configured, streaming buffers then guards before flushing.</td></tr>
+              <tr><td><span class="cl-cat">observability</span></td><td>Full <strong>OpenTelemetry</strong> observability — metrics, traces, and logs. Prometheus pull (<code>/metrics</code> scrape endpoint) and OTLP push (gRPC/HTTP to any OTel Collector or Grafana Alloy). Always-on metrics cover every pipeline stage: latency, token counts, retrieval scores, cost, embedding, and ingestion stats. Install <code>nexrag[observability]</code>. Configure under <code>observability.exporters</code>.</td></tr>
+              <tr><td><span class="cl-cat">observability</span></td><td><strong>LLM-as-judge evaluators</strong> — faithfulness, answer relevance, completeness, coherence, and context diversity. Runs off the response path (sampled, fire-and-forget). Each evaluator accepts an independent <code>llm</code> / <code>embedder</code> sub-config. Results emitted as <code>nexrag.eval.metric_value</code> OTel histogram. Opt-in under <code>observability.evaluations</code>.</td></tr>
+              <tr><td><span class="cl-cat">API</span></td><td><code>NexRAG</code> facade gains <code>evaluation_runner</code> attribute — access the <code>EvaluationRunner</code> / <code>NoOpEvaluationRunner</code> directly for custom dispatch or testing. New public module <code>nexrag.evaluators</code> exports all five concrete evaluator classes.</td></tr>
             </tbody>
           </table>
         </div>

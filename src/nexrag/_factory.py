@@ -38,6 +38,7 @@ from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.interfaces.sanitizer import BaseSanitizer
 from nexrag.core.interfaces.sparse_retriever import BaseSparseRetriever
 from nexrag.core.interfaces.vector_db import BaseVectorDB
+from nexrag.core.observability.runner import EvaluationRunner, NoOpEvaluationRunner
 from nexrag.core.pipeline.async_ingestion import AsyncIngestionPipeline
 from nexrag.core.pipeline.async_query import AsyncQueryPipeline
 from nexrag.core.pipeline.ingestion import IngestionPipeline
@@ -52,6 +53,7 @@ def wire(
     IngestionPipeline | AsyncIngestionPipeline,
     QueryPipeline | AsyncQueryPipeline,
     BaseRetriever,
+    EvaluationRunner | NoOpEvaluationRunner,
 ]:
     """
     Instantiate all components from config and wire them into pipelines.
@@ -59,8 +61,9 @@ def wire(
     When config.mode is "async", returns AsyncIngestionPipeline + AsyncQueryPipeline.
     When config.mode is "sync" (default), returns the standard sync pipelines.
 
-    Returns a (ingestion_pipeline, query_pipeline, retriever) tuple so the caller
-    (NexRAG.from_config) can store the retriever for post-ingest cache invalidation.
+    Returns a (ingestion_pipeline, query_pipeline, retriever, eval_runner) tuple so
+    the caller (NexRAG.from_config) can store retriever for cache invalidation and
+    eval_runner for post-query sampling.
     """
     observer = _build_observer(config.observability)
 
@@ -90,6 +93,9 @@ def wire(
     input_guards = _build_guard_chain(config.guardrails.input, observer, "input")
     retrieved_guards = _build_guard_chain(config.guardrails.retrieved, observer, "retrieved")
     output_guards = _build_guard_chain(config.guardrails.output, observer, "output")
+
+    # Evaluation runner (off-path, optional).
+    eval_runner = _build_evaluation_runner(config.observability, observer)
 
     ingestion_pipeline: IngestionPipeline | AsyncIngestionPipeline
     query_pipeline: QueryPipeline | AsyncQueryPipeline
@@ -122,6 +128,7 @@ def wire(
             input_guards=input_guards,
             retrieved_guards=retrieved_guards,
             output_guards=output_guards,
+            evaluation_runner=eval_runner,
         )
     else:
         ingestion_pipeline = IngestionPipeline(
@@ -150,9 +157,10 @@ def wire(
             input_guards=input_guards,
             retrieved_guards=retrieved_guards,
             output_guards=output_guards,
+            evaluation_runner=eval_runner,
         )
 
-    return ingestion_pipeline, query_pipeline, retriever
+    return ingestion_pipeline, query_pipeline, retriever, eval_runner
 
 
 # Component builders
@@ -656,18 +664,8 @@ def _build_observer(config: ObservabilityConfig) -> BaseObserver:
     if not config.enabled:
         return NoOpObserver()
 
-    if config.observer == "console":
-        from nexrag.observers.console import ConsoleObserver
-
-        return ConsoleObserver(log_level=config.log_level, format=config.format)
-
-    if config.observer == "custom":
-        if not config.class_path:
-            raise ConfigError(
-                "observability.class is required when observability.observer is 'custom'.",
-                stage="config",
-                component="observer",
-            )
+    # Custom observer escape hatch — takes priority over OTel when class_path is set.
+    if config.class_path:
         return resolve_class(
             config.class_path,
             BaseObserver,  # type: ignore[type-abstract]
@@ -675,10 +673,104 @@ def _build_observer(config: ObservabilityConfig) -> BaseObserver:
             stage="observer",
         )
 
-    raise ConfigError(
-        f"Unknown observer: {config.observer!r}. Supported: console, custom",
-        stage="config",
-        component="observer",
+    # Default: OpenTelemetry observer.
+    from nexrag.core.observability.pricing import build_pricing_table
+    from nexrag.observers.otel import OpenTelemetryObserver
+
+    pricing_table = build_pricing_table(dict(config.metrics.pricing))
+    return OpenTelemetryObserver(config=config, pricing_table=pricing_table)
+
+
+def _build_evaluation_runner(
+    config: ObservabilityConfig,
+    observer: BaseObserver,
+) -> EvaluationRunner | NoOpEvaluationRunner:
+    if not config.enabled or not config.evaluations.enabled:
+        return NoOpEvaluationRunner()
+
+    ev_cfg = config.evaluations
+    evaluators: list[tuple[object, float]] = []
+
+    def _rate(per_metric: float | None) -> float:
+        return per_metric if per_metric is not None else ev_cfg.sample_rate
+
+    if ev_cfg.faithfulness.enabled and ev_cfg.faithfulness.llm is not None:
+        from nexrag.evaluators.faithfulness import FaithfulnessEvaluator
+
+        llm = _build_llm(ev_cfg.faithfulness.llm)
+        evaluators.append(
+            (
+                FaithfulnessEvaluator(llm=llm, **ev_cfg.faithfulness.params),
+                _rate(ev_cfg.faithfulness.sample_rate),
+            )
+        )
+
+    if ev_cfg.answer_relevance.enabled and ev_cfg.answer_relevance.llm is not None:
+        from nexrag.evaluators.answer_relevance import AnswerRelevanceEvaluator
+
+        llm = _build_llm(ev_cfg.answer_relevance.llm)
+        embedder = (
+            _build_embedder(ev_cfg.answer_relevance.embedder)
+            if ev_cfg.answer_relevance.embedder is not None
+            else None
+        )
+        evaluators.append(
+            (
+                AnswerRelevanceEvaluator(
+                    llm=llm, embedder=embedder, **ev_cfg.answer_relevance.params
+                ),
+                _rate(ev_cfg.answer_relevance.sample_rate),
+            )
+        )
+
+    if ev_cfg.answer_completeness.enabled and ev_cfg.answer_completeness.llm is not None:
+        from nexrag.evaluators.answer_completeness import AnswerCompletenessEvaluator
+
+        llm = _build_llm(ev_cfg.answer_completeness.llm)
+        evaluators.append(
+            (
+                AnswerCompletenessEvaluator(llm=llm, **ev_cfg.answer_completeness.params),
+                _rate(ev_cfg.answer_completeness.sample_rate),
+            )
+        )
+
+    if ev_cfg.answer_coherence.enabled and ev_cfg.answer_coherence.llm is not None:
+        from nexrag.evaluators.answer_coherence import AnswerCoherenceEvaluator
+
+        llm = _build_llm(ev_cfg.answer_coherence.llm)
+        evaluators.append(
+            (
+                AnswerCoherenceEvaluator(llm=llm, **ev_cfg.answer_coherence.params),
+                _rate(ev_cfg.answer_coherence.sample_rate),
+            )
+        )
+
+    if ev_cfg.context_diversity.enabled and ev_cfg.context_diversity.embedder is not None:
+        from nexrag.evaluators.context_diversity import ContextDiversityEvaluator
+
+        embedder = _build_embedder(ev_cfg.context_diversity.embedder)
+        evaluators.append(
+            (
+                ContextDiversityEvaluator(embedder=embedder, **ev_cfg.context_diversity.params),
+                _rate(ev_cfg.context_diversity.sample_rate),
+            )
+        )
+
+    for custom_cfg in ev_cfg.custom:
+        if not custom_cfg.enabled:
+            continue
+        from nexrag.core.interfaces.evaluator import BaseEvaluator
+
+        ev = resolve_class(
+            custom_cfg.class_path, BaseEvaluator, custom_cfg.params, stage="evaluator"
+        )
+        evaluators.append((ev, _rate(custom_cfg.sample_rate)))  # type: ignore[arg-type]
+
+    return EvaluationRunner(
+        evaluators=evaluators,  # type: ignore[arg-type]
+        global_sample_rate=ev_cfg.sample_rate,
+        max_concurrency=ev_cfg.max_concurrency,
+        observer=observer,
     )
 
 

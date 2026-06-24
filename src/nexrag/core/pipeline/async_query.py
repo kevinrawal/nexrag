@@ -23,6 +23,7 @@ from nexrag.core.guards.apply import (
 )
 from nexrag.core.guards.chain import GuardChain
 from nexrag.core.interfaces.embedder import BaseEmbedder
+from nexrag.core.interfaces.evaluator import EvalSample
 from nexrag.core.interfaces.llm import BaseLLM
 from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
 from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
@@ -32,6 +33,7 @@ from nexrag.core.models.chunk import ScoredChunk
 from nexrag.core.models.event import PipelineEvent
 from nexrag.core.models.metrics import RunMetrics, TokenUsage
 from nexrag.core.models.result import PipelineResult, Source
+from nexrag.core.observability.runner import EvaluationRunner, NoOpEvaluationRunner
 from nexrag.exceptions import (
     EmbedderError,
     LLMError,
@@ -79,6 +81,7 @@ class AsyncQueryPipeline:
         input_guards: GuardChain | None = None,
         retrieved_guards: GuardChain | None = None,
         output_guards: GuardChain | None = None,
+        evaluation_runner: EvaluationRunner | NoOpEvaluationRunner | None = None,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
@@ -93,6 +96,9 @@ class AsyncQueryPipeline:
         self._input_guards = input_guards
         self._retrieved_guards = retrieved_guards
         self._output_guards = output_guards
+        self._evaluation_runner: EvaluationRunner | NoOpEvaluationRunner = (
+            evaluation_runner or NoOpEvaluationRunner()
+        )
 
     def run(
         self,
@@ -468,12 +474,22 @@ class AsyncQueryPipeline:
                 pipeline_id=pipeline_id,
                 cause=e,
             ) from e
+        scores = [sc.score for sc in chunks]
+        retrieval_meta: dict[str, Any] = {
+            "chunks_retrieved": len(chunks),
+            "collection": collection,
+        }
+        if scores:
+            retrieval_meta["top_score"] = scores[0]
+            retrieval_meta["avg_score"] = sum(scores) / len(scores)
+            retrieval_meta["bottom_score"] = scores[-1]
+            retrieval_meta["score_spread"] = scores[0] - scores[-1]
         await self._emit(
             pipeline_id,
             "retriever",
             "completed",
             t,
-            {"chunks_retrieved": len(chunks), "collection": collection},
+            retrieval_meta,
         )
         return chunks
 
@@ -527,7 +543,15 @@ class AsyncQueryPipeline:
                 cause=e,
             ) from e
         await self._emit(
-            pipeline_id, "prompt_builder", "completed", t, {"prompt_length": len(prompt)}
+            pipeline_id,
+            "prompt_builder",
+            "completed",
+            t,
+            {
+                "prompt_length": len(prompt),
+                "chunks_sent": len(chunks),
+                "estimated_tokens": len(prompt) // 4,
+            },
         )
         return prompt
 
@@ -622,7 +646,14 @@ class AsyncQueryPipeline:
             token_usage=token_usage,
             metrics=metrics,
         )
-
+        await self._evaluation_runner.async_dispatch(
+            EvalSample(
+                query=query,
+                answer=answer,
+                context=[sc.chunk.text for sc in chunks],
+                pipeline_id=pipeline_id,
+            )
+        )
         return result
 
     # Helpers
