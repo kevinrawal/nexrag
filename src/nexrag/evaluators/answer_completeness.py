@@ -56,7 +56,7 @@ class AnswerCompletenessEvaluator(BaseEvaluator):
         return ["answer.completeness_score"]
 
     def evaluate(self, sample: EvalSample) -> list[MetricValue]:
-        attrs = {"model": self._llm.model_name}
+        attrs: dict[str, str] = {"model": self._llm.model_name or ""}
         try:
             prompt = _COMPLETENESS_PROMPT.format(
                 query=sample.query[:2000],
@@ -93,4 +93,5 @@ def _parse_json(text: str) -> dict[str, Any]:
     end = text.rfind("}") + 1
     if start == -1 or end == 0:
         return {}
-    return json.loads(text[start:end])
+    result: dict[str, Any] = json.loads(text[start:end])
+    return result

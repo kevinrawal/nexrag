@@ -763,8 +763,8 @@ def _build_evaluation_runner(
 
         ev = resolve_class(
             custom_cfg.class_path, BaseEvaluator, custom_cfg.params, stage="evaluator"
-        )
-        evaluators.append((ev, _rate(custom_cfg.sample_rate)))  # type: ignore[arg-type]
+        )  # type: ignore[type-abstract]
+        evaluators.append((ev, _rate(custom_cfg.sample_rate)))
 
     return EvaluationRunner(
         evaluators=evaluators,  # type: ignore[arg-type]

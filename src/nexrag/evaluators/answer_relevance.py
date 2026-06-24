@@ -60,7 +60,7 @@ class AnswerRelevanceEvaluator(BaseEvaluator):
         return ["answer.relevance_score"]
 
     def evaluate(self, sample: EvalSample) -> list[MetricValue]:
-        attrs = {"model": self._llm.model_name}
+        attrs: dict[str, str] = {"model": self._llm.model_name or ""}
         try:
             raw, _ = self._llm.generate(_REVERSE_PROMPT.format(answer=sample.answer[:3000]))
             data = _parse_json(raw)
@@ -101,4 +101,5 @@ def _parse_json(text: str) -> dict[str, Any]:
     end = text.rfind("}") + 1
     if start == -1 or end == 0:
         return {}
-    return json.loads(text[start:end])
+    result: dict[str, Any] = json.loads(text[start:end])
+    return result

@@ -89,12 +89,9 @@ class FaithfulnessEvaluator(BaseEvaluator):
             ]
 
         total = len(claims)
+        model: str = self._llm.model_name or ""
         if total == 0:
-            return [
-                MetricValue(
-                    name="faithfulness.score", value=1.0, attributes={"model": self._llm.model_name}
-                )
-            ]
+            return [MetricValue(name="faithfulness.score", value=1.0, attributes={"model": model})]
 
         supported = sum(1 for c in claims if c.get("supported", False))
         hallucinated = total - supported
@@ -107,7 +104,7 @@ class FaithfulnessEvaluator(BaseEvaluator):
             and (c.get("critical", False) or bool(_CRITICAL_PATTERN.search(c.get("claim", ""))))
         )
 
-        attrs = {"model": self._llm.model_name}
+        attrs: dict[str, str] = {"model": model}
         return [
             MetricValue(name="faithfulness.score", value=supported / total, attributes=attrs),
             MetricValue(
@@ -127,4 +124,5 @@ def _parse_json(text: str) -> dict[str, Any]:
     end = text.rfind("}") + 1
     if start == -1 or end == 0:
         return {}
-    return json.loads(text[start:end])
+    result: dict[str, Any] = json.loads(text[start:end])
+    return result

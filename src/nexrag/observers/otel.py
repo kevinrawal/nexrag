@@ -345,7 +345,7 @@ class OpenTelemetryObserver(BaseObserver):
 
         try:
             from opentelemetry._logs import SeverityNumber
-            from opentelemetry.sdk._logs import LogRecord
+            from opentelemetry.sdk._logs import LogRecord  # type: ignore[attr-defined]
 
             severity_map = {
                 "started": SeverityNumber.DEBUG,

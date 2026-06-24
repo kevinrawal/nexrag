@@ -49,7 +49,7 @@ class AnswerCoherenceEvaluator(BaseEvaluator):
         return ["answer.coherence_score"]
 
     def evaluate(self, sample: EvalSample) -> list[MetricValue]:
-        attrs = {"model": self._llm.model_name}
+        attrs: dict[str, str] = {"model": self._llm.model_name or ""}
         try:
             prompt = _COHERENCE_PROMPT.format(answer=sample.answer[:4000])
             raw, _ = self._llm.generate(prompt)
@@ -82,4 +82,5 @@ def _parse_json(text: str) -> dict[str, Any]:
     end = text.rfind("}") + 1
     if start == -1 or end == 0:
         return {}
-    return json.loads(text[start:end])
+    result: dict[str, Any] = json.loads(text[start:end])
+    return result
