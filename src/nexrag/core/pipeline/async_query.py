@@ -30,6 +30,7 @@ from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
 from nexrag.core.interfaces.reranker import BaseReranker
 from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.models.chunk import ScoredChunk
+from nexrag.core.models.conversation import ConversationTurn
 from nexrag.core.models.event import PipelineEvent
 from nexrag.core.models.metrics import RunMetrics, TokenUsage
 from nexrag.core.models.result import PipelineResult, Source
@@ -100,6 +101,11 @@ class AsyncQueryPipeline:
             evaluation_runner or NoOpEvaluationRunner()
         )
 
+    @property
+    def default_collection(self) -> str:
+        """The collection this pipeline queries when none is specified per-call."""
+        return self._collection
+
     def run(
         self,
         query: str,
@@ -109,6 +115,7 @@ class AsyncQueryPipeline:
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
         auth_context: dict[str, Any] | None = None,
+        history: list[ConversationTurn] | None = None,
     ) -> PipelineResult:
         """
         Sync entry point — wraps arun() in asyncio.run() for non-async callers.
@@ -125,6 +132,7 @@ class AsyncQueryPipeline:
                 score_threshold=score_threshold,
                 metadata_filter=metadata_filter,
                 auth_context=auth_context,
+                history=history,
             )
         )
 
@@ -171,6 +179,7 @@ class AsyncQueryPipeline:
         score_threshold: float | None = None,
         metadata_filter: dict[str, Any] | None = None,
         auth_context: dict[str, Any] | None = None,
+        history: list[ConversationTurn] | None = None,
     ) -> PipelineResult:
         """
         Run the full async query pipeline for a user query.
@@ -182,6 +191,8 @@ class AsyncQueryPipeline:
             score_threshold: Override default score_threshold for this query.
             metadata_filter: Optional metadata filters applied during retrieval.
             auth_context:    Per-request principal info for the access-control guard.
+            history:         Optional prior conversation turns (already trimmed) to
+                             include in the prompt. Retrieval uses only the current query.
 
         Returns:
             PipelineResult with answer, sources, scores, and latency.
@@ -240,7 +251,7 @@ class AsyncQueryPipeline:
             )
 
             t = time.monotonic()
-            prompt = await self._run_prompt_builder(query, chunks, pipeline_id)
+            prompt = await self._run_prompt_builder(query, chunks, pipeline_id, history)
             stage_latencies["prompt_builder"] = (time.monotonic() - t) * 1000
 
             t = time.monotonic()
@@ -525,12 +536,16 @@ class AsyncQueryPipeline:
         return reranked
 
     async def _run_prompt_builder(
-        self, query: str, chunks: list[ScoredChunk], pipeline_id: str
+        self,
+        query: str,
+        chunks: list[ScoredChunk],
+        pipeline_id: str,
+        history: list[ConversationTurn] | None = None,
     ) -> str:
         await self._emit(pipeline_id, "prompt_builder", "started")
         t = time.monotonic()
         try:
-            prompt = self._prompt_builder.build(query, chunks)
+            prompt = self._prompt_builder.build(query, chunks, history)
         except Exception as e:
             await self._emit_failed(pipeline_id, "prompt_builder", t, e)
             if isinstance(e, PromptError):

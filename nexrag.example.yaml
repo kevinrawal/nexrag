@@ -101,6 +101,38 @@ query:
     context_format: numbered            # numbered | labeled | plain
     # class: myapp.prompts.MyPromptBuilder  # custom prompt builder
 
+  # Query-result cache: short-circuit repeated questions (no embed/retrieve/LLM).
+  # Disabled by default. The built-in memory cache is single-process and exact-match;
+  # for a shared cache across replicas, set backend: custom and point class at your own.
+  cache:
+    enabled: false
+    backend: memory                     # memory | custom
+    strategy: exact                     # exact (safe) | semantic (requires custom backend)
+    max_size: 1000                      # memory backend only
+    ttl_seconds: 300                    # 0 disables expiry
+    # class: myapp.caches.RedisQueryCache
+
+  # Multi-turn sessions: enable query_session(text, session_id) for chat-style use.
+  # Disabled by default. Retrieval always uses only the current query; prior turns
+  # are injected into the prompt and trimmed by the context strategy below.
+  session:
+    enabled: false
+    backend: memory                     # memory | custom
+    session_ttl_seconds: 1800
+    persist: true                       # false = never store history (privacy mode)
+    context_strategy:
+      type: window                      # window | token_budget | custom
+      max_history_turns: 6              # window: keep last N turns
+      max_tokens: 2000                  # token_budget: fit history within N tokens
+    # class: myapp.sessions.RedisSessionStore
+
+  # Client-side rate limit: reject excess queries before they reach the provider.
+  # Disabled by default. Raises LLMRateLimitError (with retry_after_seconds) when over.
+  rate_limit:
+    enabled: false
+    requests_per_minute: 60
+    burst: 10
+
 # ── Observability ───────────────────────────────────────────────────────────────
 # Requires: pip install nexrag[observability]
 # NexRAG emits metrics, traces, and logs via OpenTelemetry.

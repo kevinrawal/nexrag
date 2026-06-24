@@ -24,19 +24,30 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from nexrag.core.models.chunk import ScoredChunk
+from nexrag.core.models.conversation import ConversationTurn
 
 
 class BasePromptBuilder(ABC):
     """Abstract base class for all NexRAG prompt builders."""
 
     @abstractmethod
-    def build(self, query: str, chunks: list[ScoredChunk]) -> str:
+    def build(
+        self,
+        query: str,
+        chunks: list[ScoredChunk],
+        history: list[ConversationTurn] | None = None,
+    ) -> str:
         """
-        Assemble the final prompt string from a query and retrieved chunks.
+        Assemble the final prompt string from a query, retrieved chunks, and
+        (optionally) prior conversation turns.
 
         Args:
-            query:  The original user query string.
-            chunks: Retrieved chunks ordered by relevance (rank 1 = most relevant).
+            query:   The original user query string.
+            chunks:  Retrieved chunks ordered by relevance (rank 1 = most relevant).
+            history: Prior conversation turns for multi-turn sessions, oldest first,
+                     already trimmed by the active context strategy. None or empty
+                     for single-shot queries — implementations should treat both the
+                     same. Retrieval never uses history; it is for the prompt only.
 
         Returns:
             The complete prompt string to pass to the LLM.

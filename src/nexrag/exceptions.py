@@ -130,7 +130,24 @@ class LLMTimeoutError(LLMError):
 
 
 class LLMRateLimitError(LLMError):
-    """LLM provider rate limit hit."""
+    """
+    Rate limit hit.
+
+    Raised both when an upstream LLM provider returns a 429 and when NexRAG's own
+    client-side rate limiter (query.rate_limit) rejects a request before it reaches
+    the provider. ``retry_after_seconds`` is the suggested wait before retrying;
+    it is set by the client-side limiter and may be None for provider-originated errors.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after_seconds: float | None = None,
+        **kwargs: object,
+    ) -> None:
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(message, **kwargs)  # type: ignore[arg-type]
 
 
 # Guardrails

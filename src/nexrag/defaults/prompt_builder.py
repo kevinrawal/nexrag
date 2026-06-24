@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
 from nexrag.core.models.chunk import ScoredChunk
+from nexrag.core.models.conversation import ConversationTurn
 from nexrag.exceptions import PromptError
 
 _DEFAULT_SYSTEM = (
@@ -52,17 +53,28 @@ class DefaultPromptBuilder(BasePromptBuilder):
         self._system = system.strip()
         self._context_format = context_format
 
-    def build(self, query: str, chunks: list[ScoredChunk]) -> str:
+    def build(
+        self,
+        query: str,
+        chunks: list[ScoredChunk],
+        history: list[ConversationTurn] | None = None,
+    ) -> str:
         """
         Assemble the prompt.
 
+        When ``history`` is provided, a "Conversation so far:" block of labelled
+        turns is inserted between the system prompt and the retrieved context so the
+        LLM can resolve follow-up references ("the second one", "what about pricing?").
+
         Args:
-            query:  User's question.
-            chunks: Retrieved chunks in relevance order.
+            query:   User's question.
+            chunks:  Retrieved chunks in relevance order.
+            history: Prior conversation turns (oldest first), or None/empty for a
+                     single-shot query.
 
         Returns:
-            A string with system prompt, context block, and question.
-            Format: "<SYSTEM>\\n\\n<CONTEXT>\\n\\nQuestion: <query>"
+            A string of the form:
+            "<SYSTEM>\\n\\n---\\n\\n[Conversation so far: ...\\n\\n]<CONTEXT>\\n\\nQuestion: <query>"
 
         Raises:
             PromptError: If query is empty.
@@ -75,7 +87,11 @@ class DefaultPromptBuilder(BasePromptBuilder):
             )
 
         context_block = self._build_context(chunks)
-        user_part = f"{context_block}\n\nQuestion: {query.strip()}"
+        if history:
+            history_block = self._build_history(history)
+            user_part = f"{history_block}\n\n{context_block}\n\nQuestion: {query.strip()}"
+        else:
+            user_part = f"{context_block}\n\nQuestion: {query.strip()}"
 
         return f"{self._system}{self._SEPARATOR}{user_part}"
 
@@ -84,6 +100,14 @@ class DefaultPromptBuilder(BasePromptBuilder):
         return self._system
 
     # Private helpers
+
+    @staticmethod
+    def _build_history(history: list[ConversationTurn]) -> str:
+        lines = ["Conversation so far:"]
+        for turn in history:
+            label = "User" if turn.role == "user" else "Assistant"
+            lines.append(f"{label}: {turn.content.strip()}")
+        return "\n".join(lines)
 
     def _build_context(self, chunks: list[ScoredChunk]) -> str:
         if not chunks:

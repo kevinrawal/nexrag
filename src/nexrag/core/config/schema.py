@@ -287,6 +287,106 @@ class RerankerConfig(BaseModel):
         return self
 
 
+class CacheConfig(BaseModel):
+    """
+    Query-result cache config (facade-level).
+
+    backend: "memory" uses the built-in InMemoryQueryCache; "custom" resolves
+             ``class``. (For Redis/distributed caches, set backend to custom and
+             point ``class`` at your backend — an official Redis adapter is a
+             follow-up.)
+    strategy: "exact" matches identical queries+params (zero false positives, the
+              safe default). "semantic" returns cached answers for embedding-near
+              queries — opt-in and risky; the built-in memory backend does not
+              implement it, so it requires a custom ``class``.
+    """
+
+    enabled: bool = False
+    backend: Literal["memory", "custom"] = "memory"
+    strategy: Literal["exact", "semantic"] = "exact"
+    similarity_threshold: float = 0.97  # semantic only
+    max_size: int = 1000  # memory only
+    ttl_seconds: int = 300
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def validate_cache(self) -> CacheConfig:
+        if self.backend == "custom" and not self.class_path:
+            raise ValueError(
+                "query.cache.class is required when query.cache.backend is 'custom'. "
+                "Provide a dotted class path: myproject.caches.MyQueryCache"
+            )
+        if self.strategy == "semantic" and self.backend != "custom":
+            raise ValueError(
+                "query.cache.strategy 'semantic' requires backend 'custom' with a "
+                "class implementing semantic lookup. The built-in memory cache is "
+                "exact-match only (semantic caching can serve wrong answers for "
+                "similar-but-different questions)."
+            )
+        return self
+
+
+class ContextStrategyConfig(BaseModel):
+    """How much conversation history to send to the LLM each turn."""
+
+    type: Literal["window", "token_budget", "custom"] = "window"
+    max_history_turns: int = 6  # window
+    max_tokens: int = 2000  # token_budget
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def validate_context_strategy(self) -> ContextStrategyConfig:
+        if self.type == "custom" and not self.class_path:
+            raise ValueError(
+                "query.session.context_strategy.class is required when type is 'custom'. "
+                "Provide a dotted class path: myproject.context.MyStrategy"
+            )
+        return self
+
+
+class SessionConfig(BaseModel):
+    """
+    Multi-turn conversation session config (facade-level).
+
+    backend: "memory" uses InMemorySessionStore; "custom" resolves ``class``
+             (e.g. a Redis-backed store for shared/long-lived history).
+    persist: When false, history is never written beyond the request (privacy mode).
+    """
+
+    enabled: bool = False
+    backend: Literal["memory", "custom"] = "memory"
+    session_ttl_seconds: int = 1800
+    persist: bool = True
+    context_strategy: ContextStrategyConfig = Field(default_factory=ContextStrategyConfig)
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def validate_session(self) -> SessionConfig:
+        if self.backend == "custom" and not self.class_path:
+            raise ValueError(
+                "query.session.class is required when query.session.backend is 'custom'. "
+                "Provide a dotted class path: myproject.sessions.MySessionStore"
+            )
+        return self
+
+
+class RateLimitConfig(BaseModel):
+    """Client-side request throttle for the query path (facade-level)."""
+
+    enabled: bool = False
+    requests_per_minute: int = 60
+    burst: int = 10
+
+
 class QueryConfig(BaseModel):
     embedder: EmbedderConfig | Literal["inherit"] = "inherit"
     retriever: RetrieverConfig = Field(default_factory=RetrieverConfig)
@@ -294,6 +394,9 @@ class QueryConfig(BaseModel):
     prompt: PromptConfig = Field(default_factory=PromptConfig)
     llm: LLMConfig
     max_query_length: int = 8000
+    cache: CacheConfig = Field(default_factory=CacheConfig)
+    session: SessionConfig = Field(default_factory=SessionConfig)
+    rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
 
 
 # Observability

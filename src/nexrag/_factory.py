@@ -6,11 +6,14 @@ Not part of the public API. Import from nexrag, not from here.
 
 from __future__ import annotations
 
+import logging
 from typing import TypedDict
 
 from nexrag.core.config.resolver import resolve_class
 from nexrag.core.config.schema import (
+    CacheConfig,
     ChunkerConfig,
+    ContextStrategyConfig,
     EmbedderConfig,
     GuardChainConfig,
     GuardConfig,
@@ -19,23 +22,28 @@ from nexrag.core.config.schema import (
     NexRAGConfig,
     ObservabilityConfig,
     PromptConfig,
+    RateLimitConfig,
     RerankerConfig,
     RetrieverConfig,
     SanitizerConfig,
+    SessionConfig,
     SparseConfig,
     VectorDBConfig,
 )
 from nexrag.core.guards.chain import GuardChain
 from nexrag.core.interfaces.chunker import BaseChunker
+from nexrag.core.interfaces.context_strategy import BaseContextStrategy
 from nexrag.core.interfaces.embedder import BaseEmbedder
 from nexrag.core.interfaces.guard import BaseGuard
 from nexrag.core.interfaces.llm import BaseLLM
 from nexrag.core.interfaces.loader import BaseLoader
 from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
 from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
+from nexrag.core.interfaces.query_cache import BaseQueryCache
 from nexrag.core.interfaces.reranker import BaseReranker
 from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.interfaces.sanitizer import BaseSanitizer
+from nexrag.core.interfaces.session_store import BaseSessionStore
 from nexrag.core.interfaces.sparse_retriever import BaseSparseRetriever
 from nexrag.core.interfaces.vector_db import BaseVectorDB
 from nexrag.core.observability.runner import EvaluationRunner, NoOpEvaluationRunner
@@ -43,8 +51,12 @@ from nexrag.core.pipeline.async_ingestion import AsyncIngestionPipeline
 from nexrag.core.pipeline.async_query import AsyncQueryPipeline
 from nexrag.core.pipeline.ingestion import IngestionPipeline
 from nexrag.core.pipeline.query import QueryPipeline
+from nexrag.core.runtime import QueryRuntime
+from nexrag.defaults.rate_limiter import TokenBucketRateLimiter
 from nexrag.exceptions import ConfigError
 from nexrag.loaders.auto import AutoLoader
+
+_log = logging.getLogger("nexrag")
 
 
 def wire(
@@ -54,6 +66,7 @@ def wire(
     QueryPipeline | AsyncQueryPipeline,
     BaseRetriever,
     EvaluationRunner | NoOpEvaluationRunner,
+    QueryRuntime,
 ]:
     """
     Instantiate all components from config and wire them into pipelines.
@@ -61,9 +74,10 @@ def wire(
     When config.mode is "async", returns AsyncIngestionPipeline + AsyncQueryPipeline.
     When config.mode is "sync" (default), returns the standard sync pipelines.
 
-    Returns a (ingestion_pipeline, query_pipeline, retriever, eval_runner) tuple so
-    the caller (NexRAG.from_config) can store retriever for cache invalidation and
-    eval_runner for post-query sampling.
+    Returns a (ingestion_pipeline, query_pipeline, retriever, eval_runner, runtime)
+    tuple so the caller (NexRAG.from_config) can store retriever for cache
+    invalidation, eval_runner for post-query sampling, and the QueryRuntime
+    (cache / rate limiter / session store / context strategy) for the facade.
     """
     observer = _build_observer(config.observability)
 
@@ -96,6 +110,23 @@ def wire(
 
     # Evaluation runner (off-path, optional).
     eval_runner = _build_evaluation_runner(config.observability, observer)
+
+    # Facade-level query runtime (cache / rate limit / sessions). All optional.
+    runtime = _build_query_runtime(
+        config.query.cache, config.query.session, config.query.rate_limit
+    )
+
+    # Streaming + output guards are incompatible by design: output guards must see
+    # the full answer, so streaming buffers it and emits one chunk (no live tokens).
+    # Warn once at construction so this is never a silent surprise in production.
+    if output_guards is not None:
+        _log.warning(
+            "Output guards are enabled: stream_query()/astream_query() will buffer "
+            "the full response and emit it as a single chunk (output guards cannot "
+            "edit an already-sent token stream). Use query()/async_query() for the "
+            "same guaranteed guarding, or disable the output guard chain for true "
+            "live token streaming."
+        )
 
     ingestion_pipeline: IngestionPipeline | AsyncIngestionPipeline
     query_pipeline: QueryPipeline | AsyncQueryPipeline
@@ -160,7 +191,89 @@ def wire(
             evaluation_runner=eval_runner,
         )
 
-    return ingestion_pipeline, query_pipeline, retriever, eval_runner
+    return ingestion_pipeline, query_pipeline, retriever, eval_runner, runtime
+
+
+# Facade-level query runtime builders
+
+
+def _build_query_runtime(
+    cache_cfg: CacheConfig,
+    session_cfg: SessionConfig,
+    rate_cfg: RateLimitConfig,
+) -> QueryRuntime:
+    cache = _build_query_cache(cache_cfg) if cache_cfg.enabled else None
+    rate_limiter = (
+        TokenBucketRateLimiter(
+            requests_per_minute=rate_cfg.requests_per_minute, burst=rate_cfg.burst
+        )
+        if rate_cfg.enabled
+        else None
+    )
+    session_store = _build_session_store(session_cfg) if session_cfg.enabled else None
+    context_strategy = (
+        _build_context_strategy(session_cfg.context_strategy) if session_cfg.enabled else None
+    )
+    return QueryRuntime(
+        cache=cache,
+        rate_limiter=rate_limiter,
+        session_store=session_store,
+        context_strategy=context_strategy,
+    )
+
+
+def _build_query_cache(config: CacheConfig) -> BaseQueryCache:
+    if config.backend == "custom":
+        return resolve_class(
+            config.class_path,  # type: ignore[arg-type]
+            BaseQueryCache,  # type: ignore[type-abstract]
+            config.params,
+            stage="query_cache",
+        )
+
+    from nexrag.defaults.query_cache import InMemoryQueryCache
+
+    return InMemoryQueryCache(max_size=config.max_size, ttl_seconds=config.ttl_seconds)
+
+
+def _build_session_store(config: SessionConfig) -> BaseSessionStore:
+    if config.backend == "custom":
+        return resolve_class(
+            config.class_path,  # type: ignore[arg-type]
+            BaseSessionStore,  # type: ignore[type-abstract]
+            config.params,
+            stage="session_store",
+        )
+
+    from nexrag.defaults.session_store import InMemorySessionStore
+
+    return InMemorySessionStore(ttl_seconds=config.session_ttl_seconds, persist=config.persist)
+
+
+def _build_context_strategy(config: ContextStrategyConfig) -> BaseContextStrategy:
+    if config.type == "custom":
+        return resolve_class(
+            config.class_path,  # type: ignore[arg-type]
+            BaseContextStrategy,  # type: ignore[type-abstract]
+            config.params,
+            stage="context_strategy",
+        )
+
+    if config.type == "window":
+        from nexrag.defaults.context_strategy import WindowStrategy
+
+        return WindowStrategy(max_turns=config.max_history_turns)
+
+    if config.type == "token_budget":
+        from nexrag.defaults.context_strategy import TokenBudgetStrategy
+
+        return TokenBudgetStrategy(max_tokens=config.max_tokens)
+
+    raise ConfigError(
+        f"Unknown context strategy type: {config.type!r}. Supported: window, token_budget, custom",
+        stage="config",
+        component="context_strategy",
+    )
 
 
 # Component builders
@@ -365,7 +478,7 @@ def _build_loader(config: LoaderConfig) -> BaseLoader | None:
         return RawTextLoader(**config.params)
 
     raise ConfigError(
-        f"Unknown loader type: {config.type!r}. " f"Supported: auto, pdf, txt, custom",
+        f"Unknown loader type: {config.type!r}. Supported: auto, pdf, txt, custom",
         stage="config",
         component="loader",
     )
