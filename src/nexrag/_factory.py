@@ -762,8 +762,11 @@ def _build_evaluation_runner(
         from nexrag.core.interfaces.evaluator import BaseEvaluator
 
         ev = resolve_class(
-            custom_cfg.class_path, BaseEvaluator, custom_cfg.params, stage="evaluator"
-        )  # type: ignore[type-abstract]
+            custom_cfg.class_path,
+            BaseEvaluator,  # type: ignore[type-abstract]
+            custom_cfg.params,
+            stage="evaluator",
+        )
         evaluators.append((ev, _rate(custom_cfg.sample_rate)))
 
     return EvaluationRunner(

@@ -26,7 +26,7 @@ from nexrag.exceptions import (
 def test_version_exists():
     assert hasattr(nexrag, "__version__")
     assert isinstance(nexrag.__version__, str)
-    assert nexrag.__version__ == "0.4.0"
+    assert nexrag.__version__ == "0.5.0"
 
 
 def test_public_api_importable():

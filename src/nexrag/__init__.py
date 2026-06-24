@@ -28,7 +28,7 @@ from nexrag.core.pipeline.ingestion import IngestionPipeline, IngestionResult
 from nexrag.core.pipeline.query import QueryPipeline
 from nexrag.exceptions import GuardrailBlockedError, GuardrailError, NexRAGError
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __all__ = [
     "NexRAG",
     "PipelineResult",

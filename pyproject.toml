@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "nexrag"
-version = "0.4.0"
+version = "0.5.0"
 description = "Framework-agnostic RAG pipeline SDK. Plug in any component, swap any stage, configure everything in YAML"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -232,9 +232,21 @@ module = [
     "opentelemetry",
     "opentelemetry.*",
     "prometheus_client",
-    "grpc",
 ]
 ignore_missing_imports = true
+
+# The observer modules carry inline `# type: ignore`s (no-redef on the grpc/http
+# exporter fallback imports, attr-defined on LogRecord) that are only *needed*
+# when the `observability` extra is installed and mypy can actually resolve
+# opentelemetry. CI type-checks without extras, so ignore_missing_imports above
+# turns those imports into Any and the ignores read as unused. Don't flag them —
+# they are load-bearing in an installed environment.
+[[tool.mypy.overrides]]
+module = [
+    "nexrag.observers._otel_setup",
+    "nexrag.observers.otel",
+]
+warn_unused_ignores = false
 
 # Pytest
 
