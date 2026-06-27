@@ -565,7 +565,7 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
         <p class="doc-lead">NexRAG is configured entirely through a YAML file — by default <code>nexrag.yaml</code> in your working directory.</p>
 
         <div id="config-reference" data-sub-anchor="config-reference" style="scroll-margin-top:80px"></div>
-        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — full config reference (v0.4.0)</span>
+        <pre class="doc-code"><code><span class="yml-cmt"># nexrag.yaml — full config reference (v0.5.0)</span>
 
 <span class="key">mode:</span> <span class="val">sync</span>             <span class="yml-cmt"># sync (default) | async — enables native async pipeline</span>
 
@@ -639,6 +639,25 @@ pip install <span class="str">"nexrag[all]"</span></code></pre>
       <span class="val">the provided context. If unknown, say so.</span>
     <span class="yml-cmt"># context_format: numbered  # numbered | labeled | plain (how chunks are presented)</span>
     <span class="yml-cmt"># template: default          # default | qa | summarize | custom</span>
+  <span class="yml-cmt"># cache:                            # optional query-result cache — disabled by default</span>
+  <span class="yml-cmt">#   enabled: true</span>
+  <span class="yml-cmt">#   backend: memory                 # memory | custom</span>
+  <span class="yml-cmt">#   strategy: exact                 # exact | semantic (semantic requires a custom backend)</span>
+  <span class="yml-cmt">#   max_size: 1000                  # max cached entries (memory backend)</span>
+  <span class="yml-cmt">#   ttl_seconds: 300                # entry time-to-live</span>
+  <span class="yml-cmt"># session:                          # optional multi-turn conversation memory — disabled by default</span>
+  <span class="yml-cmt">#   enabled: true</span>
+  <span class="yml-cmt">#   backend: memory                 # memory | custom</span>
+  <span class="yml-cmt">#   session_ttl_seconds: 1800       # idle session lifetime</span>
+  <span class="yml-cmt">#   persist: true                   # false = privacy mode (history never stored)</span>
+  <span class="yml-cmt">#   context_strategy:               # how much history is injected into the prompt</span>
+  <span class="yml-cmt">#     type: window                  # window | token_budget | custom</span>
+  <span class="yml-cmt">#     max_history_turns: 6          # window: keep the last N turns</span>
+  <span class="yml-cmt">#     max_tokens: 2000              # token_budget: fit history within N tokens</span>
+  <span class="yml-cmt"># rate_limit:                       # optional client-side throttle — disabled by default</span>
+  <span class="yml-cmt">#   enabled: true</span>
+  <span class="yml-cmt">#   requests_per_minute: 60</span>
+  <span class="yml-cmt">#   burst: 10                       # allow short bursts up to this many requests</span>
 
 <span class="key">guardrails:</span>                  <span class="yml-cmt"># optional security layer — every chain is disabled by default</span>
   <span class="key">input:</span>                       <span class="yml-cmt"># runs on the user query</span>
@@ -1000,6 +1019,8 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)  <span cla
             <tr><td>async_query(text, **kwargs)</td><td>Non-blocking query — awaitable, returns PipelineResult</td></tr>
             <tr><td>astream_query(text, **kwargs)</td><td>Async generator — yields tokens then a final <code>RunMetrics</code>; use <code>isinstance(item, RunMetrics)</code> to separate</td></tr>
             <tr><td>async_ingest(data, loader?)</td><td>Non-blocking ingest — awaitable, returns IngestionResult</td></tr>
+            <tr><td>async_ingest_batch(sources, **kwargs)</td><td>Non-blocking batch ingest — embeds all chunks across the batch in one call; returns list[IngestionResult]</td></tr>
+            <tr><td>async_query_session(text, session_id, **kwargs)</td><td>Non-blocking multi-turn query — awaitable, returns PipelineResult (requires <code>query.session.enabled</code>)</td></tr>
             <tr><td>stream_query(text, **kwargs)</td><td>Sync generator — yields tokens then a final <code>RunMetrics</code>; no event loop needed</td></tr>
           </tbody>
         </table>
@@ -1121,7 +1142,8 @@ pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)</code></pr
 
 
 <span class="kw">class</span> <span class="fn">EchoLLM</span>(BaseLLM):
-    <span class="kw">def</span> <span class="fn">generate</span>(self, prompt: str) -> str: <span class="kw">return</span> <span class="str">"test answer"</span>
+    <span class="cmt"># generate() returns (answer, token_usage) — token_usage is None when unknown</span>
+    <span class="kw">def</span> <span class="fn">generate</span>(self, prompt: str): <span class="kw">return</span> (<span class="str">"test answer"</span>, <span class="kw">None</span>)
     <span class="kw">def</span> <span class="fn">stream</span>(self, prompt): <span class="kw">yield</span> <span class="str">"test answer"</span></code></pre>
       </div>
 
@@ -1199,6 +1221,21 @@ m = result.metrics
             <tr><td>parent_doc_id</td><td>str | None</td><td>Document ID of the source document this chunk came from</td></tr>
           </tbody>
         </table>
+
+        <div id="api-sessions" data-sub-anchor="api-sessions" class="doc-h2">Conversation sessions</div>
+        <p class="doc-p">Available when <code>query.session.enabled: true</code>. Each method takes a caller-supplied <code>session_id</code> (any opaque string — chat thread, socket id, etc.). History is injected into the prompt only; retrieval always uses the current query alone. Calling these with sessions disabled raises <code>RuntimeError</code>.</p>
+        <table class="doc-table">
+          <thead><tr><th>Method</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>query_session(text, session_id, **kwargs)</td><td>Run a query as the next turn in a conversation — returns PipelineResult and appends the turn to history</td></tr>
+            <tr><td>async_query_session(text, session_id, **kwargs)</td><td>Awaitable variant of <code>query_session()</code></td></tr>
+            <tr><td>clear_session(session_id)</td><td>Delete all stored history for a session (idempotent) — for "start over" and data-deletion requests</td></tr>
+            <tr><td>delete_turns(session_id, before=timestamp)</td><td>Delete turns older than a Unix timestamp; returns the number of turns removed</td></tr>
+          </tbody>
+        </table>
+        <pre class="doc-code"><code>r1 = pipeline.query_session(<span class="str">"What is NexRAG?"</span>, session_id=<span class="str">"chat-42"</span>)
+r2 = pipeline.query_session(<span class="str">"And who maintains it?"</span>, session_id=<span class="str">"chat-42"</span>)  <span class="cmt"># sees turn 1</span>
+pipeline.clear_session(<span class="str">"chat-42"</span>)  <span class="cmt"># forget the conversation</span></code></pre>
       </div>
 
       <!-- ══════════════════════════════════════ -->
@@ -1803,9 +1840,10 @@ result = pipeline.query(<span class="str">"What's our revenue?"</span>, auth_con
 
         <!-- version switcher -->
         <div class="cl-ver-bar">
-          <button class="cl-vtab active" data-cl="v040">
-            v0.4.0 <span class="cl-vtab-latest">latest</span>
+          <button class="cl-vtab active" data-cl="v050">
+            v0.5.0 <span class="cl-vtab-latest">latest</span>
           </button>
+          <button class="cl-vtab" data-cl="v040">v0.4.0</button>
           <button class="cl-vtab" data-cl="v033">v0.3.3</button>
           <button class="cl-vtab" data-cl="v032">v0.3.2</button>
           <button class="cl-vtab" data-cl="v031">v0.3.1</button>
@@ -1814,8 +1852,28 @@ result = pipeline.query(<span class="str">"What's our revenue?"</span>, auth_con
           <button class="cl-vtab" data-cl="v010">v0.1.0</button>
         </div>
 
+        <!-- v0.5.0 -->
+        <div class="cl-panel active" id="cl-v050">
+          <div class="cl-meta">
+            <span class="cl-ver-name">v0.5.0</span>
+            <span class="cl-date">2026-06-26</span>
+          </div>
+          <p class="cl-summary">Stateful query layer: pluggable <strong>query-result cache</strong>, <strong>multi-turn sessions</strong> with context strategies, a client-side <strong>rate limiter</strong>, and truly batched embedding for <code>ingest_batch()</code>.</p>
+          <table class="cl-table">
+            <tbody>
+              <tr><td><span class="cl-cat">performance</span></td><td><code>ingest_batch()</code> now embeds <strong>every chunk across the whole batch in a single <code>embed()</code> call</strong> (one provider round-trip instead of one per source); fingerprint checked once, idempotency and writes stay per source. New facade method <code>async_ingest_batch()</code>. Return type unchanged (<code>list[IngestionResult]</code>); results share the batch <code>pipeline_id</code> and report batch latency.</td></tr>
+              <tr><td><span class="cl-cat">config</span></td><td>New <code>query.cache</code> block — pluggable query-result cache. <code>BaseQueryCache</code> interface + default <code>InMemoryQueryCache</code> (exact-match, LRU + TTL, per-collection invalidation after ingest). Options: <code>enabled</code>, <code>backend</code> (memory|custom), <code>strategy</code> (exact|semantic), <code>max_size</code>, <code>ttl_seconds</code>. Semantic strategy requires a custom backend; streaming responses are not cached.</td></tr>
+              <tr><td><span class="cl-cat">API</span></td><td>New <code>query.session</code> block + facade methods <code>query_session()</code>, <code>async_query_session()</code>, <code>clear_session()</code>, <code>delete_turns(before=...)</code>. <code>BaseSessionStore</code> interface + default <code>InMemorySessionStore</code> (TTL, <code>persist: false</code> privacy mode). Retrieval always uses the current query only; history is injected into the prompt.</td></tr>
+              <tr><td><span class="cl-cat">config</span></td><td>New <code>query.session.context_strategy</code> — decides how much history to send each turn. <code>BaseContextStrategy</code> interface + <code>WindowStrategy</code> (last N turns) and <code>TokenBudgetStrategy</code> (fit a token budget). Options: <code>type</code> (window|token_budget|custom), <code>max_history_turns</code>, <code>max_tokens</code>.</td></tr>
+              <tr><td><span class="cl-cat">config</span></td><td>New <code>query.rate_limit</code> block — client-side <code>TokenBucketRateLimiter</code> applied before every query entry point. Raises <code>LLMRateLimitError</code> with a new <code>retry_after_seconds</code> attribute. Options: <code>enabled</code>, <code>requests_per_minute</code>, <code>burst</code>.</td></tr>
+              <tr><td><span class="cl-cat">breaking</span></td><td><code>BasePromptBuilder.build()</code> gained an optional <code>history</code> parameter (<code>build(query, chunks, history=None)</code>); <code>DefaultPromptBuilder</code> renders a "Conversation so far" block when history is present. Custom prompt builders must accept <code>history=None</code>.</td></tr>
+              <tr><td><span class="cl-cat">observability</span></td><td>When an output guard chain is enabled, <code>from_config()</code> logs a startup warning that <code>stream_query()</code> / <code>astream_query()</code> buffer the full response (output guards cannot edit an already-sent stream). Behaviour unchanged — the warning makes the trade-off explicit.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <!-- v0.4.0 -->
-        <div class="cl-panel active" id="cl-v040">
+        <div class="cl-panel" id="cl-v040">
           <div class="cl-meta">
             <span class="cl-ver-name">v0.4.0</span>
             <span class="cl-date">2026-06-15</span>
@@ -1915,7 +1973,7 @@ result = pipeline.query(<span class="str">"What's our revenue?"</span>, auth_con
               <tr><td><span class="cl-cat">loaders</span></td><td><code>PDFLoader</code> extracts up to 8 metadata fields (<code>title</code>, <code>author</code>, <code>subject</code>, <code>keywords</code>, <code>creator</code>, <code>producer</code>, <code>creation_date</code>, <code>modification_date</code>). Configurable via <code>loader.include_metadata</code> and <code>loader.metadata_fields</code>.</td></tr>
               <tr><td><span class="cl-cat">config</span></td><td><code>VectorDBConfig</code> gains <code>upsert_batch_size</code>, <code>query_batch_size</code>, <code>max_retries</code>, <code>retry_delay</code> for ChromaDB connection and batch tuning.</td></tr>
               <tr><td><span class="cl-cat">config</span></td><td>Chunker <code>strategy</code> reduced to <code>recursive | custom</code>. Values <code>fixed</code>, <code>sentence</code>, <code>paragraph</code> removed — they were never implemented.</td></tr>
-              <tr><td><span class="cl-cat">breaking</span></td><td>Loaders are now converter-only: <code>PDFLoader.load()</code> accepts <code>bytes</code>; <code>RawTextLoader.load()</code> accepts <code>str</code>. Passing a file path directly to a loader now raises <code>LoaderError</code> — use <code>pipeline.ingest(path)</code> instead.</td></tr>
+              <tr><td><span class="cl-cat">breaking</span></td><td>Loaders are now converter-only: <code>PDFLoader.load()</code> accepts <code>bytes</code>; <code>RawTextLoader.load()</code> accepts <code>str</code>. Read the file yourself first (e.g. <code>Path("doc.pdf").read_bytes()</code>) and pass the <strong>content</strong> to <code>pipeline.ingest()</code> — file paths are no longer accepted.</td></tr>
               <tr><td><span class="cl-cat">fixed</span></td><td>Six <code>ChromaDBAdapter</code> bugs resolved: <code>None</code> metadata crash, missing struct fields on round-trip, filter operator always <code>$eq</code>, missing batch upsert, no connection retry, unimplemented <code>list_collections()</code>.</td></tr>
             </tbody>
           </table>
@@ -1964,7 +2022,7 @@ result = pipeline.query(<span class="str">"What's our revenue?"</span>, auth_con
 
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.4.0</div>
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.5.0</div>
       <div class="footer-links">
         <a href="index.html">Home</a>
         <a href="story.html">Story</a>

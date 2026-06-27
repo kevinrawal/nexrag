@@ -330,9 +330,9 @@
 
           <div class="story-section" id="roadmap">
             <div class="story-section-num">05 — What's coming</div>
-            <h2 class="story-section-title">v0.4.0 adds breadth and security. v1 is the platform.</h2>
+            <h2 class="story-section-title">v0.5.0 makes the query layer stateful. v1 is the platform.</h2>
             <p>
-              v0.4.0 adds the Gemini and Pinecone providers, a production chunking suite (token, sentence-window, markdown, code, semantic, proposition) with independently-resolved nested component configs, a pluggable <strong>guardrails</strong> security layer, and <strong>full OpenTelemetry observability</strong> — metrics, traces, and logs with Prometheus pull, OTLP push, and LLM-as-judge evaluators — on top of the hybrid retrieval, reranking, and async streaming shipped earlier. What comes next is more remote vector stores and more loaders.
+              v0.5.0 adds a pluggable <strong>query-result cache</strong>, <strong>multi-turn sessions</strong> with window / token-budget context strategies, and a client-side <strong>rate limiter</strong> — plus truly batched embedding for <code>ingest_batch()</code>. That builds on v0.4.0's Gemini and Pinecone providers, the production chunking suite (token, sentence-window, markdown, code, semantic, proposition) with independently-resolved nested component configs, the pluggable <strong>guardrails</strong> security layer, and <strong>full OpenTelemetry observability</strong> — metrics, traces, and logs with Prometheus pull, OTLP push, and LLM-as-judge evaluators — on top of the hybrid retrieval, reranking, and async streaming shipped earlier. What comes next is more remote vector stores and more loaders.
             </p>
             <div class="roadmap">
               <div class="roadmap-item">
@@ -368,6 +368,18 @@
                 <div class="roadmap-text"><strong>Guardrails.</strong> A pluggable security layer — ingestion / input / retrieved / output guard chains with ALLOW · BLOCK · REDACT verdicts and fail-open/fail-closed policies. PII, access control, prompt-injection, groundedness, topic, and model guards. See <a href="https://github.com/kevinrawal/nexrag/blob/main/SECURITY.md">SECURITY.md</a>.</div>
               </div>
               <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>Multi-turn sessions.</strong> Conversation memory via <code>query_session()</code> with a caller-supplied <code>session_id</code>. Pluggable <code>BaseSessionStore</code> (in-memory default, TTL, <code>persist: false</code> privacy mode) and window / token-budget context strategies. History is injected into the prompt; retrieval always uses the current query.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>Query-result cache.</strong> Pluggable <code>BaseQueryCache</code> with an exact-match in-memory default (LRU + TTL) and per-collection invalidation after ingest. Configure under <code>query.cache</code>.</div>
+              </div>
+              <div class="roadmap-item">
+                <span class="roadmap-tag done">shipped</span>
+                <div class="roadmap-text"><strong>Client-side rate limiting.</strong> A token-bucket throttle applied before every query entry point, raising <code>LLMRateLimitError(retry_after_seconds=...)</code>. Configure under <code>query.rate_limit</code>.</div>
+              </div>
+              <div class="roadmap-item">
                 <span class="roadmap-tag soon">v1</span>
                 <div class="roadmap-text"><strong>More remote vector databases.</strong> Weaviate, Qdrant — for teams running at scale. Pinecone serverless and ChromaDB server mode are already available.</div>
               </div>
@@ -389,7 +401,7 @@
 
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.4.0</div>
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.5.0</div>
       <div class="footer-links">
         <a href="index.html">Home</a>
         <a href="showcase.html">Showcase</a>

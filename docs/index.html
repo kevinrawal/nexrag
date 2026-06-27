@@ -230,7 +230,7 @@
         <div class="hero-content">
           <div class="hero-badge">
             <span class="badge">
-              <span class="badge-dot"></span>v0.4.0 — now on PyPI
+              <span class="badge-dot"></span>v0.5.0 — now on PyPI
             </span>
           </div>
           <h1 class="hero-name">NexRAG</h1>
@@ -258,12 +258,13 @@
               <div class="win-dots"><span></span><span></span><span></span></div>
               <span class="win-name">quickstart.py</span>
             </div>
-<pre class="code-block"><code><span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
+<pre class="code-block"><code><span class="kw">from</span> pathlib <span class="kw">import</span> Path
+<span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
 
 pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
 
-<span class="cmt"># Ingest your documents</span>
-result = pipeline.ingest(<span class="str">"docs/manual.pdf"</span>)
+<span class="cmt"># Ingest your documents — pass file *content*, not a path</span>
+result = pipeline.ingest(Path(<span class="str">"docs/manual.pdf"</span>).read_bytes())
 <span class="fn">print</span>(<span class="str">f"Wrote {result.chunks_written} chunks"</span>)
 <span class="fn">print</span>(<span class="str">f"Done in {result.latency_ms:.0f}ms"</span>)
 
@@ -506,14 +507,16 @@ result = pipeline.query(
           <button class="ctab" data-tab="custom">Custom component</button>
         </div>
         <div class="ctab-panel active" id="tab-py">
-<pre class="code-block"><code><span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
+<pre class="code-block"><code><span class="kw">from</span> pathlib <span class="kw">import</span> Path
+<span class="kw">from</span> nexrag <span class="kw">import</span> NexRAG
 <span class="kw">from</span> dotenv <span class="kw">import</span> load_dotenv
 
 load_dotenv()
 pipeline = NexRAG.from_config(<span class="str">"nexrag.yaml"</span>)
 
-<span class="cmt"># ── Ingest ──────────────────────────────────────────────────</span>
-result = pipeline.ingest(<span class="str">"contracts/agreement.pdf"</span>)
+<span class="cmt"># ── Ingest (loaders are converter-only: pass bytes/str, not a path) ──</span>
+pdf_bytes = Path(<span class="str">"contracts/agreement.pdf"</span>).read_bytes()
+result = pipeline.ingest(pdf_bytes, metadata={<span class="str">"source"</span>: <span class="str">"agreement.pdf"</span>})
 <span class="fn">print</span>(<span class="str">f"Ingested {result.documents_loaded} doc, {result.chunks_written} chunks"</span>)
 <span class="cmt"># → Ingested 1 doc, 48 chunks in 1240.3 ms</span>
 
@@ -670,7 +673,6 @@ app = FastAPI()
               <tr><td>Vector DBs</td><td>Weaviate, Qdrant</td></tr>
               <tr><td>LLMs</td><td>Mistral</td></tr>
               <tr><td>Loaders</td><td>Word (.docx), HTML, Excel</td></tr>
-              <tr><td>Observability</td><td>OpenTelemetry, Prometheus</td></tr>
             </tbody>
           </table>
         </div>
@@ -697,7 +699,7 @@ app = FastAPI()
   <!-- ── Footer ────────────────────────────────── -->
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.4.0</div>
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.5.0</div>
       <div class="footer-links">
         <a href="story.html">Story</a>
         <a href="showcase.html">Showcase</a>

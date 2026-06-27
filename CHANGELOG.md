@@ -7,6 +7,43 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.5.0] - 2026-06-26
+
+Stateful query layer — a pluggable query-result cache, multi-turn sessions with context
+strategies, a client-side rate limiter, and truly batched embedding for `ingest_batch()`.
+
+### Added
+
+- **Query-result cache (`query.cache`).** New `BaseQueryCache` interface + default `InMemoryQueryCache` (exact-match, LRU + TTL, per-collection version invalidation). The facade checks the cache before `query()` / `async_query()` and invalidates a collection's entries after any ingest into it. Config: `enabled`, `backend` (`memory` | `custom`), `strategy` (`exact` | `semantic`), `max_size`, `ttl_seconds`, `class`. Semantic strategy requires a custom backend (the built-in cache is exact-only, by design); streaming responses are not cached.
+- **Multi-turn sessions (`query.session`).** New `BaseSessionStore` interface + default `InMemorySessionStore` (TTL, `persist: false` privacy mode). New facade methods `query_session()`, `async_query_session()`, `clear_session()`, and `delete_turns(session_id, before=...)`. Retrieval always uses only the current query; conversation history is injected into the prompt.
+- **Context-management strategy (`query.session.context_strategy`).** New `BaseContextStrategy` interface + `WindowStrategy` (last N turns) and `TokenBudgetStrategy` (fit a token budget) defaults. Config: `type` (`window` | `token_budget` | `custom`), `max_history_turns`, `max_tokens`, `class`.
+- **Client-side rate limiter (`query.rate_limit`).** New `TokenBucketRateLimiter` applied at the facade before every query entry point. Config: `enabled`, `requests_per_minute`, `burst`. `LLMRateLimitError` gained a `retry_after_seconds` attribute (`None` for provider-originated 429s).
+- **`async_ingest_batch()`** facade method.
+
+### Changed
+
+- **`ingest_batch()` now truly batches embeddings.** Every chunk across the whole batch is embedded in a single `embed()` call (one provider round-trip instead of one per source); the fingerprint is checked once, while idempotency and writes stay per source. Return type is unchanged (`list[IngestionResult]`); results now share the batch `pipeline_id` and report the batch latency.
+- **Startup warning for streaming + output guards.** When an output guard chain is enabled, `from_config()` logs a warning that `stream_query()` / `astream_query()` buffer the full response (output guards cannot edit an already-sent stream). Behaviour is unchanged — the warning makes the trade-off explicit.
+- **(Breaking) `BasePromptBuilder.build()` gained an optional `history` parameter** (`build(query, chunks, history=None)`); `DefaultPromptBuilder` renders a "Conversation so far" block when history is present. Custom prompt builders must accept `history=None`.
+
+---
+
+## [0.4.0] - 2026-06-15
+
+Breadth and security — Gemini and Pinecone providers, a production chunking suite, a
+pluggable guardrails layer, and full OpenTelemetry observability.
+
+### Added
+
+- **Gemini provider.** `GeminiLLM` (`llm.provider: gemini`) and `GeminiEmbedder` (`embedder.provider: gemini`) via the unified `google-genai` SDK. Install `nexrag[gemini]`. Default models `gemini-2.5-flash` / `gemini-embedding-001`.
+- **Pinecone vector store.** `PineconeVectorDB` (`vector_db.provider: pinecone`) — each NexRAG collection maps to a Pinecone namespace in one serverless index, created lazily on first upsert. Install `nexrag[pinecone]`.
+- **Production chunking suite.** New strategies: `token` (tiktoken), `sentence`, `sentence_window`, `markdown` (header path), `code` (tree-sitter), `semantic`, `proposition`; `fixed` is now wired. New extras `nexrag[tiktoken]`, `nexrag[code]`. `ChunkerConfig` gains nested `embedder` / `llm` sub-configs resolved **independently** of the pipeline's main models — `semantic` requires `chunker.embedder`, `proposition` requires `chunker.llm`.
+- **Guardrails security layer.** A `BaseGuard` (verdict `ALLOW` · `BLOCK` · `REDACT`) composed into `ingestion` / `input` / `retrieved` / `output` chains under a top-level `guardrails:` block, each with a `policy: fail_open | fail_closed`. Shipped guards: `pii` (`nexrag[pii]`), `access_control`, `prompt_injection`, `groundedness`, `topic`, `model`. See [SECURITY.md](SECURITY.md). Facade query methods gain an optional `auth_context` param; new `GuardrailError` / `GuardrailBlockedError` exported from the top-level package.
+- **OpenTelemetry observability.** Full metrics, traces, and logs. Prometheus pull (`/metrics` scrape endpoint) and OTLP push (gRPC/HTTP to any OTel Collector or Grafana Alloy). Always-on metrics cover every pipeline stage: latency, token counts, retrieval scores, cost, embedding, and ingestion stats. Install `nexrag[observability]`. Configure under `observability.exporters`.
+- **LLM-as-judge evaluators.** Faithfulness, answer relevance, completeness, coherence, and context diversity — run off the response path (sampled, fire-and-forget). Each evaluator takes an independent `llm` / `embedder` sub-config; results emitted as the `nexrag.eval.metric_value` OTel histogram. Opt-in under `observability.evaluations`. New public module `nexrag.evaluators`; the `NexRAG` facade gains an `evaluation_runner` attribute.
+
+---
+
 ## [0.3.3] - 2026-06-12
 
 Hardening pass from an external code review — idempotency correctness, observability

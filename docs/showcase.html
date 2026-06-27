@@ -248,7 +248,7 @@
         <p class="sc-hero-sub">
           Projects from the community. If you've built something with NexRAG, open a GitHub issue to get it listed here.
         </p>
-        <div class="sc-hero-meta">v0.3.0 · public release · May 2026</div>
+        <div class="sc-hero-meta">v0.5.0 · June 2026</div>
       </div>
     </div>
   </section>
@@ -259,10 +259,26 @@
 
       <div class="placeholder-notice fade-up">
         <span>note</span>
-        NexRAG launched May 2026. The cards below are illustrative examples of what you can build — not real submissions yet. Be the first.
+        NexRAG launched May 2026. The first real project is featured below; the remaining cards are illustrative examples of what you can build. Submit yours to be featured.
       </div>
 
       <div class="sc-grid">
+
+        <!-- Real project — NexRAG Policy Bot -->
+        <div class="sc-card fade-up">
+          <div class="sc-tag">Policy Chatbot</div>
+          <div class="sc-title">NexRAG Policy Bot</div>
+          <p class="sc-desc">A Streamlit chatbot that answers questions about company policy, grounded in your Markdown/text policy docs. Streams answers token-by-token via <code>stream_query()</code>, ships OpenTelemetry + Prometheus observability and LLM-as-judge evaluation, and runs fully local on Ollama — every pipeline decision lives in YAML, with no custom RAG code.</p>
+          <div class="sc-meta">
+            <div class="sc-stack">
+              <span class="sc-chip">Ollama</span>
+              <span class="sc-chip">ChromaDB</span>
+              <span class="sc-chip">Streamlit</span>
+              <span class="sc-chip">Streaming</span>
+            </div>
+            <a href="https://github.com/kevinrawal/nexrag-policy-bot" target="_blank" class="sc-author" style="color:var(--text-3);text-decoration:none;transition:color 0.15s" onmouseover="this.style.color='var(--text-2)'" onmouseout="this.style.color='var(--text-3)'">kevinrawal/nexrag-policy-bot ↗</a>
+          </div>
+        </div>
 
         <!-- Card 1 -->
         <div class="sc-card sc-placeholder fade-up">
@@ -405,7 +421,7 @@
 
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.4.0</div>
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.5.0</div>
       <div class="footer-links">
         <a href="index.html">Home</a>
         <a href="story.html">Story</a>

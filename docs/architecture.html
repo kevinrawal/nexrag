@@ -598,7 +598,7 @@
 
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.3.0</div>
+      <div class="footer-logo"><span class="logo-dot">●</span> NexRAG v0.5.0</div>
       <div class="footer-links">
         <a href="index.html">Home</a>
         <a href="docs.html">Docs</a>
@@ -632,7 +632,7 @@
     const stages = {
       loader: {
         label: 'Loader',
-        desc: 'Converts a raw source (file path, bytes, or string) into a list of Document objects. Since v0.3.0, loaders are converter-only — NexRAG handles I/O before calling the loader.',
+        desc: 'Converts raw content (bytes or str) into a list of Document objects. Since v0.3.0, loaders are converter-only — you read the file and pass its content; NexRAG never opens files for you.',
         input: 'bytes | str',
         output: 'list[Document]',
         iface: 'BaseLoader',
@@ -656,7 +656,7 @@
         input: 'list[Document]',
         output: 'list[Chunk]',
         iface: 'BaseChunker',
-        providers: ['recursive', 'custom'],
+        providers: ['recursive', 'fixed', 'token', 'sentence', 'sentence_window', 'markdown', 'code', 'semantic', 'proposition', 'custom'],
         yaml: `ingestion:\n  chunker:\n    strategy: recursive\n    chunk_size: 512\n    chunk_overlap: 64\n    min_chunk_size: 50`,
         href: 'docs.html#chunkers'
       },
@@ -666,7 +666,7 @@
         input: 'list[str]',
         output: 'list[list[float]]',
         iface: 'BaseEmbedder',
-        providers: ['openai', 'huggingface', 'ollama', 'custom'],
+        providers: ['openai', 'gemini', 'huggingface', 'ollama', 'custom'],
         yaml: `ingestion:\n  embedder:\n    provider: openai\n    model: text-embedding-3-small\n    api_key: \${OPENAI_API_KEY}\n    batch_size: 100`,
         href: 'docs.html#embedders'
       },
@@ -686,7 +686,7 @@
         input: 'list[EmbeddedChunk]  /  query vector',
         output: 'written  /  list[ScoredChunk]',
         iface: 'BaseVectorDB',
-        providers: ['chroma (persistent)', 'chroma (memory)', 'chroma (server)', 'custom'],
+        providers: ['chroma (persistent)', 'chroma (memory)', 'chroma (server)', 'pinecone', 'custom'],
         yaml: `vector_db:\n  provider: chroma\n  default_collection: documents\n  upsert_batch_size: 500\n  max_retries: 3`,
         href: 'docs.html#vector-dbs'
       },
@@ -736,7 +736,7 @@
         input: 'str (prompt)',
         output: 'str (answer)',
         iface: 'BaseLLM',
-        providers: ['openai', 'anthropic', 'ollama', 'custom'],
+        providers: ['openai', 'anthropic', 'gemini', 'ollama', 'custom'],
         yaml: `query:\n  llm:\n    provider: openai\n    model: gpt-4o\n    api_key: \${OPENAI_API_KEY}\n    temperature: 0.2\n    max_tokens: 1024`,
         href: 'docs.html#llms'
       },

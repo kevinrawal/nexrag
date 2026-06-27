@@ -38,19 +38,23 @@ cp nexrag.example.yaml nexrag.yaml   # edit to taste
 ```
 
 ```python
+from pathlib import Path
+
 from nexrag import NexRAG, RunMetrics
 
 pipeline = NexRAG.from_config("nexrag.yaml")
 
-# Ingest a PDF
-result = pipeline.ingest("contracts/agreement.pdf")
+# Ingest a PDF. Loaders are converter-only: pass the file *content* (bytes for
+# PDF, str for text), not a path — NexRAG never opens files for you.
+pdf_bytes = Path("contracts/agreement.pdf").read_bytes()
+result = pipeline.ingest(pdf_bytes, metadata={"source": "agreement.pdf"})
 print(f"Ingested {result.documents_loaded} doc, {result.chunks_produced} chunks")
 
 # Query (blocking)
 result = pipeline.query("What are the termination clauses?")
 print(result.answer)
 for source in result.sources:
-    print(f"  [{source.rank}] score={source.score:.3f}  {source.chunk.metadata.get('source')}")
+    print(f"  [{source.rank}] score={source.score:.3f}  {source.source}")
 
 # Streaming — tokens arrive live; RunMetrics is the final item
 metrics = None
@@ -109,8 +113,6 @@ pip install "nexrag[huggingface]"    # HuggingFace embedder
 
 # Document loaders
 pip install "nexrag[pdf]"            # PDFLoader (pypdf)
-pip install "nexrag[word]"           # Word documents (python-docx)
-pip install "nexrag[html]"           # HTML pages (beautifulsoup4)
 
 # Retrieval extras
 pip install "nexrag[bm25]"           # BM25Retriever keyword search (rank-bm25)
@@ -151,8 +153,11 @@ NexRAG has two independent pipelines:
 
 ```
 INGESTION  →  Loader → Sanitizer → Chunker → Embedder → VectorDB
-QUERY      →  Embedder → Retriever → PromptBuilder → LLM → PipelineResult
+QUERY      →  Embedder → Retriever → Reranker → PromptBuilder → LLM → PipelineResult
 ```
+
+Every stage runs through a guard chain (ingestion / input / retrieved / output) and emits
+a `PipelineEvent` to the observer.
 
 See [Architecture Documentation](docs/) for full pipeline diagrams.
 
@@ -165,11 +170,30 @@ See [Architecture Documentation](docs/) for full pipeline diagrams.
 | Embedders | OpenAI, Gemini, Ollama, HuggingFace |
 | Vector DBs | ChromaDB (in-memory, persistent, server), Pinecone |
 | LLMs | OpenAI, Anthropic, Gemini, Ollama |
-| Loaders | PDF, plain text, Word, HTML, Excel |
-| Chunkers | Recursive, token, sentence, sentence-window, markdown, code, semantic, proposition |
+| Loaders | PDF, plain text, auto-detect (Word / HTML / Excel are planned, not yet wired) |
+| Chunkers | Recursive, fixed, token, sentence, sentence-window, markdown, code, semantic, proposition |
 | Retrievers | Dense (cosine similarity), BM25 (keyword), Hybrid (dense + BM25) |
 | Rerankers | Cohere, CrossEncoder (sentence-transformers) |
+| Guardrails | PII, access control, prompt-injection, groundedness, topic, model (LLM-as-judge) |
 | Observability | OpenTelemetry — Prometheus pull, OTLP push (Grafana Alloy, Jaeger, etc.) |
+
+Every provider is selected in YAML and swappable with a `custom` class path. See
+[docs/](docs/) for the full configuration reference.
+
+---
+
+## Production features
+
+Beyond the core pipeline, the following are configured entirely in YAML and off by default:
+
+| Feature | Config block | What it does |
+|---|---|---|
+| Async & streaming | `mode: async`, `stream_query()` / `astream_query()` | Native-async stages and token-by-token streaming. |
+| Guardrails | `guardrails.{ingestion,input,retrieved,output}` | Ordered guard chains with `fail_open` / `fail_closed` policy; verdicts ALLOW / BLOCK / REDACT. |
+| Query cache | `query.cache` | Exact-match in-memory cache (LRU + TTL) with per-collection invalidation; pluggable backend. |
+| Multi-turn sessions | `query.session` + `query_session()` / `clear_session()` / `delete_turns()` | Conversation history injected into the prompt; window / token-budget context strategies; `persist: false` privacy mode. |
+| Rate limiting | `query.rate_limit` | Client-side token-bucket throttle; raises `LLMRateLimitError(retry_after_seconds=...)`. |
+| Evaluations | `observability.evaluations` | Off-path LLM-as-judge: faithfulness, answer relevance, completeness, coherence, context diversity, at a sample rate. |
 
 ---
 
