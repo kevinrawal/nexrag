@@ -226,11 +226,6 @@ observability:
 
 Always-on metrics cover every pipeline stage — latency, token counts, retrieval scores, ingestion stats, and cost. Optional LLM-as-judge evaluators (faithfulness, answer relevance, completeness, coherence, context diversity) run off the response path at a configurable sample rate, each with its own model and embedder.
 
----
-
-## Contributing
-
-NexRAG is in early development. Contribution guidelines will be published with v1.0.
 
 ---
 
