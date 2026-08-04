@@ -1,12 +1,15 @@
 """Unit tests for the NexRAG facade (ingest_batch, cache, rate limit, sessions)."""
 
 import asyncio
+import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from nexrag import NexRAG
+from nexrag.core.interfaces.query_cache import BaseQueryCache
 from nexrag.core.models.result import PipelineResult
 from nexrag.core.pipeline.ingestion import IngestionResult
 from nexrag.core.runtime import QueryRuntime
@@ -206,6 +209,45 @@ class TestAsyncFacade:
 
         asyncio.run(run())
         assert pipeline._query.run.call_count == 1
+
+    def test_async_query_does_not_block_event_loop_on_cache(self):
+        """Regression (#57): async_query must call the cache via aget/aset (a thread
+        hop), never synchronously on the loop. A sync-blocking cache.get would force
+        two concurrent async queries to serialize; offloading lets them overlap."""
+
+        class _ConcurrencyProbeCache(BaseQueryCache):
+            def __init__(self) -> None:
+                self._lock = threading.Lock()
+                self.active = 0
+                self.max_active = 0
+
+            def get(self, key, *, collection):
+                with self._lock:
+                    self.active += 1
+                    self.max_active = max(self.max_active, self.active)
+                time.sleep(0.05)  # window for a second call to overlap
+                with self._lock:
+                    self.active -= 1
+                return None
+
+            def set(self, key, result, *, collection):
+                pass
+
+            def invalidate(self, collection):
+                pass
+
+        probe = _ConcurrencyProbeCache()
+        pipeline = _pipeline_with_runtime(QueryRuntime(cache=probe))
+
+        async def run():
+            await asyncio.gather(
+                pipeline.async_query("a"),
+                pipeline.async_query("b"),
+            )
+
+        asyncio.run(run())
+        # Both get() calls ran on threads at the same time → the loop was never blocked.
+        assert probe.max_active == 2
 
     def test_async_query_rate_limited(self):
         rt = QueryRuntime(rate_limiter=TokenBucketRateLimiter(requests_per_minute=60, burst=1))

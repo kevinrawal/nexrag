@@ -19,6 +19,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Async query-cache methods (`BaseQueryCache.aget` / `aset`).** New async variants with default implementations that run the sync methods in a thread pool, so existing sync-only cache backends keep working unchanged. The facade's `async_query` now calls `aget`/`aset` instead of the sync methods directly — a network-backed cache (e.g. Redis) no longer blocks the event loop on every cache read/write. (Foundation for #57; the raw-query interface change that makes semantic caching implementable is deferred to a follow-up.)
+
+### Fixed
+
+- **Custom cache backends receive top-level cache config.** `query.cache.similarity_threshold`, `max_size`, and `ttl_seconds` are now forwarded to a `backend: custom` cache's constructor (previously only `params` was passed, so these had to be duplicated manually). Forwarding is signature-aware — a field is only passed when the custom class declares it (or a `**kwargs`), and explicit `params` always win — so a backend that doesn't accept those names is never broken.
+
+---
+
 ## [0.5.0] - 2026-06-26
 
 Stateful query layer — a pluggable query-result cache, multi-turn sessions with context

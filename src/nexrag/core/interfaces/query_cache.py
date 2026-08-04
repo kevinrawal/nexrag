@@ -29,6 +29,7 @@ production multi-replica deploys plug a shared backend (e.g. Redis) via
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from abc import ABC, abstractmethod
@@ -93,3 +94,16 @@ class BaseQueryCache(ABC):
         Called by the facade after every ingest into ``collection`` so stale
         answers are never served. Must be cheap — it runs on the ingest path.
         """
+
+    # Async variants — the async facade methods (async_query) call these so a
+    # network-backed cache (e.g. Redis) never blocks the event loop. The defaults
+    # run the sync methods in a thread pool, so existing sync-only backends keep
+    # working unmodified; override with a native async client for true async I/O.
+
+    async def aget(self, key: str, *, collection: str) -> PipelineResult | None:
+        """Async variant of :meth:`get`. Default: runs ``get`` in a thread pool."""
+        return await asyncio.to_thread(self.get, key, collection=collection)
+
+    async def aset(self, key: str, result: PipelineResult, *, collection: str) -> None:
+        """Async variant of :meth:`set`. Default: runs ``set`` in a thread pool."""
+        await asyncio.to_thread(self.set, key, result, collection=collection)

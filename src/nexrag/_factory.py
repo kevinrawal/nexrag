@@ -6,8 +6,10 @@ Not part of the public API. Import from nexrag, not from here.
 
 from __future__ import annotations
 
+import importlib
+import inspect
 import logging
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from nexrag.core.config.resolver import resolve_class
 from nexrag.core.config.schema import (
@@ -224,16 +226,62 @@ def _build_query_runtime(
 
 def _build_query_cache(config: CacheConfig) -> BaseQueryCache:
     if config.backend == "custom":
+        # Forward the top-level cache settings so a custom backend (e.g. a semantic
+        # cache) receives them without the user duplicating each value into params.
+        params = _forward_config_fields(
+            config.class_path,
+            config.params,
+            {
+                "similarity_threshold": config.similarity_threshold,
+                "max_size": config.max_size,
+                "ttl_seconds": config.ttl_seconds,
+            },
+        )
         return resolve_class(
             config.class_path,  # type: ignore[arg-type]
             BaseQueryCache,  # type: ignore[type-abstract]
-            config.params,
+            params,
             stage="query_cache",
         )
 
     from nexrag.defaults.query_cache import InMemoryQueryCache
 
     return InMemoryQueryCache(max_size=config.max_size, ttl_seconds=config.ttl_seconds)
+
+
+def _forward_config_fields(
+    class_path: str | None,
+    base_params: dict[str, Any],
+    forwardable: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Merge top-level config values into ``base_params`` for a resolved custom class,
+    but only the fields its ``__init__`` can actually accept.
+
+    A field is forwarded only when the class declares a matching keyword parameter
+    (or a ``**kwargs`` catch-all) AND the user did not already set it in ``params``
+    (explicit params always win). This lets ``query.cache.similarity_threshold`` reach
+    a semantic cache backend without duplication, while never breaking a backend whose
+    constructor doesn't take those names. If the class can't be imported/introspected,
+    ``base_params`` is returned unchanged so ``resolve_class`` surfaces the real error.
+    """
+    params = dict(base_params)
+    if not class_path:
+        return params
+    try:
+        module_path, class_name = class_path.rsplit(".", 1)
+        cls = getattr(importlib.import_module(module_path), class_name)
+        signature = inspect.signature(cls)
+    except Exception:
+        return params
+    accepts_kwargs = any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in signature.parameters.values()
+    )
+    declared = set(signature.parameters)
+    for name, value in forwardable.items():
+        if name not in params and (accepts_kwargs or name in declared):
+            params[name] = value
+    return params
 
 
 def _build_session_store(config: SessionConfig) -> BaseSessionStore:
