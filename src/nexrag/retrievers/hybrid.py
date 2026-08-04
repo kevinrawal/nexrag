@@ -163,30 +163,34 @@ class HybridRetriever(BaseRetriever):
         """
         Fuse two scored lists by normalizing then applying alpha weighting.
 
-        Both lists are keyed by content_hash. Chunks that only appear in one
-        list get score 0.0 from the absent list.
+        Both lists are keyed by row_id — the document-scoped storage key the vector
+        DB itself uses. Keying by content_hash (a hash of text only) would collapse
+        identical text from two different documents into one entry, silently dropping
+        a legitimately distinct chunk; row_id keeps them separate while still merging
+        the same stored chunk that appears in both the dense and sparse results.
+        Chunks that only appear in one list get score 0.0 from the absent list.
         """
-        dense_map: dict[str, float] = {sc.chunk.content_hash: sc.score for sc in dense}
-        sparse_map: dict[str, float] = {sc.chunk.content_hash: sc.score for sc in sparse}
-        chunk_map: dict[str, ScoredChunk] = {sc.chunk.content_hash: sc for sc in dense + sparse}
+        dense_map: dict[str, float] = {sc.chunk.row_id: sc.score for sc in dense}
+        sparse_map: dict[str, float] = {sc.chunk.row_id: sc.score for sc in sparse}
+        chunk_map: dict[str, ScoredChunk] = {sc.chunk.row_id: sc for sc in dense + sparse}
 
-        all_hashes = list(chunk_map.keys())
+        all_ids = list(chunk_map.keys())
 
-        dense_scores = _normalize_scores([dense_map.get(h, 0.0) for h in all_hashes])
-        sparse_scores = _normalize_scores([sparse_map.get(h, 0.0) for h in all_hashes])
+        dense_scores = _normalize_scores([dense_map.get(i, 0.0) for i in all_ids])
+        sparse_scores = _normalize_scores([sparse_map.get(i, 0.0) for i in all_ids])
 
         fused: list[tuple[str, float]] = []
-        for h, d_score, s_score in zip(all_hashes, dense_scores, sparse_scores, strict=True):
+        for row_id, d_score, s_score in zip(all_ids, dense_scores, sparse_scores, strict=True):
             fused_score = self._alpha * d_score + (1.0 - self._alpha) * s_score
-            fused.append((h, fused_score))
+            fused.append((row_id, fused_score))
 
         fused.sort(key=lambda x: x[1], reverse=True)
 
         results: list[ScoredChunk] = []
-        for rank, (content_hash, score) in enumerate(fused[:top_k], start=1):
+        for rank, (row_id, score) in enumerate(fused[:top_k], start=1):
             if score_threshold > 0.0 and score < score_threshold:
                 break
-            original = chunk_map[content_hash]
+            original = chunk_map[row_id]
             results.append(ScoredChunk(chunk=original.chunk, score=score, rank=rank))
 
         return results

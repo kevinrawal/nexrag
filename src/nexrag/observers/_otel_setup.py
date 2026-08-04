@@ -122,7 +122,7 @@ def _otlp_metric_reader(config: ObservabilityConfig) -> Any:
         )
     else:
         try:
-            from opentelemetry.exporter.otlp.proto.http.metric_exporter import (  # type: ignore[no-redef]
+            from opentelemetry.exporter.otlp.proto.http.metric_exporter import (  # type: ignore[no-redef,assignment]
                 OTLPMetricExporter,
             )
         except ImportError as e:
@@ -187,7 +187,7 @@ def _build_tracer_provider(config: ObservabilityConfig, resource: Any) -> Any:
             )
         else:
             try:
-                from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[no-redef]
+                from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[no-redef,assignment]
                     OTLPSpanExporter,
                 )
             except ImportError as e:
@@ -249,7 +249,7 @@ def _build_logger_provider(config: ObservabilityConfig, resource: Any) -> Any:
                     )
                 )
             else:
-                from opentelemetry.exporter.otlp.proto.http._log_exporter import (  # type: ignore[no-redef]
+                from opentelemetry.exporter.otlp.proto.http._log_exporter import (  # type: ignore[no-redef,assignment]
                     OTLPLogExporter,
                 )
 

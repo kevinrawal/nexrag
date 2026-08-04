@@ -156,7 +156,11 @@ class ChromaDBAdapter(BaseVectorDB):
                 query_embeddings=[embedding],
                 n_results=top_k,
                 where=where if where else None,
-                include=["documents", "metadatas", "distances", "embeddings"],
+                # Only request what _build_scored_chunks consumes. Fetching
+                # "embeddings" here would serialize and return full vectors
+                # (top_k × dimension floats) that are never read — wasted
+                # bandwidth and memory on every query.
+                include=["documents", "metadatas", "distances"],
             )
         except Exception as e:
             raise VectorDBError(

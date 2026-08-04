@@ -165,6 +165,54 @@ class TestHybridRetrieverFusion:
         tenants = {r.chunk.metadata.get("tenant") for r in results}
         assert tenants == {"acme"}
 
+    def test_identical_text_across_documents_not_collapsed(self):
+        """Two different documents with identical text must both survive fusion.
+
+        Regression: fusion previously keyed chunks by content_hash (a hash of text
+        only), so identical text from two different documents — stored as separate
+        rows under distinct row_ids — collided and one was silently dropped. Fusion
+        must key by row_id, the same document-scoped key the vector DB stores under.
+        """
+        dense_chunk = Chunk(
+            text="shared boilerplate clause",
+            chunk_index=0,
+            total_chunks=1,
+            parent_doc_id="contract-a",
+            metadata={"source": "a.pdf"},
+        )
+        sparse_chunk = Chunk(
+            text="shared boilerplate clause",  # identical text, different document
+            chunk_index=0,
+            total_chunks=1,
+            parent_doc_id="contract-b",
+            metadata={"source": "b.pdf"},
+        )
+        # Same text ⇒ same content_hash, but distinct documents ⇒ distinct row_ids.
+        assert dense_chunk.content_hash == sparse_chunk.content_hash
+        assert dense_chunk.row_id != sparse_chunk.row_id
+
+        class _StaticSparse(BaseSparseRetriever):
+            def __init__(self, results):
+                self._results = results
+
+            def retrieve(
+                self, query, query_embedding, top_k, collection, score_threshold=0.0, filters=None
+            ):
+                return self._results[:top_k]
+
+        db = MagicMock()
+        db.query.return_value = [_make_scored(dense_chunk, 0.9, 1)]
+        sparse = _StaticSparse([_make_scored(sparse_chunk, 0.8, 1)])
+
+        retriever = HybridRetriever(vector_db=db, alpha=0.5, sparse=sparse)
+        results = retriever.retrieve(
+            "shared boilerplate clause", [0.1], top_k=5, collection="col"
+        )
+
+        row_ids = {r.chunk.row_id for r in results}
+        assert row_ids == {dense_chunk.row_id, sparse_chunk.row_id}
+        assert len(results) == 2
+
     def test_score_threshold_filters(self):
         chunks = [_make_chunk(f"text {i}", i) for i in range(4)]
 
