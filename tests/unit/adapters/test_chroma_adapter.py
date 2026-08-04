@@ -65,6 +65,16 @@ class TestChromaDBAdapter:
         results = adapter.query([0.1, 0.2], top_k=5, collection_name=col)
         assert results == []
 
+    def test_query_does_not_fetch_unused_embeddings(self, adapter, col):
+        """query() must not request 'embeddings' — they are never read and cost bandwidth."""
+        mock_collection = MagicMock()
+        mock_collection.query.return_value = {"ids": [[]]}
+        with patch.object(adapter, "_get_or_create", return_value=mock_collection):
+            adapter.query([1.0, 0.0], top_k=5, collection_name=col)
+        include = mock_collection.query.call_args.kwargs["include"]
+        assert "embeddings" not in include
+        assert set(include) == {"documents", "metadatas", "distances"}
+
     def test_delete_removes_chunk(self, adapter, col):
         chunk = _make_chunk("To be deleted")
         adapter.upsert([chunk], [[0.1, 0.2]], col)

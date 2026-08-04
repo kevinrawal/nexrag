@@ -98,7 +98,10 @@ class PIIGuard(BaseGuard):
             from presidio_anonymizer import AnonymizerEngine
 
             self._analyzer = AnalyzerEngine()
-            self._anonymizer = AnonymizerEngine()
+            # AnonymizerEngine.__init__ is untyped in presidio; the ignore is only
+            # live when the [pii] extra is installed (CI type-checks without it, so
+            # the pii module is in mypy's warn_unused_ignores=false override).
+            self._anonymizer = AnonymizerEngine()  # type: ignore[no-untyped-call]
         return self._analyzer, self._anonymizer
 
     def _scan_regex(self, text: str) -> tuple[set[str], str]:

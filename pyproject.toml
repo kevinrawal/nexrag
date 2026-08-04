@@ -235,16 +235,20 @@ module = [
 ]
 ignore_missing_imports = true
 
-# The observer modules carry inline `# type: ignore`s (no-redef on the grpc/http
-# exporter fallback imports, attr-defined on LogRecord) that are only *needed*
-# when the `observability` extra is installed and mypy can actually resolve
-# opentelemetry. CI type-checks without extras, so ignore_missing_imports above
-# turns those imports into Any and the ignores read as unused. Don't flag them —
-# they are load-bearing in an installed environment.
+# These modules carry inline `# type: ignore`s that are only *needed* when the
+# matching optional extra is installed and mypy can actually resolve the third-party
+# package:
+#   - observers: no-redef/assignment on the grpc/http OTLP exporter fallback imports,
+#     attr-defined on LogRecord (needs the `observability` extra).
+#   - guards.pii: no-untyped-call on presidio's AnonymizerEngine (needs the `pii` extra).
+# CI type-checks without extras, so ignore_missing_imports above turns those imports
+# into Any and the ignores read as unused. Don't flag them — they are load-bearing in
+# an installed environment.
 [[tool.mypy.overrides]]
 module = [
     "nexrag.observers._otel_setup",
     "nexrag.observers.otel",
+    "nexrag.guards.pii",
 ]
 warn_unused_ignores = false
 

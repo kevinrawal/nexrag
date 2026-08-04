@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Hybrid retrieval no longer drops identical text from different documents.** `HybridRetriever` fused the dense and sparse result sets keyed by `content_hash` (a hash of the chunk text only), so two chunks with identical text originating from **different** documents — stored as separate rows under distinct `row_id`s — collided and one was silently discarded. Fusion now keys by `row_id` (the same document-scoped key the vector DB stores under), so distinct documents are preserved while the same stored chunk appearing in both the dense and sparse lists is still merged.
+
+### Changed
+
+- **ChromaDB queries no longer fetch unused embedding vectors.** `ChromaDBAdapter.query()` requested `include=[..., "embeddings"]` but never read them; every query serialized and returned `top_k × dimension` floats that were immediately discarded. The adapter now requests only `documents`, `metadatas`, and `distances`, cutting per-query bandwidth and memory. Results are unchanged.
+
+---
+
 ## [0.5.0] - 2026-06-26
 
 Stateful query layer — a pluggable query-result cache, multi-turn sessions with context
