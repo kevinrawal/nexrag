@@ -42,6 +42,7 @@ from nexrag.core.interfaces.loader import BaseLoader
 from nexrag.core.interfaces.observer import BaseObserver, NoOpObserver
 from nexrag.core.interfaces.prompt_builder import BasePromptBuilder
 from nexrag.core.interfaces.query_cache import BaseQueryCache
+from nexrag.core.interfaces.rate_limiter import BaseRateLimiter
 from nexrag.core.interfaces.reranker import BaseReranker
 from nexrag.core.interfaces.retriever import BaseRetriever
 from nexrag.core.interfaces.sanitizer import BaseSanitizer
@@ -205,13 +206,7 @@ def _build_query_runtime(
     rate_cfg: RateLimitConfig,
 ) -> QueryRuntime:
     cache = _build_query_cache(cache_cfg) if cache_cfg.enabled else None
-    rate_limiter = (
-        TokenBucketRateLimiter(
-            requests_per_minute=rate_cfg.requests_per_minute, burst=rate_cfg.burst
-        )
-        if rate_cfg.enabled
-        else None
-    )
+    rate_limiter = _build_rate_limiter(rate_cfg) if rate_cfg.enabled else None
     session_store = _build_session_store(session_cfg) if session_cfg.enabled else None
     context_strategy = (
         _build_context_strategy(session_cfg.context_strategy) if session_cfg.enabled else None
@@ -221,6 +216,20 @@ def _build_query_runtime(
         rate_limiter=rate_limiter,
         session_store=session_store,
         context_strategy=context_strategy,
+    )
+
+
+def _build_rate_limiter(config: RateLimitConfig) -> BaseRateLimiter:
+    if config.backend == "custom":
+        return resolve_class(
+            config.class_path,  # type: ignore[arg-type]
+            BaseRateLimiter,  # type: ignore[type-abstract]
+            config.params,
+            stage="rate_limiter",
+        )
+
+    return TokenBucketRateLimiter(
+        requests_per_minute=config.requests_per_minute, burst=config.burst
     )
 
 

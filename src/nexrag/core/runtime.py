@@ -17,8 +17,8 @@ from dataclasses import dataclass
 
 from nexrag.core.interfaces.context_strategy import BaseContextStrategy
 from nexrag.core.interfaces.query_cache import BaseQueryCache
+from nexrag.core.interfaces.rate_limiter import BaseRateLimiter
 from nexrag.core.interfaces.session_store import BaseSessionStore
-from nexrag.defaults.rate_limiter import TokenBucketRateLimiter
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,6 @@ class QueryRuntime:
     """Facade-level components that wrap the query pipeline."""
 
     cache: BaseQueryCache | None = None
-    rate_limiter: TokenBucketRateLimiter | None = None
+    rate_limiter: BaseRateLimiter | None = None
     session_store: BaseSessionStore | None = None
     context_strategy: BaseContextStrategy | None = None

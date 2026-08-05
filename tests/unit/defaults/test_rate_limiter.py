@@ -51,6 +51,18 @@ class TestTokenBucketRateLimiter:
         with pytest.raises(ValueError):
             TokenBucketRateLimiter(requests_per_minute=0, burst=5)
 
+    def test_invalid_burst_raises(self):
+        # Regression (#56): burst <= 0 must fail loudly, not be silently clamped to 1.
+        with pytest.raises(ValueError):
+            TokenBucketRateLimiter(requests_per_minute=60, burst=0)
+        with pytest.raises(ValueError):
+            TokenBucketRateLimiter(requests_per_minute=60, burst=-5)
+
+    def test_is_base_rate_limiter(self):
+        from nexrag.core.interfaces.rate_limiter import BaseRateLimiter
+
+        assert isinstance(TokenBucketRateLimiter(), BaseRateLimiter)
+
     def test_aacquire_matches_acquire(self):
         limiter = TokenBucketRateLimiter(requests_per_minute=60, burst=1)
 

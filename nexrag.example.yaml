@@ -130,8 +130,13 @@ query:
   # Disabled by default. Raises LLMRateLimitError (with retry_after_seconds) when over.
   rate_limit:
     enabled: false
+    backend: memory                     # memory | custom
     requests_per_minute: 60
     burst: 10
+    # Swap in a shared/distributed limiter (e.g. Redis-backed) for multi-process
+    # correctness — same backend + class convention as query.cache / query.session.
+    # backend: custom
+    # class: myapp.limits.RedisRateLimiter
 
 # ── Observability ───────────────────────────────────────────────────────────────
 # Requires: pip install nexrag[observability]

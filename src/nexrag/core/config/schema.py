@@ -380,11 +380,40 @@ class SessionConfig(BaseModel):
 
 
 class RateLimitConfig(BaseModel):
-    """Client-side request throttle for the query path (facade-level)."""
+    """
+    Client-side request throttle for the query path (facade-level).
+
+    backend: "memory" uses the built-in TokenBucketRateLimiter (process-local);
+             "custom" resolves ``class`` — plug a shared/distributed limiter
+             (e.g. Redis-backed) for multi-process correctness, following the same
+             ``backend`` + ``class`` convention as query.cache / query.session.
+    """
 
     enabled: bool = False
+    backend: Literal["memory", "custom"] = "memory"
     requests_per_minute: int = 60
     burst: int = 10
+    class_path: str | None = Field(default=None, alias="class")
+    params: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def validate_rate_limit(self) -> RateLimitConfig:
+        if self.backend == "custom":
+            if not self.class_path:
+                raise ValueError(
+                    "query.rate_limit.class is required when query.rate_limit.backend is "
+                    "'custom'. Provide a dotted class path: myproject.limits.MyRateLimiter"
+                )
+            # Numeric bounds are the built-in limiter's contract; a custom backend
+            # owns its own validation, so only enforce them for the memory backend.
+            return self
+        if self.requests_per_minute <= 0:
+            raise ValueError("query.rate_limit.requests_per_minute must be a positive integer.")
+        if self.burst <= 0:
+            raise ValueError("query.rate_limit.burst must be a positive integer.")
+        return self
 
 
 class QueryConfig(BaseModel):
