@@ -787,9 +787,22 @@ def _build_llm(config: LLMConfig) -> BaseLLM:
             max_retries=config.max_retries,
         )
 
+    if config.provider == "groq":
+        from nexrag.adapters.llms.groq import GroqLLM
+
+        return GroqLLM(
+            model=config.model,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            timeout=config.timeout,
+            max_retries=config.max_retries,
+        )
+
     raise ConfigError(
         f"Unknown LLM provider: {config.provider!r}. "
-        "Supported: openai, anthropic, gemini, ollama, custom",
+        "Supported: openai, anthropic, gemini, groq, ollama, custom",
         stage="config",
         component="llm",
     )

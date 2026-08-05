@@ -108,6 +108,7 @@ pip install "nexrag[openai,chromadb]"
 pip install "nexrag[openai]"         # OpenAI embedder + LLM
 pip install "nexrag[chromadb]"       # ChromaDB vector store
 pip install "nexrag[anthropic]"      # Anthropic (Claude) LLM
+pip install "nexrag[groq]"           # Groq (fast inference) LLM
 pip install "nexrag[ollama]"         # Ollama local LLM + embedder
 pip install "nexrag[huggingface]"    # HuggingFace embedder
 

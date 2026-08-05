@@ -54,7 +54,7 @@ class EmbedderConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    provider: Literal["openai", "anthropic", "gemini", "ollama", "custom"]
+    provider: Literal["openai", "anthropic", "gemini", "groq", "ollama", "custom"]
     model: str
     api_key: str | None = None
     base_url: str | None = None
