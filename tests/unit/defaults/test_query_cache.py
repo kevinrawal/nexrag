@@ -1,5 +1,7 @@
 """Unit tests for InMemoryQueryCache and make_cache_key."""
 
+import asyncio
+
 from nexrag.core.interfaces.query_cache import make_cache_key
 from nexrag.core.models.result import PipelineResult
 from nexrag.defaults.query_cache import InMemoryQueryCache
@@ -107,3 +109,26 @@ class TestInMemoryQueryCache:
         assert len(cache) == 0
         cache.set("k", _result(), collection="c")
         assert len(cache) == 1
+
+
+class TestAsyncCacheInterface:
+    """aget/aset default to the sync methods so sync-only backends work on async paths (#57)."""
+
+    def test_aset_then_aget_hit(self):
+        cache = InMemoryQueryCache()
+        r = _result()
+
+        async def run() -> None:
+            await cache.aset("k", r, collection="c")
+            got = await cache.aget("k", collection="c")
+            assert got is r
+
+        asyncio.run(run())
+
+    def test_aget_miss_returns_none(self):
+        cache = InMemoryQueryCache()
+
+        async def run() -> None:
+            assert await cache.aget("nope", collection="c") is None
+
+        asyncio.run(run())

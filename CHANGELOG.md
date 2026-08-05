@@ -23,10 +23,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Pluggable rate-limiter backend (`query.rate_limit.backend`).** New `BaseRateLimiter` interface; the built-in `TokenBucketRateLimiter` now implements it, and `query.rate_limit.backend: custom` + `class` resolves a user-supplied limiter (e.g. a Redis-backed one for multi-process correctness) — the same `backend` + `class` convention already used by `query.cache` and `query.session`. Default (`backend: memory`) behaviour is unchanged. (Foundation for #56; per-user / `scope` limiting to follow.)
+- **Async query-cache methods (`BaseQueryCache.aget` / `aset`).** New async variants with default implementations that run the sync methods in a thread pool, so existing sync-only cache backends keep working unchanged. The facade's `async_query` now calls `aget`/`aset` instead of the sync methods directly — a network-backed cache (e.g. Redis) no longer blocks the event loop on every cache read/write. (Foundation for #57; the raw-query interface change that makes semantic caching implementable is deferred to a follow-up.)
 
 ### Fixed
 
+- **Custom cache backends receive top-level cache config.** `query.cache.similarity_threshold`, `max_size`, and `ttl_seconds` are now forwarded to a `backend: custom` cache's constructor (previously only `params` was passed, so these had to be duplicated manually). Forwarding is signature-aware — a field is only passed when the custom class declares it (or a `**kwargs`), and explicit `params` always win — so a backend that doesn't accept those names is never broken.
+- **Pluggable rate-limiter backend (`query.rate_limit.backend`).** New `BaseRateLimiter` interface; the built-in `TokenBucketRateLimiter` now implements it, and `query.rate_limit.backend: custom` + `class` resolves a user-supplied limiter (e.g. a Redis-backed one for multi-process correctness) — the same `backend` + `class` convention already used by `query.cache` and `query.session`. Default (`backend: memory`) behaviour is unchanged. (Foundation for #56; per-user / `scope` limiting to follow.)
 - **Rate-limit config now validates at load time.** `RateLimitConfig` gained validators matching `CacheConfig`/`SessionConfig`: `requests_per_minute <= 0` and `burst <= 0` now fail with a clear `ConfigError` at config-load instead of surfacing later (or, for `burst`, being silently clamped to `1`). `backend: custom` requires `class`. `TokenBucketRateLimiter` now also raises `ValueError` on `burst <= 0`, consistent with `requests_per_minute`.
 
 ---

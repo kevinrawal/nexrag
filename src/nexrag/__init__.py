@@ -447,7 +447,7 @@ class NexRAG:
                 metadata_filter=metadata_filter,
                 auth_context=auth_context,
             )
-            cached = cache.get(cache_key, collection=active_collection)
+            cached = await cache.aget(cache_key, collection=active_collection)
             if cached is not None:
                 return cached
 
@@ -471,7 +471,7 @@ class NexRAG:
                 auth_context=auth_context,
             )
         if cache is not None and cache_key is not None:
-            cache.set(cache_key, result, collection=active_collection)
+            await cache.aset(cache_key, result, collection=active_collection)
         return result
 
     # Multi-turn conversation sessions
