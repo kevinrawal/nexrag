@@ -241,6 +241,7 @@ def _build_query_cache(config: CacheConfig) -> BaseQueryCache:
             config.class_path,
             config.params,
             {
+                "strategy": config.strategy,
                 "similarity_threshold": config.similarity_threshold,
                 "max_size": config.max_size,
                 "ttl_seconds": config.ttl_seconds,
@@ -253,9 +254,16 @@ def _build_query_cache(config: CacheConfig) -> BaseQueryCache:
             stage="query_cache",
         )
 
-    from nexrag.defaults.query_cache import InMemoryQueryCache
+    if config.backend == "memory":
+        from nexrag.caches.memory import InMemoryQueryCache
 
-    return InMemoryQueryCache(max_size=config.max_size, ttl_seconds=config.ttl_seconds)
+        return InMemoryQueryCache(max_size=config.max_size, ttl_seconds=config.ttl_seconds)
+
+    raise ConfigError(
+        f"Unknown query cache backend: {config.backend!r}. Supported: memory, custom",
+        stage="config",
+        component="query_cache",
+    )
 
 
 def _forward_config_fields(

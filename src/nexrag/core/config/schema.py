@@ -291,10 +291,10 @@ class CacheConfig(BaseModel):
     """
     Query-result cache config (facade-level).
 
-    backend: "memory" uses the built-in InMemoryQueryCache; "custom" resolves
-             ``class``. (For Redis/distributed caches, set backend to custom and
-             point ``class`` at your backend — an official Redis adapter is a
-             follow-up.)
+    backend: "memory" uses the built-in InMemoryQueryCache (nexrag/caches/memory.py);
+             "custom" resolves ``class``. (For Redis/distributed caches, set backend
+             to custom and point ``class`` at your backend — an official Redis
+             adapter is a follow-up.)
     strategy: "exact" matches identical queries+params (zero false positives, the
               safe default). "semantic" returns cached answers for embedding-near
               queries — opt-in and risky; the built-in memory backend does not

@@ -1,13 +1,13 @@
 """
 Tests for the query-cache wiring foundation (issue #57):
-  - Top-level CacheConfig fields (similarity_threshold/max_size/ttl_seconds) reach a
-    custom backend without the user duplicating them into `params`.
+  - Top-level CacheConfig fields (strategy/similarity_threshold/max_size/ttl_seconds)
+    reach a custom backend without the user duplicating them into `params`.
   - Forwarding is signature-aware: a backend whose __init__ doesn't accept those
     names is never broken by the forwarding.
 
-The heavier interface change (passing the raw query to get/set so semantic caching
-is possible) is deferred to a follow-up; this covers the async-safety + config
-forwarding foundation only.
+The raw-query interface (CacheLookup, passed to get/set so semantic caching is
+implementable) lives in tests/unit/caches/test_memory.py; this file covers
+config forwarding for the `backend: custom` path only.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Any
 
 from nexrag._factory import _build_query_cache
 from nexrag.core.config.schema import CacheConfig
-from nexrag.core.interfaces.query_cache import BaseQueryCache
+from nexrag.core.interfaces.query_cache import BaseQueryCache, CacheLookup
 from nexrag.core.models.result import PipelineResult
 
 
@@ -25,20 +25,22 @@ class ForwardingCache(BaseQueryCache):
 
     def __init__(
         self,
+        strategy: str | None = None,
         similarity_threshold: float | None = None,
         max_size: int | None = None,
         ttl_seconds: int | None = None,
         tag: str = "",
     ) -> None:
+        self.strategy = strategy
         self.similarity_threshold = similarity_threshold
         self.max_size = max_size
         self.ttl_seconds = ttl_seconds
         self.tag = tag
 
-    def get(self, key: str, *, collection: str) -> PipelineResult | None:
+    def get(self, lookup: CacheLookup) -> PipelineResult | None:
         return None
 
-    def set(self, key: str, result: PipelineResult, *, collection: str) -> None:
+    def set(self, lookup: CacheLookup, result: PipelineResult) -> None:
         pass
 
     def invalidate(self, collection: str) -> None:
@@ -51,10 +53,10 @@ class MinimalCache(BaseQueryCache):
     def __init__(self, url: str) -> None:
         self.url = url
 
-    def get(self, key: str, *, collection: str) -> PipelineResult | None:
+    def get(self, lookup: CacheLookup) -> PipelineResult | None:
         return None
 
-    def set(self, key: str, result: PipelineResult, *, collection: str) -> None:
+    def set(self, lookup: CacheLookup, result: PipelineResult) -> None:
         pass
 
     def invalidate(self, collection: str) -> None:
@@ -67,10 +69,10 @@ class KwargsCache(BaseQueryCache):
     def __init__(self, **kwargs: Any) -> None:
         self.kwargs = kwargs
 
-    def get(self, key: str, *, collection: str) -> PipelineResult | None:
+    def get(self, lookup: CacheLookup) -> PipelineResult | None:
         return None
 
-    def set(self, key: str, result: PipelineResult, *, collection: str) -> None:
+    def set(self, lookup: CacheLookup, result: PipelineResult) -> None:
         pass
 
     def invalidate(self, collection: str) -> None:
@@ -84,6 +86,7 @@ class TestCustomCacheConfigForwarding:
                 "enabled": True,
                 "backend": "custom",
                 "class": f"{__name__}.ForwardingCache",
+                "strategy": "semantic",
                 "similarity_threshold": 0.9,
                 "max_size": 42,
                 "ttl_seconds": 77,
@@ -92,6 +95,7 @@ class TestCustomCacheConfigForwarding:
         )
         cache = _build_query_cache(cfg)
         assert isinstance(cache, ForwardingCache)
+        assert cache.strategy == "semantic"
         assert cache.similarity_threshold == 0.9
         assert cache.max_size == 42
         assert cache.ttl_seconds == 77
@@ -139,6 +143,7 @@ class TestCustomCacheConfigForwarding:
         )
         cache = _build_query_cache(cfg)
         assert isinstance(cache, KwargsCache)
+        assert cache.kwargs["strategy"] == "exact"
         assert cache.kwargs["similarity_threshold"] == 0.8
         assert cache.kwargs["max_size"] == 10
         assert cache.kwargs["ttl_seconds"] == 5
