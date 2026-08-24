@@ -4,17 +4,17 @@ import asyncio
 import threading
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from nexrag import NexRAG
+from nexrag.caches.memory import InMemoryQueryCache
 from nexrag.core.interfaces.query_cache import BaseQueryCache
 from nexrag.core.models.result import PipelineResult
 from nexrag.core.pipeline.ingestion import IngestionResult
 from nexrag.core.runtime import QueryRuntime
 from nexrag.defaults.context_strategy import WindowStrategy
-from nexrag.defaults.query_cache import InMemoryQueryCache
 from nexrag.defaults.rate_limiter import TokenBucketRateLimiter
 from nexrag.defaults.session_store import InMemorySessionStore
 from nexrag.exceptions import LLMRateLimitError
@@ -221,7 +221,7 @@ class TestAsyncFacade:
                 self.active = 0
                 self.max_active = 0
 
-            def get(self, key, *, collection):
+            def get(self, lookup):
                 with self._lock:
                     self.active += 1
                     self.max_active = max(self.max_active, self.active)
@@ -230,7 +230,7 @@ class TestAsyncFacade:
                     self.active -= 1
                 return None
 
-            def set(self, key, result, *, collection):
+            def set(self, lookup, result):
                 pass
 
             def invalidate(self, collection):
@@ -271,9 +271,11 @@ class TestAsyncFacade:
     def test_async_ingest_batch_delegates_and_invalidates(self):
         pipeline = _make_pipeline()
         cache = MagicMock()
+        cache.ainvalidate = AsyncMock()
         pipeline._runtime = QueryRuntime(cache=cache)
         pipeline._ingestion.ingest_batch = MagicMock(return_value=[_make_result(collection="docs")])
         # Sync-mode ingestion pipeline → facade runs ingest_batch via to_thread.
         results = asyncio.run(pipeline.async_ingest_batch(["a.pdf"]))
         assert len(results) == 1
-        cache.invalidate.assert_called_once_with("docs")
+        # async ingest invalidates via ainvalidate (never blocks the event loop).
+        cache.ainvalidate.assert_called_once_with("docs")

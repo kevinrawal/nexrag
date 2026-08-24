@@ -19,7 +19,7 @@ from typing import Any
 from nexrag._factory import wire
 from nexrag.core.config.loader import load_config
 from nexrag.core.interfaces.loader import BaseLoader
-from nexrag.core.interfaces.query_cache import make_cache_key
+from nexrag.core.interfaces.query_cache import CacheLookup
 from nexrag.core.models.metrics import RunMetrics
 from nexrag.core.models.result import PipelineResult
 from nexrag.core.observability.runner import EvaluationRunner, NoOpEvaluationRunner
@@ -106,6 +106,14 @@ class NexRAG:
             self._retriever.invalidate_cache(collection)
         if self._runtime.cache is not None:
             self._runtime.cache.invalidate(collection)
+
+    async def _anotify_ingest(self, collection: str) -> None:
+        """Async variant of _notify_ingest — invalidates via ainvalidate so a
+        network-backed cache never blocks the event loop on the ingest path."""
+        if self._retriever is not None and hasattr(self._retriever, "invalidate_cache"):
+            self._retriever.invalidate_cache(collection)
+        if self._runtime.cache is not None:
+            await self._runtime.cache.ainvalidate(collection)
 
     # Rate limiting (applies to every query entry point when configured)
 
@@ -279,17 +287,17 @@ class NexRAG:
 
         active_collection = collection or self._query.default_collection
         cache = self._runtime.cache
-        cache_key: str | None = None
+        lookup: CacheLookup | None = None
         if cache is not None:
-            cache_key = make_cache_key(
-                text,
+            lookup = CacheLookup(
+                query=text,
                 collection=active_collection,
                 top_k=top_k,
                 score_threshold=score_threshold,
                 metadata_filter=metadata_filter,
                 auth_context=auth_context,
             )
-            cached = cache.get(cache_key, collection=active_collection)
+            cached = cache.get(lookup)
             if cached is not None:
                 return cached
 
@@ -301,8 +309,8 @@ class NexRAG:
             metadata_filter=metadata_filter,
             auth_context=auth_context,
         )
-        if cache is not None and cache_key is not None:
-            cache.set(cache_key, result, collection=active_collection)
+        if cache is not None and lookup is not None:
+            cache.set(lookup, result)
         return result
 
     def stream_query(
@@ -437,17 +445,17 @@ class NexRAG:
 
         active_collection = collection or self._query.default_collection
         cache = self._runtime.cache
-        cache_key: str | None = None
+        lookup: CacheLookup | None = None
         if cache is not None:
-            cache_key = make_cache_key(
-                text,
+            lookup = CacheLookup(
+                query=text,
                 collection=active_collection,
                 top_k=top_k,
                 score_threshold=score_threshold,
                 metadata_filter=metadata_filter,
                 auth_context=auth_context,
             )
-            cached = await cache.aget(cache_key, collection=active_collection)
+            cached = await cache.aget(lookup)
             if cached is not None:
                 return cached
 
@@ -470,8 +478,8 @@ class NexRAG:
                 metadata_filter=metadata_filter,
                 auth_context=auth_context,
             )
-        if cache is not None and cache_key is not None:
-            await cache.aset(cache_key, result, collection=active_collection)
+        if cache is not None and lookup is not None:
+            await cache.aset(lookup, result)
         return result
 
     # Multi-turn conversation sessions
@@ -659,7 +667,7 @@ class NexRAG:
             result = await asyncio.to_thread(
                 self._ingestion.ingest, data, loader, metadata, collection
             )
-        self._notify_ingest(result.collection_used)
+        await self._anotify_ingest(result.collection_used)
         return result
 
     async def async_ingest_batch(
@@ -686,5 +694,5 @@ class NexRAG:
                 self._ingestion.ingest_batch, sources, loader, metadata, collection
             )
         if results:
-            self._notify_ingest(results[0].collection_used)
+            await self._anotify_ingest(results[0].collection_used)
         return results
